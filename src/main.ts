@@ -105,6 +105,12 @@ app.innerHTML = `
   </div>
 `;
 
+// Active Calendar Date tracker
+let currentSelectedDate = new Date().toISOString().split('T')[0];
+eventBus.on(AppEvents.DATE_SELECTED, (date: string) => {
+  currentSelectedDate = date;
+});
+
 // Initialize Modal Sheet for Task Creation
 const taskFormModal = renderTaskFormModal();
 document.body.appendChild(taskFormModal.backdrop);
@@ -116,7 +122,7 @@ qcMount.appendChild(renderQuickCapture());
 // Mount Floating Action Button
 const fabBtn = document.querySelector('#fab-add-task')!;
 fabBtn.addEventListener('click', () => {
-  taskFormModal.open();
+  taskFormModal.open(currentSelectedDate);
 });
 
 // Notification Bell Toggle
@@ -144,7 +150,7 @@ function switchTab(tab: string) {
   if (tab === 'orbit') {
     renderOrbitView();
   } else if (tab === 'tasks') {
-    viewContainer.appendChild(renderTaskList(() => taskFormModal.open()));
+    viewContainer.appendChild(renderTaskList((date) => taskFormModal.open(date)));
   } else if (tab === 'graph') {
     viewContainer.appendChild(renderDotGraph());
   } else if (tab === 'cloud') {
@@ -153,8 +159,8 @@ function switchTab(tab: string) {
 }
 
 function renderOrbitView() {
-  viewContainer.appendChild(renderFocusOrbit(() => taskFormModal.open()));
-  viewContainer.appendChild(renderTaskList(() => taskFormModal.open()));
+  viewContainer.appendChild(renderFocusOrbit((date) => taskFormModal.open(date)));
+  viewContainer.appendChild(renderTaskList((date) => taskFormModal.open(date)));
 }
 
 // Attach Bottom Nav Listeners
@@ -168,24 +174,26 @@ document.querySelectorAll('.nav-item').forEach(btn => {
 // Update Mascot Status dynamically
 async function updateMascotStatus() {
   const tasks = await taskRepository.getAllTasks();
-  const pending = tasks.filter(t => !t.completed);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayTasks = tasks.filter(t => (t.date || todayStr) === todayStr);
+  const pending = todayTasks.filter(t => !t.completed);
   const statusTitle = document.querySelector('#mascot-status-title');
   const subspeech = document.querySelector('#mascot-subspeech');
 
   if (statusTitle && subspeech) {
-    if (tasks.length === 0) {
+    if (todayTasks.length === 0) {
       statusTitle.textContent = 'Ready for input, Bruv.';
-      subspeech.textContent = 'No scheduled tasks yet. Tap the red + button to plan your day.';
+      subspeech.textContent = 'No tasks for today. Tap the red + button to plan or browse upcoming days.';
     } else if (pending.length === 0) {
       statusTitle.textContent = 'All tasks crushed today, Bruv!';
       subspeech.textContent = 'Streak protected. Great job staying focused.';
     } else {
-      statusTitle.textContent = `${pending.length} tasks on deck, Bruv.`;
+      statusTitle.textContent = `${pending.length} tasks today, Bruv.`;
       subspeech.textContent = `Next up: "${pending[0].title}" at ${pending[0].startTime}.`;
     }
   }
 
-  // Schedule local notification alarms for pending tasks
+  // Schedule notification alarms
   pending.forEach(t => notificationService.scheduleTaskAlert(t));
 }
 

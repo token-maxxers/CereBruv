@@ -10,10 +10,21 @@ const NOTES_KEY = 'cerebruv_notes_v1';
 const STATS_KEY = 'cerebruv_stats_v1';
 
 export class LocalTaskRepository implements ITaskRepository {
+  private getTodayString(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
   private read(): Task[] {
     try {
       const data = localStorage.getItem(TASKS_KEY);
-      return data ? JSON.parse(data) : [];
+      if (!data) return [];
+      const tasks: Task[] = JSON.parse(data);
+      const today = this.getTodayString();
+      // Backwards compatibility for existing tasks without date
+      return tasks.map(t => ({
+        ...t,
+        date: t.date || today,
+      }));
     } catch {
       return [];
     }
@@ -38,6 +49,7 @@ export class LocalTaskRepository implements ITaskRepository {
       id: 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       title: dto.title.trim(),
       category: dto.category,
+      date: dto.date || this.getTodayString(),
       startTime: dto.startTime,
       durationMinutes: dto.durationMinutes,
       urgency: dto.urgency,

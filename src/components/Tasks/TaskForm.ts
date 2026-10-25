@@ -2,7 +2,7 @@ import { taskRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import type { TaskCategory, UrgencyLevel } from '../../types/task';
 
-export function renderTaskFormModal(): { backdrop: HTMLElement; open: () => void; close: () => void } {
+export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDate?: string) => void; close: () => void } {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
 
@@ -20,7 +20,7 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: () => void
             type="text" 
             id="task-title-input" 
             class="form-input" 
-            placeholder="e.g. Study Data Structures, Review Slides" 
+            placeholder="e.g. Capstone manuscript, GDG Workshop, Gym" 
             required 
           />
         </div>
@@ -45,6 +45,16 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: () => void
               <option value="low">Low</option>
             </select>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="task-date-input">Scheduled Date *</label>
+          <input 
+            type="date" 
+            id="task-date-input" 
+            class="form-input" 
+            required 
+          />
         </div>
 
         <div class="form-row">
@@ -92,11 +102,14 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: () => void
 
   const form = backdrop.querySelector<HTMLFormElement>('#create-task-form')!;
   const closeBtn = backdrop.querySelector<HTMLButtonElement>('#modal-close-btn')!;
+  const dateInput = backdrop.querySelector<HTMLInputElement>('#task-date-input')!;
   const startInput = backdrop.querySelector<HTMLInputElement>('#task-start-input')!;
 
-  const open = () => {
-    // Default to current local time in HH:mm
+  const open = (prefillDate?: string) => {
     const now = new Date();
+    const todayString = now.toISOString().split('T')[0];
+    dateInput.value = prefillDate || todayString;
+
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(Math.floor(now.getMinutes() / 5) * 5).padStart(2, '0');
     startInput.value = `${hours}:${minutes}`;
@@ -121,7 +134,8 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: () => void
     const title = (backdrop.querySelector<HTMLInputElement>('#task-title-input')!).value;
     const category = (backdrop.querySelector<HTMLSelectElement>('#task-category-select')!).value as TaskCategory;
     const urgency = (backdrop.querySelector<HTMLSelectElement>('#task-urgency-select')!).value as UrgencyLevel;
-    const startTime = (backdrop.querySelector<HTMLInputElement>('#task-start-input')!).value;
+    const date = dateInput.value;
+    const startTime = startInput.value;
     const durationMinutes = parseInt((backdrop.querySelector<HTMLInputElement>('#task-duration-input')!).value, 10);
     const notes = (backdrop.querySelector<HTMLTextAreaElement>('#task-notes-input')!).value;
 
@@ -129,6 +143,7 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: () => void
       title,
       category,
       urgency,
+      date,
       startTime,
       durationMinutes,
       notes: notes.trim() || undefined,

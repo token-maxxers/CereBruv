@@ -3,6 +3,7 @@ import type { Task } from '../../types/task';
 export interface CreateTaskDTO {
   title: string;
   category: Task['category'];
+  date?: string; // YYYY-MM-DD (defaults to today)
   startTime: string; // HH:mm
   durationMinutes: number;
   urgency: Task['urgency'];

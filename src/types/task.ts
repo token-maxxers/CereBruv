@@ -6,6 +6,7 @@ export interface Task {
   id: string;
   title: string;
   category: TaskCategory;
+  date: string; // YYYY-MM-DD
   startTime: string; // HH:mm (24-hour format e.g. "09:30")
   durationMinutes: number; // e.g. 45
   urgency: UrgencyLevel;

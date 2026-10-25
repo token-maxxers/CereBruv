@@ -4,24 +4,37 @@ import {
   calculateOrbitSegments,
   analyzeDayWorkload,
 } from './orbitCalculator';
-import type { OrbitArcSegment } from '../../types/task';
+import type { OrbitArcSegment, Task } from '../../types/task';
 
-export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
+export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'card-section';
   container.style.padding = 'var(--spacing-3)';
 
+  // Default to today in YYYY-MM-DD
+  const todayObj = new Date();
+  let selectedDate = todayObj.toISOString().split('T')[0];
+
   container.innerHTML = `
-    <!-- Top Date & Weekly Strip (Matching Image 1) -->
+    <!-- Top Date & Navigation Strip (Matching Image 1) -->
     <div style="display: flex; flex-direction: column; gap: var(--spacing-2); margin-bottom: var(--spacing-3);">
       <div style="display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <h2 style="font-size: var(--font-size-lg); font-weight: 800; color: var(--color-black-dominant);" id="orbit-full-date"></h2>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="prev-day-btn" class="icon-btn" style="width: 26px; height: 26px;" title="Previous Day">
+            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); cursor: pointer;" id="orbit-full-date"></h2>
+          <button id="next-day-btn" class="icon-btn" style="width: 26px; height: 26px;" title="Next Day">
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
         </div>
-        <span class="pill-badge" id="orbit-workload-badge" style="font-size: 0.7rem;">CALCULATING...</span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <button id="jump-today-btn" class="pill-badge" style="cursor: pointer; display: none; font-size: 0.65rem;">TODAY</button>
+          <span class="pill-badge" id="orbit-workload-badge" style="font-size: 0.7rem;">CALCULATING...</span>
+        </div>
       </div>
 
-      <!-- Weekly Day Strip -->
+      <!-- Weekly Day & Date Strip (Image 1: S M T W T F S + dates 25, 26, 27...) -->
       <div id="weekly-strip" style="display: flex; justify-content: space-between; gap: 4px; padding: 4px 0;"></div>
     </div>
 
@@ -32,7 +45,7 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
 
         <!-- Center Hub Information -->
         <div style="position: absolute; width: 140px; height: 140px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: var(--spacing-2);">
-          <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.05em;" id="center-month-day">10/25</div>
+          <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.05em;" id="center-month-day"></div>
           <div style="font-size: var(--font-size-xl); font-weight: 800; color: var(--color-black-dominant); line-height: 1.1;" id="center-busy-hours">0h</div>
           <div style="font-size: 0.7rem; color: var(--color-black-muted); font-weight: 600;" id="center-free-time">Free: 16h</div>
         </div>
@@ -60,6 +73,9 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
   const ctx = canvas.getContext('2d')!;
   const fullDateEl = container.querySelector<HTMLElement>('#orbit-full-date')!;
   const workloadBadge = container.querySelector<HTMLElement>('#orbit-workload-badge')!;
+  const jumpTodayBtn = container.querySelector<HTMLButtonElement>('#jump-today-btn')!;
+  const prevDayBtn = container.querySelector<HTMLButtonElement>('#prev-day-btn')!;
+  const nextDayBtn = container.querySelector<HTMLButtonElement>('#next-day-btn')!;
   const centerMonthDay = container.querySelector<HTMLElement>('#center-month-day')!;
   const centerBusyHours = container.querySelector<HTMLElement>('#center-busy-hours')!;
   const centerFreeTime = container.querySelector<HTMLElement>('#center-free-time')!;
@@ -68,21 +84,50 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
   const nextTaskRationale = container.querySelector<HTMLElement>('#next-task-rationale')!;
   const weeklyStrip = container.querySelector<HTMLElement>('#weekly-strip')!;
 
-  // Render weekly days strip
-  renderWeeklyStrip(weeklyStrip);
+  function getTodayString(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  function changeDay(deltaDays: number) {
+    const current = new Date(selectedDate);
+    current.setDate(current.getDate() + deltaDays);
+    selectedDate = current.toISOString().split('T')[0];
+    eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
+    drawOrbit();
+  }
+
+  prevDayBtn.addEventListener('click', () => changeDay(-1));
+  nextDayBtn.addEventListener('click', () => changeDay(1));
+  jumpTodayBtn.addEventListener('click', () => {
+    selectedDate = getTodayString();
+    eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
+    drawOrbit();
+  });
 
   async function drawOrbit() {
-    const tasks = await taskRepository.getAllTasks();
+    const allTasks = await taskRepository.getAllTasks();
+    const todayStr = getTodayString();
+    const isToday = selectedDate === todayStr;
+
+    jumpTodayBtn.style.display = isToday ? 'none' : 'inline-block';
+
+    // Filter tasks for the selected date
+    const dayTasks = allTasks.filter(t => (t.date || todayStr) === selectedDate);
+
+    const targetDate = new Date(selectedDate);
     const now = new Date();
-    const currentFraction = now.getHours() + now.getMinutes() / 60;
+    const currentFraction = isToday ? now.getHours() + now.getMinutes() / 60 : 0;
 
     // Set date labels
-    fullDateEl.textContent = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    centerMonthDay.textContent = `${now.getMonth() + 1}/${now.getDate()}`;
+    fullDateEl.textContent = targetDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
 
-    // Calculate workload and segments
-    const analysis = analyzeDayWorkload(tasks, currentFraction);
-    const segments = calculateOrbitSegments(tasks);
+    // Render Weekly Strip with dots for tasks
+    renderWeeklyStrip(weeklyStrip, allTasks, selectedDate);
+
+    // Calculate workload and segments for this day
+    const analysis = analyzeDayWorkload(dayTasks, currentFraction);
+    const segments = calculateOrbitSegments(dayTasks);
 
     // Update workload badges
     const busyHours = (analysis.totalBusyMinutes / 60).toFixed(1);
@@ -95,8 +140,8 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
       workloadBadge.style.color = 'var(--color-red-primary)';
       workloadBadge.style.borderColor = 'var(--color-red-primary)';
       workloadBadge.style.background = 'var(--color-red-subtle)';
-    } else if (tasks.length === 0) {
-      workloadBadge.textContent = 'SCHEDULE OPEN';
+    } else if (dayTasks.length === 0) {
+      workloadBadge.textContent = 'OPEN';
       workloadBadge.style.color = 'var(--color-black-muted)';
       workloadBadge.style.borderColor = 'var(--border-medium)';
       workloadBadge.style.background = 'transparent';
@@ -112,11 +157,11 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
       const next = analysis.realisticNextTask;
       nextTaskBody.textContent = next.title;
       nextTaskTimePill.textContent = `${next.startTime} (${next.durationMinutes}m)`;
-      nextTaskRationale.textContent = `Suggested based on urgency (${next.urgency}) and estimated effort. Fits your schedule gap.`;
+      nextTaskRationale.textContent = `Suggested for ${targetDate.toLocaleDateString(undefined, { weekday: 'short' })} based on urgency (${next.urgency}) and duration.`;
     } else {
-      nextTaskBody.textContent = tasks.length === 0 ? 'No tasks scheduled today.' : 'All tasks completed!';
+      nextTaskBody.textContent = dayTasks.length === 0 ? 'No tasks scheduled for this day.' : 'All tasks completed!';
       nextTaskTimePill.textContent = '';
-      nextTaskRationale.textContent = tasks.length === 0 ? 'Tap the red + button to schedule your focus blocks.' : 'Great job! Day is cleared.';
+      nextTaskRationale.textContent = dayTasks.length === 0 ? 'Tap + Add Task to schedule ahead.' : 'Great job! Day is clear.';
     }
 
     // Canvas Retina Scaling
@@ -134,14 +179,14 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
     const dialRadius = 105;
     const arcLineWidth = 18;
 
-    // 1. Draw 24-Hour Base Circular Track (Neutral Sand)
+    // 1. Base Circular Track
     ctx.beginPath();
     ctx.arc(centerX, centerY, dialRadius, 0, Math.PI * 2);
     ctx.lineWidth = arcLineWidth;
-    ctx.strokeStyle = '#EAE2D5'; // Soft beige track
+    ctx.strokeStyle = '#EAE2D5';
     ctx.stroke();
 
-    // 2. Draw 24 Hour Hour Ticks and Numbers
+    // 2. Hour Ticks (0, 6, 12, 18)
     for (let h = 0; h < 24; h++) {
       const angle = (h / 24) * Math.PI * 2 - Math.PI / 2;
       const isMajor = h % 6 === 0;
@@ -160,7 +205,6 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
       ctx.strokeStyle = isMajor ? '#121216' : '#A89F91';
       ctx.stroke();
 
-      // Major Hour Numbers: 0, 6, 12, 18
       if (isMajor) {
         const textR = dialRadius - 26;
         const tx = centerX + Math.cos(angle) * textR;
@@ -173,14 +217,12 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
       }
     }
 
-    // 3. Draw Task & Activity Colored Arcs
+    // 3. Task & Activity Arcs for the Selected Day
     segments.forEach(seg => {
-      // Normalize start and end
       let s = seg.startHour;
       let e = seg.endHour;
 
       if (e > 24) {
-        // Draw split arcs if wrapping past midnight (e.g. sleep block)
         drawSingleArc(ctx, centerX, centerY, dialRadius, arcLineWidth, s, 24, seg);
         drawSingleArc(ctx, centerX, centerY, dialRadius, arcLineWidth, 0, e - 24, seg);
       } else {
@@ -188,25 +230,25 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
       }
     });
 
-    // 4. Draw Current Time Needle (CereBruv Red)
-    const currentAngle = (currentFraction / 24) * Math.PI * 2 - Math.PI / 2;
-    const needleR = dialRadius + (arcLineWidth / 2) + 3;
-    const needleInnerR = dialRadius - (arcLineWidth / 2) - 3;
+    // 4. Live Needle (Only shown if viewing Today)
+    if (isToday) {
+      const currentAngle = (currentFraction / 24) * Math.PI * 2 - Math.PI / 2;
+      const needleR = dialRadius + (arcLineWidth / 2) + 3;
+      const needleInnerR = dialRadius - (arcLineWidth / 2) - 3;
 
-    // Glowing needle line
-    ctx.beginPath();
-    ctx.moveTo(centerX + Math.cos(currentAngle) * needleInnerR, centerY + Math.sin(currentAngle) * needleInnerR);
-    ctx.lineTo(centerX + Math.cos(currentAngle) * needleR, centerY + Math.sin(currentAngle) * needleR);
-    ctx.lineWidth = 3.5;
-    ctx.strokeStyle = '#E52E2E';
-    ctx.lineCap = 'round';
-    ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(centerX + Math.cos(currentAngle) * needleInnerR, centerY + Math.sin(currentAngle) * needleInnerR);
+      ctx.lineTo(centerX + Math.cos(currentAngle) * needleR, centerY + Math.sin(currentAngle) * needleR);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#E52E2E';
+      ctx.lineCap = 'round';
+      ctx.stroke();
 
-    // Red Indicator Dot at needle tip
-    ctx.beginPath();
-    ctx.arc(centerX + Math.cos(currentAngle) * needleR, centerY + Math.sin(currentAngle) * needleR, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#E52E2E';
-    ctx.fill();
+      ctx.beginPath();
+      ctx.arc(centerX + Math.cos(currentAngle) * needleR, centerY + Math.sin(currentAngle) * needleR, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#E52E2E';
+      ctx.fill();
+    }
   }
 
   function drawSingleArc(
@@ -230,8 +272,8 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
     c.lineCap = 'round';
 
     if (seg.completed) {
-      c.strokeStyle = '#A89F91'; // Completed tasks turn muted
-      c.globalAlpha = 0.45;
+      c.strokeStyle = '#A89F91';
+      c.globalAlpha = 0.4;
       c.stroke();
       c.globalAlpha = 1.0;
     } else {
@@ -240,48 +282,67 @@ export function renderFocusOrbit(onOpenTaskForm: () => void): HTMLElement {
     }
   }
 
-  function renderWeeklyStrip(el: HTMLElement) {
-    const today = new Date();
-    const currentDay = today.getDay(); // 0 = Sun
-    const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  function renderWeeklyStrip(el: HTMLElement, allTasks: Task[], activeDateStr: string) {
+    const activeDate = new Date(activeDateStr);
+    const dayOfWeek = activeDate.getDay(); // 0 = Sun
+    const sunday = new Date(activeDate);
+    sunday.setDate(activeDate.getDate() - dayOfWeek);
 
+    const dayLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     el.innerHTML = '';
-    days.forEach((dayLabel, idx) => {
-      const isToday = idx === currentDay;
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const isSelected = dateStr === activeDateStr;
+      const isRealToday = dateStr === getTodayString();
+
+      // Check if tasks exist on this day
+      const hasTasks = allTasks.some(t => (t.date || getTodayString()) === dateStr);
+
       const dayBox = document.createElement('div');
       dayBox.style.cssText = `
         flex: 1;
-        padding: 6px 2px;
+        padding: 5px 2px;
         text-align: center;
         border-radius: var(--radius-sm);
-        background: ${isToday ? 'var(--color-red-primary)' : 'var(--bg-surface-elevated)'};
-        color: ${isToday ? '#FFFFFF' : 'var(--color-black-soft)'};
+        background: ${isSelected ? 'var(--color-red-primary)' : 'var(--bg-surface-elevated)'};
+        color: ${isSelected ? '#FFFFFF' : 'var(--color-black-dominant)'};
         font-weight: 700;
-        font-size: var(--font-size-xs);
-        border: 1px solid ${isToday ? 'var(--color-red-primary)' : 'var(--border-subtle)'};
+        cursor: pointer;
+        border: 1px solid ${isSelected ? 'var(--color-red-primary)' : isRealToday ? 'var(--border-focus)' : 'var(--border-subtle)'};
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        transition: all var(--transition-fast);
       `;
-      dayBox.textContent = dayLabel;
+
+      dayBox.innerHTML = `
+        <span style="font-size: 0.65rem; color: ${isSelected ? '#FFFFFF' : 'var(--color-black-muted)'};">${dayLetters[i]}</span>
+        <span style="font-size: var(--font-size-xs); font-weight: 800;">${d.getDate()}</span>
+        ${hasTasks ? `<span style="width: 4px; height: 4px; border-radius: 50%; background: ${isSelected ? '#FFFFFF' : 'var(--color-red-primary)'}; margin-top: 1px;"></span>` : `<span style="height: 5px;"></span>`}
+      `;
+
+      dayBox.addEventListener('click', () => {
+        selectedDate = dateStr;
+        eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
+        drawOrbit();
+      });
+
       el.appendChild(dayBox);
-    });
+    }
   }
 
-  // Handle click on canvas to trigger quick task creation or open details
   canvas.addEventListener('click', () => {
-    onOpenTaskForm();
+    onOpenTaskForm(selectedDate);
   });
 
-  // React to storage events
   eventBus.on(AppEvents.TASK_CREATED, () => drawOrbit());
   eventBus.on(AppEvents.TASK_COMPLETED, () => drawOrbit());
   eventBus.on(AppEvents.TASK_DELETED, () => drawOrbit());
 
-  // Auto-refresh clock needle every 60 seconds
-  setInterval(() => {
-    drawOrbit();
-  }, 60000);
-
-  // Initial draw
   drawOrbit();
-
   return container;
 }

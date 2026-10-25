@@ -38,4 +38,5 @@ export const AppEvents = {
   TASK_COMPLETED: 'task:completed',
   NOTE_CREATED: 'note:created',
   STATS_UPDATED: 'stats:updated',
+  DATE_SELECTED: 'date:selected',
 } as const;

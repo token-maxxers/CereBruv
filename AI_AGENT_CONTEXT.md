@@ -178,6 +178,16 @@ CereBruv/
   5. Tested production build: passes cleanly with zero errors.
 * **Next Action:** Hand-off to Teammates B, C, and D for Firebase and Gemini integrations.
 
+### Entry #8: 2026-10-25 (Antigravity Agent)
+* **Phase:** Feature Enhancement (Multi-Day Calendar & Future Scheduling).
+* **Action:**
+  1. Updated `Task` model to include `date: string` (YYYY-MM-DD), with backwards compatibility for existing tasks.
+  2. Added interactive date selector in `TaskForm.ts` allowing users to schedule tasks ahead on any future date.
+  3. Upgraded `FocusOrbit.ts` weekly date strip to show active dates (e.g., 25, 26, 27) with dot indicators for days containing scheduled tasks.
+  4. Added previous (`<`) and next (`>`) day navigation buttons and a quick "TODAY" jump button.
+  5. Synchronized `TaskList.ts` to filter and display appointments and tasks for the currently selected calendar day.
+* **Next Action:** Ready for team hand-off.
+
 ---
 
 ## 7. How to Deploy to Google Firebase Hosting

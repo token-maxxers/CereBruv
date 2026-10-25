@@ -2,40 +2,51 @@ import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import type { Task } from '../../types/task';
 
-export function renderTaskList(onOpenForm: () => void): HTMLElement {
+export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'card-section';
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  let activeDate = todayStr;
+
   async function loadTasks() {
-    const tasks = await taskRepository.getAllTasks();
+    const allTasks = await taskRepository.getAllTasks();
+
+    // Filter by activeDate
+    const tasks = allTasks.filter(t => (t.date || todayStr) === activeDate);
 
     // Sort by startTime
     tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
+    const isToday = activeDate === todayStr;
+    const dateFormatted = new Date(activeDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const headerTitle = isToday ? `Today's Schedule (${tasks.length})` : `${dateFormatted} Schedule (${tasks.length})`;
+
     if (tasks.length === 0) {
       container.innerHTML = `
+        <div class="section-header">
+          <h2 class="section-title">${headerTitle}</h2>
+          <button class="section-action" id="empty-add-btn">+ Add Task</button>
+        </div>
         <div class="empty-state">
-          <h3 class="empty-state-title">No scheduled tasks yet</h3>
-          <p class="empty-state-sub">Add real tasks with start times to visualize your day on the Focus Orbit.</p>
-          <button class="btn btn-primary" id="empty-add-btn">
-            + Add Task
-          </button>
+          <h3 class="empty-state-title">No scheduled tasks for this day</h3>
+          <p class="empty-state-sub">Tap "+ Add Task" to schedule appointments, classes, or focus blocks.</p>
         </div>
       `;
 
-      container.querySelector('#empty-add-btn')?.addEventListener('click', onOpenForm);
+      container.querySelector('#empty-add-btn')?.addEventListener('click', () => onOpenForm(activeDate));
       return;
     }
 
     container.innerHTML = `
       <div class="section-header">
-        <h2 class="section-title">Today's Schedule (${tasks.length})</h2>
+        <h2 class="section-title">${headerTitle}</h2>
         <button class="section-action" id="header-add-task-btn">+ Add Task</button>
       </div>
       <div class="task-list" id="task-items-container"></div>
     `;
 
-    container.querySelector('#header-add-task-btn')?.addEventListener('click', onOpenForm);
+    container.querySelector('#header-add-task-btn')?.addEventListener('click', () => onOpenForm(activeDate));
 
     const listContainer = container.querySelector('#task-items-container')!;
 
@@ -107,9 +118,13 @@ export function renderTaskList(onOpenForm: () => void): HTMLElement {
     return div.innerHTML;
   }
 
-  // Subscribe to changes
+  // Subscribe to changes and day selections
   eventBus.on(AppEvents.TASK_CREATED, () => loadTasks());
   eventBus.on(AppEvents.TASK_DELETED, () => loadTasks());
+  eventBus.on(AppEvents.DATE_SELECTED, (newDate: string) => {
+    activeDate = newDate;
+    loadTasks();
+  });
 
   loadTasks();
   return container;
