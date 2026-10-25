@@ -20,15 +20,17 @@
 ---
 
 ## 2. Visual Identity & Design System Tokens
-* **Strict Rule:** No generic bright blues/purples unless specified. Maintain high-contrast, premium aesthetic.
-* **Palette:**
-  * Obsidian Black: `#0D0D11` (App background)
-  * Charcoal Surface: `#16161B` (Cards, panels, modal sheets)
-  * Elevated Surface: `#202028` (Inputs, secondary badges)
-  * CereBruv Red: `#E52E2E` (Brand mascot, active orbit arcs, priority flags, primary CTA)
-  * Light Cream / Warm Beige: `#F5EFEB` (Primary typography)
-  * Muted Sand Beige: `#D8C7B0` & `#A89F91` (Labels, secondary text, orbit dial markings)
-* **Strict UX Rule:** Mobile-first viewport (max width 440px centered). Responsive for phone screens. No emojis in UI labels; use clean geometric SVG icons.
+* **Strict Rule:** Beige is the DOMINANT color. Accented with CereBruv Red and high-contrast Black. No emojis in UI labels; use clean geometric SVG icons.
+* **Palette Tokens:**
+  * Dominant Beige Background: `#F5EFEB` (Warm cream canvas)
+  * Surface Card Beige: `#FAF7F2` (Crisp light card and panel background)
+  * Elevated Beige: `#EDE5DA` (Inputs, chips, elevated buttons)
+  * CereBruv Signature Red: `#E52E2E` (Official mascot, active orbit arcs, priority flags, primary CTA)
+  * High-Contrast Black: `#121216` (Primary typography, high-contrast borders, dark elements)
+  * Muted Black / Taupe: `#5E5D67` (Secondary copy, timestamps, dial markers)
+  * Subtle Card Border: `#E2D9CC`
+* **Mascot Asset:** Uses the official mascot image `src/assets/mascot.png` as provided by the user.
+* **Strict UX Rule:** Mobile-first viewport (max width 440px centered). Responsive for phone screens.
 
 ---
 
@@ -111,8 +113,13 @@ CereBruv/
 
 ### Entry #1: 2026-10-25 (Antigravity Agent)
 * **Phase:** Phase 1 Complete.
-* **Action:** Initialized Vite + TypeScript setup. Built mobile-first base HTML, Red/Black/Beige design system CSS variables (`#0D0D11`, `#16161B`, `#E52E2E`, `#F5EFEB`), CereBruv official mascot SVG component, and application shell. Created `AI_AGENT_CONTEXT.md`.
+* **Action:** Initialized Vite + TypeScript setup. Built mobile-first base HTML, Red/Black/Beige design system CSS variables, CereBruv official mascot component, and application shell. Created `AI_AGENT_CONTEXT.md`.
 * **Next Action:** Phase 2 (Domain Types, `ITaskRepository`, and `LocalStorageAdapter`).
+
+### Entry #2: 2026-10-25 (Antigravity Agent)
+* **Phase:** Design Adjustment (User Directive).
+* **Action:** Set Warm Beige (`#F5EFEB`) as the dominant primary canvas color. Configured crisp light card surfaces (`#FAF7F2`) and deep high-contrast black typography (`#121216`). Replaced SVG approximation with the exact official mascot PNG image `src/assets/mascot.png` as uploaded by user.
+* **Next Action:** Phase 2 upon user approval.
 
 ---
 

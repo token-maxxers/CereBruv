@@ -1,4 +1,4 @@
-import mascotSvg from './assets/mascot.svg';
+import mascotImg from './assets/mascot.png';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -7,7 +7,7 @@ app.innerHTML = `
     <!-- Header -->
     <header class="app-header">
       <div class="brand-section">
-        <img src="${mascotSvg}" alt="CereBruv Logo" class="brand-logo" />
+        <img src="${mascotImg}" alt="CereBruv Official Mascot" class="brand-logo" />
         <div class="brand-titles">
           <h1 class="brand-name">Cere<span>Bruv</span></h1>
           <span class="brand-tagline">Think it through, CereBruv's got you</span>
@@ -26,7 +26,7 @@ app.innerHTML = `
 
     <!-- Companion Dynamic Banner -->
     <div class="mascot-banner" id="mascot-banner">
-      <img src="${mascotSvg}" alt="Mascot Icon" class="mascot-avatar-small" />
+      <img src="${mascotImg}" alt="CereBruv Mascot" class="mascot-avatar-small" />
       <div class="mascot-speech" id="mascot-speech">
         Ready for input, Bruv.
         <span>No scheduled tasks yet. Add one below to ignite your Focus Orbit.</span>
@@ -41,8 +41,8 @@ app.innerHTML = `
           <h2 class="section-title">Focus Orbit (Phase 1 Skeleton)</h2>
           <span class="section-action" id="current-date-label"></span>
         </div>
-        <p style="font-size: var(--font-size-sm); color: var(--color-beige-dark); line-height: 1.6;">
-          Design system initialized: Red, Black, and Beige theme applied. Foundation modules loading...
+        <p style="font-size: var(--font-size-sm); color: var(--color-black-muted); line-height: 1.6;">
+          Design system initialized with dominant warm beige canvas, official red mascot, and dark contrast typography.
         </p>
       </section>
     </main>
