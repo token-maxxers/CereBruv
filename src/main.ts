@@ -1,4 +1,6 @@
 import mascotImg from './assets/mascot.png';
+import { userStatsRepository, taskRepository } from './services/storage';
+import { eventBus, AppEvents } from './services/events';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -29,7 +31,7 @@ app.innerHTML = `
       <img src="${mascotImg}" alt="CereBruv Mascot" class="mascot-avatar-small" />
       <div class="mascot-speech" id="mascot-speech">
         Ready for input, Bruv.
-        <span>No scheduled tasks yet. Add one below to ignite your Focus Orbit.</span>
+        <span id="mascot-subspeech">No scheduled tasks yet. Add one below to ignite your Focus Orbit.</span>
       </div>
     </div>
 
@@ -38,12 +40,13 @@ app.innerHTML = `
       <!-- Active View will be injected here by Navigation router -->
       <section class="card-section" id="active-view-container">
         <div class="section-header">
-          <h2 class="section-title">Focus Orbit (Phase 1 Skeleton)</h2>
+          <h2 class="section-title">Focus Orbit Engine</h2>
           <span class="section-action" id="current-date-label"></span>
         </div>
-        <p style="font-size: var(--font-size-sm); color: var(--color-black-muted); line-height: 1.6;">
-          Design system initialized with dominant warm beige canvas, official red mascot, and dark contrast typography.
-        </p>
+        <div id="orbit-status-info" style="font-size: var(--font-size-sm); color: var(--color-black-muted); line-height: 1.6;">
+          <p><strong>Storage System Active:</strong> Local-first data repository connected.</p>
+          <p id="task-count-indicator">Tasks in database: 0 (Awaiting user input)</p>
+        </div>
       </section>
     </main>
 
@@ -94,3 +97,29 @@ if (dateEl) {
   const now = new Date();
   dateEl.textContent = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
+
+// Initialize User Stats & Daily Streak
+async function initUserStats() {
+  const stats = await userStatsRepository.recordDailyActivity();
+  updateStatsUI(stats);
+
+  const tasks = await taskRepository.getAllTasks();
+  const indicator = document.querySelector('#task-count-indicator');
+  if (indicator) {
+    indicator.textContent = `Tasks in database: ${tasks.length} (Live user input, zero fake data)`;
+  }
+}
+
+function updateStatsUI(stats: any) {
+  const streakEl = document.querySelector('#streak-count');
+  const xpEl = document.querySelector('#xp-count');
+  if (streakEl) streakEl.textContent = `${stats.streakDays}d`;
+  if (xpEl) xpEl.textContent = `${stats.experiencePoints} XP (Lv.${stats.level})`;
+}
+
+// React to app-wide stats updates
+eventBus.on(AppEvents.STATS_UPDATED, (newStats) => {
+  updateStatsUI(newStats);
+});
+
+initUserStats();
