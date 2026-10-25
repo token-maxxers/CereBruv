@@ -1,0 +1,293 @@
+@import './variables.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--color-beige-light);
+  font-family: var(--font-family-base);
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background-color: var(--bg-primary);
+}
+
+.mobile-container {
+  width: 100%;
+  max-width: var(--max-width-mobile);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  position: relative;
+  padding-bottom: 80px; /* Space for bottom nav */
+}
+
+/* App Header */
+.app-header {
+  padding: var(--spacing-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand-section {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.brand-logo {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+}
+
+.brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-name {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-beige-light);
+  line-height: 1.1;
+}
+
+.brand-name span {
+  color: var(--color-red-primary);
+}
+
+.brand-tagline {
+  font-size: var(--font-size-xs);
+  color: var(--color-beige-dark);
+  letter-spacing: -0.01em;
+}
+
+.status-badge-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.pill-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-beige-muted);
+}
+
+.pill-badge.active-streak {
+  border-color: var(--color-red-primary);
+  color: var(--color-red-primary);
+  background: var(--color-red-subtle);
+}
+
+/* Mascot Banner */
+.mascot-banner {
+  margin: var(--spacing-4);
+  padding: var(--spacing-3) var(--spacing-4);
+  background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-surface-elevated) 100%);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--color-red-primary);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.mascot-avatar-small {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.mascot-speech {
+  font-size: var(--font-size-sm);
+  color: var(--color-beige-light);
+  font-weight: 500;
+}
+
+.mascot-speech span {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-beige-dark);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* Content Area */
+.main-content {
+  flex: 1;
+  padding: 0 var(--spacing-4) var(--spacing-4) var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-5);
+}
+
+/* Section Cards */
+.card-section {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-4);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-3);
+}
+
+.section-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-beige-light);
+  letter-spacing: -0.01em;
+}
+
+.section-action {
+  font-size: var(--font-size-xs);
+  color: var(--color-beige-dark);
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: color var(--transition-fast);
+}
+
+.section-action:hover {
+  color: var(--color-beige-light);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+  gap: var(--spacing-2);
+}
+
+.btn-primary {
+  background-color: var(--color-red-primary);
+  color: #FFFFFF;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-red-deep);
+}
+
+.btn-secondary {
+  background-color: var(--bg-surface-elevated);
+  color: var(--color-beige-light);
+  border-color: var(--border-subtle);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--color-beige-muted);
+}
+
+/* Bottom Navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--max-width-mobile);
+  height: 64px;
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 100;
+  padding: 0 var(--spacing-2);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--color-beige-dark);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.nav-item.active {
+  color: var(--color-red-primary);
+}
+
+.nav-item.active .nav-icon {
+  stroke: var(--color-red-primary);
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  stroke: var(--color-beige-dark);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-beige-dark);
+}
