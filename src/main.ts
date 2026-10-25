@@ -5,6 +5,7 @@ import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
 import { renderTaskFormModal } from './components/Tasks/TaskForm';
 import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
+import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -133,46 +134,9 @@ function switchTab(tab: string) {
   }
 }
 
-// Orbit View (Combines Focus Orbit Canvas Engine + Task Schedule)
-async function renderOrbitView() {
-  const tasks = await taskRepository.getAllTasks();
-  const now = new Date();
-  const dateFormatted = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-
-  const orbitCard = document.createElement('div');
-  orbitCard.className = 'card-section';
-  orbitCard.innerHTML = `
-    <div class="section-header">
-      <h2 class="section-title">Focus Orbit (Day 24h)</h2>
-      <span class="section-action">${dateFormatted}</span>
-    </div>
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--spacing-4) 0;">
-      <div id="orbit-canvas-container" style="position: relative; width: 260px; height: 260px; display: flex; align-items: center; justify-content: center;">
-        <svg viewBox="0 0 200 200" width="240" height="240">
-          <!-- 24h Outer Dial Base Track -->
-          <circle cx="100" cy="100" r="80" fill="none" stroke="var(--border-medium)" stroke-width="12" />
-          <!-- Dial Ticks (Every 6 hours) -->
-          <line x1="100" y1="12" x2="100" y2="24" stroke="var(--color-black-muted)" stroke-width="2" />
-          <line x1="188" y1="100" x2="176" y2="100" stroke="var(--color-black-muted)" stroke-width="2" />
-          <line x1="100" y1="188" x2="100" y2="176" stroke="var(--color-black-muted)" stroke-width="2" />
-          <line x1="12" y1="100" x2="24" y2="100" stroke="var(--color-black-muted)" stroke-width="2" />
-        </svg>
-        <div style="position: absolute; text-align: center;">
-          <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted);">TODAY</div>
-          <div style="font-size: var(--font-size-xl); font-weight: 800; color: var(--color-black-dominant);">${tasks.length} Tasks</div>
-          <div style="font-size: var(--font-size-xs); color: var(--color-red-primary); font-weight: 600; margin-top: 2px;">
-            ${tasks.filter(t => !t.completed).length} Pending
-          </div>
-        </div>
-      </div>
-      <p style="font-size: var(--font-size-xs); color: var(--color-black-muted); text-align: center; margin-top: var(--spacing-2);">
-        Phase 4 will activate live circular arc rendering & free-time analysis.
-      </p>
-    </div>
-  `;
-
-  viewContainer.appendChild(orbitCard);
-  // Also append task list directly under Orbit view for quick action
+// Orbit View: Mounts Focus Orbit 24h Canvas Engine + Task Schedule
+function renderOrbitView() {
+  viewContainer.appendChild(renderFocusOrbit(() => taskFormModal.open()));
   viewContainer.appendChild(renderTaskList(() => taskFormModal.open()));
 }
 
