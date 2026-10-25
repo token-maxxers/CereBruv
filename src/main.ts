@@ -6,6 +6,7 @@ import { renderTaskFormModal } from './components/Tasks/TaskForm';
 import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
 import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
+import { renderDotGraph } from './components/DotGraph/DotGraph';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -128,7 +129,7 @@ function switchTab(tab: string) {
   } else if (tab === 'tasks') {
     viewContainer.appendChild(renderTaskList(() => taskFormModal.open()));
   } else if (tab === 'graph') {
-    renderGraphPlaceholder();
+    viewContainer.appendChild(renderDotGraph());
   } else if (tab === 'cloud') {
     viewContainer.appendChild(renderCloudView());
   }
@@ -138,24 +139,6 @@ function switchTab(tab: string) {
 function renderOrbitView() {
   viewContainer.appendChild(renderFocusOrbit(() => taskFormModal.open()));
   viewContainer.appendChild(renderTaskList(() => taskFormModal.open()));
-}
-
-// Graph Placeholder
-function renderGraphPlaceholder() {
-  const graphCard = document.createElement('div');
-  graphCard.className = 'card-section';
-  graphCard.innerHTML = `
-    <div class="section-header">
-      <h2 class="section-title">Obsidian-Style Mind Graph</h2>
-    </div>
-    <div class="empty-state">
-      <h3 class="empty-state-title">Graph Node Network</h3>
-      <p class="empty-state-sub">Nodes connect your tasks, quick thoughts, and topics in a dynamic force-directed network (Phase 5 Engine).</p>
-      <button class="btn btn-primary" id="graph-create-task-btn">+ Add Node Item</button>
-    </div>
-  `;
-  graphCard.querySelector('#graph-create-task-btn')?.addEventListener('click', () => taskFormModal.open());
-  viewContainer.appendChild(graphCard);
 }
 
 // Attach Bottom Nav Listeners

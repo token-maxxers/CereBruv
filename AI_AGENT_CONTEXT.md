@@ -80,8 +80,8 @@ CereBruv/
 | **Phase 2** | Domain Types & Local-First Storage Adapter (No Fake Data) | **DONE** | Antigravity Agent |
 | **Phase 3** | Quick Capture Module & Realistic Task Input Form | **DONE** | Antigravity Agent |
 | **Phase 4** | 24-Hour Focus Orbit Canvas Engine (Calculates Free Time & Realistic Next Task) | **DONE** | Antigravity Agent |
-| **Phase 5** | Obsidian-Style Interactive Dot Graph Engine | **READY** | Antigravity Agent |
-| **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **PENDING** | Antigravity Agent |
+| **Phase 5** | Obsidian-Style Interactive Dot Graph Engine | **DONE** | Antigravity Agent |
+| **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **READY** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **PLANNED** | Teammates B, C, D |
 
 ---
@@ -157,6 +157,16 @@ CereBruv/
      - "Realistic Next Task" recommendation card matching Image 1 specifications.
   3. Integrated `FocusOrbit` directly into the default "Orbit" view in `src/main.ts`.
 * **Next Action:** Phase 5 (Obsidian-Style Interactive Dot Graph Engine).
+
+### Entry #6: 2026-10-25 (Antigravity Agent)
+* **Phase:** Phase 5 Complete.
+* **Action:**
+  1. Built `DotGraph.ts`: native HTML5 Canvas 60fps force-directed graph engine matching Image 2 specifications.
+  2. Dynamically links user's real tasks (`#E52E2E`), quick notes (`#38BDF8`), and topic hubs (`#4F46E5`, `#0D9488`, `#D97706`).
+  3. Implemented particle physics simulation: center gravity, node repulsion, spring link attraction, and velocity damping.
+  4. Added full pointer interaction: drag-and-drop nodes, click inspection overlay, and filter buttons (All, Tasks, Notes, Topics).
+  5. Wired `renderDotGraph` directly into the "Graph" tab in `src/main.ts`.
+* **Next Action:** Phase 6 (PWA Manifest, Local Notification Shell & Firebase Hand-off).
 
 ---
 
