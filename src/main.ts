@@ -1,6 +1,7 @@
 import mascotImg from './assets/mascot.png';
 import { userStatsRepository, taskRepository } from './services/storage';
 import { eventBus, AppEvents } from './services/events';
+import { notificationService } from './services/notifications/NotificationService';
 import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
 import { renderTaskFormModal } from './components/Tasks/TaskForm';
 import { renderTaskList } from './components/Tasks/TaskList';
@@ -22,6 +23,12 @@ app.innerHTML = `
         </div>
       </div>
       <div class="status-badge-group">
+        <button class="icon-btn" id="notif-bell-btn" title="Enable Task Alerts" style="width: 28px; height: 28px;">
+          <svg viewBox="0 0 24 24" width="14" height="14">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+        </button>
         <div class="pill-badge active-streak" id="streak-badge">
           <span>STREAK</span>
           <strong id="streak-count">0d</strong>
@@ -46,7 +53,6 @@ app.innerHTML = `
 
     <!-- Main Content Area -->
     <main class="main-content" id="main-content">
-      <!-- Active View will be injected here by Navigation router -->
       <div id="view-container"></div>
     </main>
 
@@ -113,11 +119,22 @@ fabBtn.addEventListener('click', () => {
   taskFormModal.open();
 });
 
+// Notification Bell Toggle
+const bellBtn = document.querySelector<HTMLButtonElement>('#notif-bell-btn')!;
+bellBtn.addEventListener('click', async () => {
+  const granted = await notificationService.requestPermission();
+  if (granted) {
+    bellBtn.style.color = 'var(--color-red-primary)';
+    notificationService.showNotification('CereBruv Alerts Active', 'Task reminder popups will alert you 10 minutes prior.');
+  } else {
+    alert('Notifications blocked in browser settings. Enable them to receive task reminders.');
+  }
+});
+
 // View Router
 const viewContainer = document.querySelector('#view-container')!;
 
 function switchTab(tab: string) {
-  // Update navbar active states
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
   });
@@ -135,7 +152,6 @@ function switchTab(tab: string) {
   }
 }
 
-// Orbit View: Mounts Focus Orbit 24h Canvas Engine + Task Schedule
 function renderOrbitView() {
   viewContainer.appendChild(renderFocusOrbit(() => taskFormModal.open()));
   viewContainer.appendChild(renderTaskList(() => taskFormModal.open()));
@@ -168,6 +184,9 @@ async function updateMascotStatus() {
       subspeech.textContent = `Next up: "${pending[0].title}" at ${pending[0].startTime}.`;
     }
   }
+
+  // Schedule local notification alarms for pending tasks
+  pending.forEach(t => notificationService.scheduleTaskAlert(t));
 }
 
 // Update User Stats (Streak & XP)
@@ -190,6 +209,28 @@ eventBus.on(AppEvents.TASK_CREATED, () => updateMascotStatus());
 eventBus.on(AppEvents.TASK_COMPLETED, () => updateMascotStatus());
 eventBus.on(AppEvents.TASK_DELETED, () => updateMascotStatus());
 
-// Initial Mount
+// Register PWA Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service Worker registration skipped:', err);
+    });
+  });
+}
+
+// Handle Mobile App Shortcut Query Params
+const urlParams = new URLSearchParams(window.location.search);
+const actionParam = urlParams.get('action');
+const tabParam = urlParams.get('tab');
+
 initUserStats();
-switchTab('orbit');
+
+if (tabParam && ['orbit', 'tasks', 'graph', 'cloud'].includes(tabParam)) {
+  switchTab(tabParam);
+} else {
+  switchTab('orbit');
+}
+
+if (actionParam === 'new_task') {
+  setTimeout(() => taskFormModal.open(), 300);
+}

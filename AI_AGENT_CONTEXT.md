@@ -81,8 +81,8 @@ CereBruv/
 | **Phase 3** | Quick Capture Module & Realistic Task Input Form | **DONE** | Antigravity Agent |
 | **Phase 4** | 24-Hour Focus Orbit Canvas Engine (Calculates Free Time & Realistic Next Task) | **DONE** | Antigravity Agent |
 | **Phase 5** | Obsidian-Style Interactive Dot Graph Engine | **DONE** | Antigravity Agent |
-| **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **READY** | Antigravity Agent |
-| **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **PLANNED** | Teammates B, C, D |
+| **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **DONE** | Antigravity Agent |
+| **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
 
@@ -167,6 +167,39 @@ CereBruv/
   4. Added full pointer interaction: drag-and-drop nodes, click inspection overlay, and filter buttons (All, Tasks, Notes, Topics).
   5. Wired `renderDotGraph` directly into the "Graph" tab in `src/main.ts`.
 * **Next Action:** Phase 6 (PWA Manifest, Local Notification Shell & Firebase Hand-off).
+
+### Entry #7: 2026-10-25 (Antigravity Agent)
+* **Phase:** Phase 6 Complete (Foundation Finalized).
+* **Action:**
+  1. Created `public/manifest.json`: Mobile-first PWA configuration (standalone fullscreen, Warm Beige background, app shortcuts for "Add Task", "Focus Orbit", and "Mind Graph").
+  2. Created `public/sw.js`: Service worker with offline asset caching and push notification listeners (ready for Firebase Cloud Messaging).
+  3. Built `NotificationService.ts`: Browser permission manager and 10-minute automated task reminder scheduler. Added bell toggle in app header.
+  4. Created Google Firebase deployment configs: `firebase.json` and `.firebaserc`.
+  5. Tested production build: passes cleanly with zero errors.
+* **Next Action:** Hand-off to Teammates B, C, and D for Firebase and Gemini integrations.
+
+---
+
+## 7. How to Deploy to Google Firebase Hosting
+
+1. Build production bundle:
+   ```bash
+   npm run build
+   ```
+2. Log in to your Google / Firebase account:
+   ```bash
+   npx firebase-tools login
+   ```
+3. Initialize / select your Firebase Project:
+   ```bash
+   npx firebase-tools use --add
+   ```
+4. Deploy in one command:
+   ```bash
+   npx firebase-tools deploy --only hosting
+   ```
+5. Your live app will be accessible worldwide on Google Cloud at:
+   `https://<project-id>.web.app`
 
 ---
 

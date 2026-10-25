@@ -1,0 +1,47 @@
+{
+  "name": "CereBruv - AI Second Brain",
+  "short_name": "CereBruv",
+  "description": "Think it through, CereBruv's got you. AI-assisted second brain and time-blocking companion.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5EFEB",
+  "theme_color": "#F5EFEB",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add Task",
+      "short_name": "New Task",
+      "description": "Quickly schedule a new task",
+      "url": "/?action=new_task",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Focus Orbit",
+      "short_name": "Orbit",
+      "description": "View 24h day wheel",
+      "url": "/?tab=orbit",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mind Graph",
+      "short_name": "Graph",
+      "description": "Explore knowledge network",
+      "url": "/?tab=graph",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
