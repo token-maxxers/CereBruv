@@ -1,6 +1,6 @@
 import { taskRepository, noteRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
-import type { GraphNode, GraphLink, GraphNodeType } from '../../types/note';
+import type { GraphNode, GraphLink } from '../../types/note';
 
 export function renderDotGraph(): HTMLElement {
   const container = document.createElement('div');
@@ -27,6 +27,12 @@ export function renderDotGraph(): HTMLElement {
     <div style="position: relative; width: 100%; height: 320px; background: #16161C; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-medium); box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
       <canvas id="dot-graph-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
 
+      <!-- Empty State Overlay if 0 items -->
+      <div id="graph-empty-overlay" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; text-align: center; color: #FAF7F2; padding: var(--spacing-4);">
+        <div style="font-size: var(--font-size-base); font-weight: 700;">No Graph Nodes Yet</div>
+        <div style="font-size: var(--font-size-xs); color: #BDB2A1; margin-top: 4px;">Add tasks or quick notes to see your personal knowledge network grow.</div>
+      </div>
+
       <!-- Zoom / Center Controls Overlay -->
       <div style="position: absolute; bottom: 8px; right: 8px; display: flex; gap: 4px;">
         <button id="graph-reset-btn" class="pill-badge" style="background: rgba(32,32,40,0.8); color: #F5EFEB; border-color: rgba(255,255,255,0.15); cursor: pointer; font-size: 0.65rem;">
@@ -44,29 +50,26 @@ export function renderDotGraph(): HTMLElement {
       </div>
     </div>
 
-    <!-- Graph Legend (Matching Image 2) -->
+    <!-- Graph Legend -->
     <div style="display: flex; align-items: center; justify-content: space-around; margin-top: var(--spacing-3); padding-top: var(--spacing-2); border-top: 1px solid var(--border-subtle); font-size: var(--font-size-xs); font-weight: 600;">
       <div style="display: flex; align-items: center; gap: 4px;">
         <span style="width: 8px; height: 8px; border-radius: 50%; background: #E52E2E; display: inline-block;"></span>
         <span>Tasks</span>
       </div>
       <div style="display: flex; align-items: center; gap: 4px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #4F46E5; display: inline-block;"></span>
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #38BDF8; display: inline-block;"></span>
         <span>Notes</span>
       </div>
       <div style="display: flex; align-items: center; gap: 4px;">
         <span style="width: 8px; height: 8px; border-radius: 50%; background: #0D9488; display: inline-block;"></span>
-        <span>Topics</span>
-      </div>
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #D97706; display: inline-block;"></span>
-        <span>Goals</span>
+        <span>Categories</span>
       </div>
     </div>
   `;
 
   const canvas = container.querySelector<HTMLCanvasElement>('#dot-graph-canvas')!;
   const ctx = canvas.getContext('2d')!;
+  const emptyOverlay = container.querySelector<HTMLElement>('#graph-empty-overlay')!;
   const inspector = container.querySelector<HTMLElement>('#node-inspector')!;
   const inspectorBadge = container.querySelector<HTMLElement>('#inspector-badge')!;
   const inspectorTitle = container.querySelector<HTMLElement>('#inspector-title')!;
@@ -85,6 +88,14 @@ export function renderDotGraph(): HTMLElement {
   let draggedNode: GraphNode | null = null;
   let isDragging = false;
 
+  const categoryConfig: Record<string, { label: string; color: string }> = {
+    study: { label: 'Study', color: '#4F46E5' },
+    work: { label: 'Work', color: '#0D9488' },
+    personal: { label: 'Personal', color: '#E52E2E' },
+    event: { label: 'Event', color: '#D97706' },
+    rest: { label: 'Rest', color: '#7C3AED' },
+  };
+
   async function buildGraphData() {
     const tasks = await taskRepository.getAllTasks();
     const notes = await noteRepository.getAllNotes();
@@ -92,22 +103,22 @@ export function renderDotGraph(): HTMLElement {
     const newNodes: GraphNode[] = [];
     const newLinks: GraphLink[] = [];
 
-    // Central Core Topic Hubs
-    const topics = [
-      { id: 'topic_study', label: 'Study & Research', type: 'tag' as GraphNodeType, color: '#4F46E5', radius: 10 },
-      { id: 'topic_work', label: 'Dev & Projects', type: 'tag' as GraphNodeType, color: '#0D9488', radius: 10 },
-      { id: 'topic_personal', label: 'Personal Life', type: 'tag' as GraphNodeType, color: '#E52E2E', radius: 10 },
-      { id: 'topic_event', label: 'Events & GDG', type: 'tag' as GraphNodeType, color: '#D97706', radius: 10 },
-    ];
+    // ONLY create category topic nodes that actually exist in the user's tasks
+    const usedCategories = new Set<string>();
+    tasks.forEach(t => usedCategories.add(t.category));
 
-    topics.forEach(t => newNodes.push(t));
+    usedCategories.forEach(cat => {
+      const cfg = categoryConfig[cat] || { label: cat.toUpperCase(), color: '#0D9488' };
+      newNodes.push({
+        id: `topic_${cat}`,
+        label: cfg.label,
+        type: 'tag',
+        radius: 10,
+        color: cfg.color,
+      });
+    });
 
-    // Connect topics to each other lightly
-    newLinks.push({ sourceId: 'topic_study', targetId: 'topic_work', weight: 1 });
-    newLinks.push({ sourceId: 'topic_work', targetId: 'topic_event', weight: 1 });
-    newLinks.push({ sourceId: 'topic_personal', targetId: 'topic_study', weight: 1 });
-
-    // Map real Tasks to nodes
+    // Map user's real Tasks
     tasks.forEach(task => {
       const taskNodeId = `node_task_${task.id}`;
       const taskNode: GraphNode = {
@@ -120,43 +131,54 @@ export function renderDotGraph(): HTMLElement {
       newNodes.push(taskNode);
 
       // Link task to its category hub
-      const categoryTopicId = `topic_${task.category}`;
-      const foundTopic = topics.find(t => t.id === categoryTopicId);
-      if (foundTopic) {
-        newLinks.push({ sourceId: taskNodeId, targetId: foundTopic.id, weight: 2 });
-      }
+      newLinks.push({
+        sourceId: taskNodeId,
+        targetId: `topic_${task.category}`,
+        weight: 2,
+      });
     });
 
-    // Map real Quick Notes to nodes
-    notes.forEach(note => {
+    // Map user's real Quick Notes / Brain-dumps
+    notes.forEach((note, idx) => {
       const noteNodeId = `node_note_${note.id}`;
-      const noteNode: GraphNode = {
+      newNodes.push({
         id: noteNodeId,
         label: note.content.length > 25 ? note.content.substring(0, 22) + '...' : note.content,
         type: 'note',
         radius: 6,
-        color: '#38BDF8', // Cyan/sky blue
-      };
-      newNodes.push(noteNode);
+        color: '#38BDF8', // Cyan
+      });
 
-      // Connect note to first task or topic
-      if (newNodes.length > 4) {
-        newLinks.push({ sourceId: noteNodeId, targetId: topics[Math.floor(Math.random() * topics.length)].id, weight: 1 });
+      // If user has tasks, connect note to the most recent task
+      if (tasks.length > 0) {
+        const targetTaskId = `node_task_${tasks[idx % tasks.length].id}`;
+        newLinks.push({
+          sourceId: noteNodeId,
+          targetId: targetTaskId,
+          weight: 1,
+        });
       }
     });
 
-    // Initialize node positions in a circle
+    // Toggle empty overlay
+    if (newNodes.length === 0) {
+      emptyOverlay.style.display = 'flex';
+    } else {
+      emptyOverlay.style.display = 'none';
+    }
+
+    // Initialize node coordinates
     const rect = canvas.getBoundingClientRect();
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
+    const cx = rect.width > 0 ? rect.width / 2 : 140;
+    const cy = rect.height > 0 ? rect.height / 2 : 160;
 
     newNodes.forEach((node, i) => {
-      const angle = (i / newNodes.length) * Math.PI * 2;
-      const dist = 60 + Math.random() * 60;
+      const angle = (i / Math.max(1, newNodes.length)) * Math.PI * 2;
+      const dist = 50 + (i % 3) * 20;
       node.x = cx + Math.cos(angle) * dist;
       node.y = cy + Math.sin(angle) * dist;
-      node.vx = (Math.random() - 0.5) * 0.5;
-      node.vy = (Math.random() - 0.5) * 0.5;
+      node.vx = (Math.random() - 0.5) * 0.4;
+      node.vy = (Math.random() - 0.5) * 0.4;
     });
 
     nodes = newNodes;
@@ -179,14 +201,14 @@ export function renderDotGraph(): HTMLElement {
     const cx = width / 2;
     const cy = height / 2;
 
-    // 1. Center Gravity
+    // Center Gravity
     nodes.forEach(n => {
       if (n === draggedNode) return;
-      n.vx = (n.vx || 0) + (cx - (n.x || cx)) * 0.001;
-      n.vy = (n.vy || 0) + (cy - (n.y || cy)) * 0.001;
+      n.vx = (n.vx || 0) + (cx - (n.x || cx)) * 0.0012;
+      n.vy = (n.vy || 0) + (cy - (n.y || cy)) * 0.0012;
     });
 
-    // 2. Node Repulsion
+    // Node Repulsion
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i];
@@ -194,8 +216,8 @@ export function renderDotGraph(): HTMLElement {
         const dx = (b.x || 0) - (a.x || 0);
         const dy = (b.y || 0) - (a.y || 0);
         const distSq = dx * dx + dy * dy || 1;
-        if (distSq < 15000) {
-          const force = 300 / distSq;
+        if (distSq < 18000) {
+          const force = 350 / distSq;
           const fx = (dx / Math.sqrt(distSq)) * force;
           const fy = (dy / Math.sqrt(distSq)) * force;
 
@@ -211,7 +233,7 @@ export function renderDotGraph(): HTMLElement {
       }
     }
 
-    // 3. Link Spring Attraction
+    // Link Spring Attraction
     links.forEach(link => {
       const source = nodes.find(n => n.id === link.sourceId);
       const target = nodes.find(n => n.id === link.targetId);
@@ -220,7 +242,7 @@ export function renderDotGraph(): HTMLElement {
       const dx = (target.x || 0) - (source.x || 0);
       const dy = (target.y || 0) - (source.y || 0);
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const desiredDist = 55;
+      const desiredDist = 65;
       const springForce = (dist - desiredDist) * 0.02;
 
       const fx = (dx / dist) * springForce;
@@ -236,16 +258,15 @@ export function renderDotGraph(): HTMLElement {
       }
     });
 
-    // 4. Position Update & Damping
+    // Position Update & Damping
     nodes.forEach(n => {
       if (n === draggedNode) return;
-      n.vx = (n.vx || 0) * 0.88; // Damping
+      n.vx = (n.vx || 0) * 0.88;
       n.vy = (n.vy || 0) * 0.88;
 
       n.x = (n.x || cx) + (n.vx || 0);
       n.y = (n.y || cy) + (n.vy || 0);
 
-      // Boundaries
       n.x = Math.max(n.radius, Math.min(width - n.radius, n.x));
       n.y = Math.max(n.radius, Math.min(height - n.radius, n.y));
     });
@@ -265,7 +286,6 @@ export function renderDotGraph(): HTMLElement {
 
     ctx.clearRect(0, 0, width, height);
 
-    // Filter nodes
     const visibleNodes = nodes.filter(n => {
       if (activeFilter === 'all') return true;
       return n.type === activeFilter;
@@ -274,7 +294,7 @@ export function renderDotGraph(): HTMLElement {
 
     // Draw Links
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     links.forEach(link => {
       if (visibleNodeIds.has(link.sourceId) && visibleNodeIds.has(link.targetId)) {
         const source = nodes.find(n => n.id === link.sourceId);
@@ -296,7 +316,7 @@ export function renderDotGraph(): HTMLElement {
       // Glow halo
       ctx.beginPath();
       ctx.arc(x, y, node.radius + 4, 0, Math.PI * 2);
-      ctx.fillStyle = node.color + '26'; // 15% opacity halo
+      ctx.fillStyle = node.color + '26';
       ctx.fill();
 
       // Node Body
@@ -307,7 +327,7 @@ export function renderDotGraph(): HTMLElement {
 
       // Node Label
       ctx.fillStyle = '#E5E7EB';
-      ctx.font = '500 9px -apple-system, sans-serif';
+      ctx.font = '600 9px -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(node.label, x, y + node.radius + 3);
@@ -316,7 +336,6 @@ export function renderDotGraph(): HTMLElement {
     requestAnimationFrame(draw);
   }
 
-  // Pointer Interaction (Drag & Tap)
   function getCanvasCoords(e: MouseEvent | TouchEvent): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
@@ -346,7 +365,6 @@ export function renderDotGraph(): HTMLElement {
       draggedNode = node;
       isDragging = true;
 
-      // Show in inspector
       inspector.style.display = 'block';
       inspectorTitle.textContent = node.label;
       inspectorBadge.textContent = node.type;
@@ -378,7 +396,6 @@ export function renderDotGraph(): HTMLElement {
   window.addEventListener('touchmove', handleMove, { passive: true });
   window.addEventListener('touchend', handleEnd);
 
-  // Filter Buttons
   container.querySelectorAll('#graph-filter-group button').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('#graph-filter-group button').forEach(b => b.classList.remove('active'));
@@ -387,26 +404,23 @@ export function renderDotGraph(): HTMLElement {
     });
   });
 
-  // Reset / Center Button
   resetBtn.addEventListener('click', () => {
     const rect = canvas.getBoundingClientRect();
     const cx = rect.width / 2;
     const cy = rect.height / 2;
     nodes.forEach((n, i) => {
-      const angle = (i / nodes.length) * Math.PI * 2;
-      n.x = cx + Math.cos(angle) * 70;
-      n.y = cy + Math.sin(angle) * 70;
+      const angle = (i / Math.max(1, nodes.length)) * Math.PI * 2;
+      n.x = cx + Math.cos(angle) * 50;
+      n.y = cy + Math.sin(angle) * 50;
       n.vx = 0;
       n.vy = 0;
     });
   });
 
-  // Re-build graph when storage changes
   eventBus.on(AppEvents.TASK_CREATED, () => buildGraphData());
   eventBus.on(AppEvents.NOTE_CREATED, () => buildGraphData());
   eventBus.on(AppEvents.TASK_DELETED, () => buildGraphData());
 
-  // Mount lifecycle
   setTimeout(() => {
     resizeCanvas();
     buildGraphData().then(() => {
