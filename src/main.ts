@@ -2,6 +2,7 @@ import mascotImg from './assets/mascot.png';
 import { initAnalytics, ensureSignedIn } from './services/firebase';
 import { userStatsRepository, taskRepository } from './services/storage';
 import { migrateLocalStorageToFirestore } from './services/storage/migrate';
+import { geminiService } from './services/ai/GeminiService';
 import { eventBus, AppEvents } from './services/events';
 import { notificationService } from './services/notifications/NotificationService';
 import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
@@ -10,6 +11,10 @@ import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
 import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
 import { renderDotGraph } from './components/DotGraph/DotGraph';
+
+// Mascot AI request debouncer & race-condition cancellation ID
+let mascotAiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let latestMascotRequestId = 0;
 
 async function bootstrap() {
   // Attempt Firebase authentication first; continue in local mode if offline/failed
@@ -182,7 +187,7 @@ async function bootstrap() {
     });
   });
 
-  // Update Mascot Status dynamically
+  // Update Mascot Status dynamically with rule-based fallback and debounced AI analysis
   async function updateMascotStatus() {
     const tasks = await taskRepository.getAllTasks();
     const todayStr = new Date().toISOString().split('T')[0];
@@ -191,6 +196,7 @@ async function bootstrap() {
     const statusTitle = document.querySelector('#mascot-status-title');
     const subspeech = document.querySelector('#mascot-subspeech');
 
+    // Rule-based fallback text (displayed immediately)
     if (statusTitle && subspeech) {
       if (todayTasks.length === 0) {
         statusTitle.textContent = 'Ready for input, Bruv.';
@@ -206,6 +212,28 @@ async function bootstrap() {
 
     // Schedule notification alarms
     pending.forEach(t => notificationService.scheduleTaskAlert(t));
+
+    // Debounce Gemini AI companion analysis (at most 1 call per task-list change batch)
+    if (mascotAiDebounceTimer) {
+      clearTimeout(mascotAiDebounceTimer);
+    }
+
+    const currentRequestId = ++latestMascotRequestId;
+
+    mascotAiDebounceTimer = setTimeout(async () => {
+      if (todayTasks.length === 0) return;
+
+      try {
+        const aiMessage = await geminiService.analyzeWorkload(todayTasks);
+        // Only update UI if this is still the freshest request and speech container exists
+        if (currentRequestId === latestMascotRequestId && subspeech && aiMessage) {
+          subspeech.textContent = aiMessage;
+        }
+      } catch (err) {
+        // Quietly maintain existing rule-based fallback on timeout, offline, or failure
+        console.warn('Gemini AI workload analysis fallback active:', err);
+      }
+    }, 400);
   }
 
   // Update User Stats (Streak & XP)
