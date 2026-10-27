@@ -1,6 +1,7 @@
 import mascotImg from './assets/mascot.png';
 import { initAnalytics, ensureSignedIn } from './services/firebase';
 import { userStatsRepository, taskRepository } from './services/storage';
+import { migrateLocalStorageToFirestore } from './services/storage/migrate';
 import { eventBus, AppEvents } from './services/events';
 import { notificationService } from './services/notifications/NotificationService';
 import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
@@ -14,8 +15,9 @@ async function bootstrap() {
   // Attempt Firebase authentication first; continue in local mode if offline/failed
   try {
     await ensureSignedIn();
+    await migrateLocalStorageToFirestore();
   } catch (err) {
-    console.warn('Firebase Auth sign-in skipped (running in local mode):', err);
+    console.warn('Firebase Auth/migration skipped (running in offline mode):', err);
   }
 
   const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -210,7 +212,7 @@ async function bootstrap() {
   async function initUserStats() {
     const stats = await userStatsRepository.recordDailyActivity();
     updateStatsUI(stats);
-    updateMascotStatus();
+    await updateMascotStatus();
   }
 
   function updateStatsUI(stats: any) {
