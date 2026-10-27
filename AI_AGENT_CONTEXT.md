@@ -351,6 +351,17 @@ CereBruv/
   6. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for live deployment.
 
+### Entry #18: 2026-10-27 (Antigravity Agent)
+* **Phase:** Bugfix - Firestore undefined field rejection.
+* **Action:**
+  1. Added `stripUndefined<T>()` helper in `src/services/storage/FirestoreAdapter.ts` that recursively removes keys with `undefined` values from objects. Preserves `null`, `0`, `false`, empty strings, and Firestore sentinel values (`increment()`, `serverTimestamp()`) by checking `Object.getPrototypeOf`.
+  2. Wrapped every write call (`setDoc`, `updateDoc`, transaction `set`) across `FirestoreTaskRepository`, `FirestoreNoteRepository`, and `FirestoreUserStatsRepository` with `stripUndefined()` — 7 call sites total.
+  3. Added `ignoreUndefinedProperties: true` to `initializeFirestore()` settings in `src/services/firebase.ts` as a second safety net.
+  4. No changes to the `Task` type, `TaskForm`, or any UI components.
+  5. Verified production build passes cleanly (`npm run build`).
+* **Files Changed:** `src/services/firebase.ts`, `src/services/storage/FirestoreAdapter.ts`.
+* **Next Action:** Ready for live deployment.
+
 ---
 
 ## 7. How to Deploy to Google Firebase Hosting
