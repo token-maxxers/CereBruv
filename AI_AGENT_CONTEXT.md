@@ -37,29 +37,51 @@
 ## 3. Modular Architecture & Directory Map
 ```text
 CereBruv/
+├── .env                        # Local environment variables (VITE_FIREBASE_*, gitignored)
+├── .env.example                # Template for environment variables
+├── .firebaserc                 # Firebase project alias
+├── firebase.json               # Firebase hosting & firestore rules configuration
+├── firestore.rules             # Granular user-scoped Firestore security rules
 ├── index.html                  # HTML5 Entry Point
 ├── package.json                # Scripts & Dependencies (Vite + TypeScript)
 ├── tsconfig.json               # TypeScript Compiler Config
 ├── AI_AGENT_CONTEXT.md         # THIS FILE (Living architecture & agent log)
+├── public/
+│   ├── manifest.json           # Web App Manifest
+│   └── sw.js                   # Service Worker (offline cache + FCM shell)
 ├── src/
+│   ├── vite-env.d.ts           # Vite client & ImportMetaEnv type definitions
 │   ├── assets/
-│   │   └── mascot.svg          # Official CereBruv Mascot (Red Brain Robot)
+│   │   ├── mascot.png          # Official CereBruv Mascot (Transparent PNG)
+│   │   └── mascot.svg          # Mascot vector asset
 │   ├── components/             # Self-contained UI modules
-│   │   ├── FocusOrbit/         # 24-hour circular dial canvas (Image 1)
-│   │   ├── DotGraph/           # Obsidian-style interconnected mind graph (Image 2)
-│   │   ├── Tasks/              # Realistic task creation and time-blocking cards
-│   │   ├── QuickCapture/       # Rapid input bar with audio & photo hooks
-│   │   └── Navigation/         # Mobile bottom navigation tabs
+│   │   ├── Cloud/
+│   │   │   └── CloudView.ts    # Cloud sync status & metrics panel
+│   │   ├── FocusOrbit/
+│   │   │   ├── FocusOrbit.ts   # 24-hour circular dial canvas engine
+│   │   │   └── orbitCalculator.ts # Dial trigonometry & gap heuristics
+│   │   ├── DotGraph/
+│   │   │   └── DotGraph.ts     # Obsidian-style 60fps force-directed graph
+│   │   ├── Tasks/
+│   │   │   ├── TaskForm.ts     # Task creation modal with date selector
+│   │   │   └── TaskList.ts     # Task display, toggle completion & deletion
+│   │   └── QuickCapture/
+│   │       └── QuickCapture.ts # Rapid thought capture, mic & photo triggers
 │   ├── services/
+│   │   ├── firebase.ts         # Firebase App, Analytics & Firestore initialization
+│   │   ├── events.ts           # Central Pub/Sub event bus
 │   │   ├── storage/
-│   │   │   ├── ITaskRepository.ts     # Abstract interface contract
-│   │   │   ├── LocalStorageAdapter.ts # Active browser storage (No mock data)
+│   │   │   ├── index.ts               # Storage export & swap point
+│   │   │   ├── ITaskRepository.ts     # Abstract Task repository interface
+│   │   │   ├── INoteRepository.ts     # Abstract Note repository interface
+│   │   │   ├── IUserStatsRepository.ts# Abstract UserStats repository interface
+│   │   │   ├── LocalStorageAdapter.ts # Active browser storage implementation
 │   │   │   └── FirestoreAdapter.ts    # Placeholder for Teammate B (Firebase)
-│   │   ├── ai/
-│   │   │   ├── IAIService.ts          # AI Interface contract
-│   │   │   └── GeminiService.ts       # Placeholder for Teammate C (Gemini)
+│   │   ├── ai/                        # [PLANNED] Teammate C (Google AI Studio / Gemini)
+│   │   │   ├── IAIService.ts          # [PLANNED] AI Interface contract
+│   │   │   └── GeminiService.ts       # [PLANNED] Gemini API integration
 │   │   └── notifications/
-│   │       └── NotificationService.ts # Local + FCM Web Push shell
+│   │       └── NotificationService.ts # Local reminder & FCM Web Push shell
 │   ├── types/
 │   │   ├── task.ts             # Domain Task & TimeBlock definitions
 │   │   ├── note.ts             # Thought & Mind-Graph Node definitions
@@ -82,6 +104,8 @@ CereBruv/
 | **Phase 4** | 24-Hour Focus Orbit Canvas Engine (Calculates Free Time & Realistic Next Task) | **DONE** | Antigravity Agent |
 | **Phase 5** | Obsidian-Style Interactive Dot Graph Engine | **DONE** | Antigravity Agent |
 | **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **DONE** | Antigravity Agent |
+| **Phase 7** | Environment Variables Security & Tree Synchronization | **DONE** | Antigravity Agent |
+| **Phase 8** | Firebase Anonymous Auth, Firestore Rules & Offline Resilience | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -198,6 +222,31 @@ CereBruv/
   3. Integrated `initAnalytics()` in `src/main.ts` for real-time app telemetry.
   4. Verified full production build (`npm run build`) passes cleanly.
 * **Next Action:** Ready for Firebase Hosting deployment (`npx firebase-tools deploy --only hosting`) and Firestore adapter connection.
+
+---
+
+### Entry #10: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 7 Complete - Environment Variable Extraction & Tree Synchronization.
+* **Action:**
+  1. Extracted hardcoded Firebase configuration from `src/services/firebase.ts` into `import.meta.env.VITE_FIREBASE_*` variables.
+  2. Populated `.env` with the active project credentials and created `.env.example` with blank keys.
+  3. Added `.env` and `.env.local` to `.gitignore`.
+  4. Added `ImportMetaEnv` interface typings in `src/vite-env.d.ts` for all `VITE_FIREBASE_*` variables.
+  5. Updated `AI_AGENT_CONTEXT.md` Section 3 directory map to accurately reflect the real repository tree (`mascot.png`, `firebase.ts`, `events.ts`, `Cloud/CloudView.ts`, `IUserStatsRepository.ts`) and labeled `src/services/ai/` as planned.
+  6. Verified that `grep -r "AIzaSy" src/` finds zero occurrences and production build (`npm run build`) succeeds cleanly.
+* **Next Action:** Ready for Firebase Hosting deployment (`npx firebase-tools deploy --only hosting`) or Firestore adapter connection.
+
+---
+
+### Entry #11: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 8 Complete - Firebase Anonymous Auth & Security Rules.
+* **Action:**
+  1. Updated `src/services/firebase.ts` to export `auth` and `ensureSignedIn()` helper which initiates anonymous authentication (`signInAnonymously`) or returns existing UID.
+  2. Wrapped `src/main.ts` startup in `bootstrap()`, awaiting `ensureSignedIn()` before rendering the UI with a try/catch fallback ensuring offline resilience.
+  3. Created `firestore.rules` enforcing that only authenticated users can read/write documents located under `/users/{userId}/{document=**}` matching their UID, and explicitly denying all other access.
+  4. Updated `firebase.json` to configure `"firestore": { "rules": "firestore.rules" }`.
+  5. Verified production build compiles cleanly (`npm run build`).
+* **Next Action:** Deploy rules and hosting (`npx firebase-tools deploy --only firestore:rules,hosting`).
 
 ---
 
