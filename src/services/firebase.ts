@@ -6,7 +6,14 @@ import {
   persistentMultipleTabManager,
   type Firestore
 } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged, type Auth } from 'firebase/auth';
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged,
+  browserLocalPersistence,
+  setPersistence,
+  type Auth
+} from 'firebase/auth';
 import { getMessaging, isSupported as isMessagingSupported, type Messaging } from 'firebase/messaging';
 
 export const firebaseConfig = {
@@ -31,6 +38,13 @@ export const db: Firestore = initializeFirestore(app, {
 
 // Initialize Auth
 export const auth: Auth = getAuth(app);
+
+// Ensure local persistence for session retention
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('Could not set browserLocalPersistence:', err);
+  });
+}
 
 // Lazy Messaging reference
 let messagingInstance: Messaging | null = null;
