@@ -3,13 +3,13 @@ import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFirestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyBQ_YTHADnFFxRe3D1_zNuFLczHExW4zB4",
-  authDomain: "cere-bruv.firebaseapp.com",
-  projectId: "cere-bruv",
-  storageBucket: "cere-bruv.firebasestorage.app",
-  messagingSenderId: "106248948674",
-  appId: "1:106248948674:web:84468c63706ca95a68e45b",
-  measurementId: "G-SP57TL1VLC"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase (guard against multiple initializations)
