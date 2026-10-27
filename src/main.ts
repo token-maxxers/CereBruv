@@ -1,33 +1,37 @@
 import mascotImg from './assets/mascot.png';
-import { initAnalytics, ensureSignedIn } from './services/firebase';
+import './styles/auth.css';
+import { initAnalytics } from './services/firebase';
+import { authService, type AuthUser } from './services/auth/AuthService';
 import { userStatsRepository, taskRepository } from './services/storage';
 import { migrateLocalStorageToFirestore } from './services/storage/migrate';
 import { geminiService } from './services/ai/GeminiService';
 import { eventBus, AppEvents } from './services/events';
 import { notificationService } from './services/notifications/NotificationService';
+import { renderAuthScreen } from './components/Auth/AuthScreen';
 import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
 import { renderTaskFormModal } from './components/Tasks/TaskForm';
 import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
 import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
 import { renderDotGraph } from './components/DotGraph/DotGraph';
+import type { UserStats } from './types/user';
 
 // Mascot AI request debouncer & race-condition cancellation ID
 let mascotAiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let latestMascotRequestId = 0;
 
-async function bootstrap() {
-  // Attempt Firebase authentication first; continue in local mode if offline/failed
-  try {
-    await ensureSignedIn();
-    await migrateLocalStorageToFirestore();
-  } catch (err) {
-    console.warn('Firebase Auth/migration skipped (running in offline mode):', err);
-  }
+const appContainer = document.querySelector<HTMLDivElement>('#app')!;
 
-  const app = document.querySelector<HTMLDivElement>('#app')!;
+/**
+ * Mounts the main application shell and binds interactive views.
+ */
+async function mountApp(user: AuthUser) {
+  // Ensure background migration runs once if user had legacy local data
+  migrateLocalStorageToFirestore().catch((err) => {
+    console.warn('Migration check skipped:', err);
+  });
 
-  app.innerHTML = `
+  appContainer.innerHTML = `
   <div class="mobile-container">
     <!-- Header -->
     <header class="app-header">
@@ -170,7 +174,16 @@ async function bootstrap() {
     } else if (tab === 'graph') {
       viewContainer.appendChild(renderDotGraph());
     } else if (tab === 'cloud') {
-      viewContainer.appendChild(renderCloudView());
+      viewContainer.appendChild(
+        renderCloudView({
+          onUpgradeGuest: () => {
+            showAuth(true); // Open in link mode so UID is retained
+          },
+          onSignOut: () => {
+            showAuth(false);
+          }
+        })
+      );
     }
   }
 
@@ -225,12 +238,10 @@ async function bootstrap() {
 
       try {
         const aiMessage = await geminiService.analyzeWorkload(todayTasks);
-        // Only update UI if this is still the freshest request and speech container exists
         if (currentRequestId === latestMascotRequestId && subspeech && aiMessage) {
           subspeech.textContent = aiMessage;
         }
       } catch (err) {
-        // Quietly maintain existing rule-based fallback on timeout, offline, or failure
         console.warn('Gemini AI workload analysis fallback active:', err);
       }
     }, 400);
@@ -243,7 +254,7 @@ async function bootstrap() {
     await updateMascotStatus();
   }
 
-  function updateStatsUI(stats: any) {
+  function updateStatsUI(stats: UserStats) {
     const streakEl = document.querySelector('#streak-count');
     const xpEl = document.querySelector('#xp-count');
     if (streakEl) streakEl.textContent = `${stats.streakDays}d`;
@@ -251,17 +262,15 @@ async function bootstrap() {
   }
 
   // Event Listeners for Live Updates
-  eventBus.on(AppEvents.STATS_UPDATED, (newStats) => updateStatsUI(newStats));
+  eventBus.on(AppEvents.STATS_UPDATED, (newStats) => updateStatsUI(newStats as UserStats));
   eventBus.on(AppEvents.TASK_CREATED, () => updateMascotStatus());
   eventBus.on(AppEvents.TASK_COMPLETED, () => updateMascotStatus());
   eventBus.on(AppEvents.TASK_DELETED, () => updateMascotStatus());
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.warn('Service Worker registration skipped:', err);
-      });
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service Worker registration skipped:', err);
     });
   }
 
@@ -283,6 +292,60 @@ async function bootstrap() {
   }
 
   initAnalytics();
+  if (user && !user.isAnonymous) {
+    notificationService.initFirebaseCloudMessaging().catch(() => {});
+  }
+}
+
+/**
+ * Renders the AuthScreen into #app.
+ */
+function showAuth(isLinkMode: boolean = false) {
+  appContainer.innerHTML = '';
+  const authScreen = renderAuthScreen({
+    isLinkMode,
+    isOffline: !navigator.onLine,
+    onSuccess: (user: AuthUser) => {
+      mountApp(user);
+    }
+  });
+  appContainer.appendChild(authScreen);
+}
+
+/**
+ * Application Bootstrap with Auth Gate
+ */
+function bootstrap() {
+  let initialCheckDone = false;
+
+  authService.onAuthChange((user: AuthUser | null) => {
+    if (!initialCheckDone) {
+      initialCheckDone = true;
+      if (user) {
+        mountApp(user);
+      } else {
+        showAuth(false);
+      }
+    } else {
+      // Auth state changed after startup (e.g. signed out)
+      if (!user) {
+        showAuth(false);
+      }
+    }
+  });
+
+  // Safety timer if offline and onAuthStateChanged is delayed
+  setTimeout(() => {
+    if (!initialCheckDone) {
+      initialCheckDone = true;
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        mountApp(currentUser);
+      } else {
+        showAuth(false);
+      }
+    }
+  }, 1500);
 }
 
 bootstrap();
