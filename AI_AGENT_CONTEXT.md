@@ -55,6 +55,8 @@ CereBruv/
 │   │   ├── mascot.png          # Official CereBruv Mascot (Transparent PNG)
 │   │   └── mascot.svg          # Mascot vector asset
 │   ├── components/             # Self-contained UI modules
+│   │   ├── Auth/
+│   │   │   └── AuthScreen.ts   # Mobile-first sign-in, sign-up & guest upgrade screen
 │   │   ├── Cloud/
 │   │   │   └── CloudView.ts    # Cloud sync status & metrics panel
 │   │   ├── FocusOrbit/
@@ -69,6 +71,8 @@ CereBruv/
 │   │       └── QuickCapture.ts # Rapid thought capture, mic & photo triggers
 │   ├── services/
 │   │   ├── firebase.ts         # Firebase App, Analytics & Firestore initialization
+│   │   ├── auth/
+│   │   │   └── AuthService.ts  # Google, Email & Guest linking authentication wrapper
 │   │   ├── events.ts           # Central Pub/Sub event bus
 │   │   ├── storage/
 │   │   │   ├── index.ts               # Active Firestore repository exports
@@ -89,7 +93,8 @@ CereBruv/
 │   │   └── user.ts             # Streak, XP, and settings types
 │   ├── styles/
 │   │   ├── variables.css       # Design system CSS tokens
-│   │   └── main.css            # Mobile-first base styles & utilities
+│   │   ├── main.css            # Mobile-first base styles & utilities
+│   │   └── auth.css            # Authentication screen styles & tokens
 │   └── main.ts                 # Application bootstrapping & router
 ```
 
@@ -112,6 +117,7 @@ CereBruv/
 | **Phase 11** | Gemini Workload Analysis & Mascot AI Companion (firebase/ai) | **DONE** | Antigravity Agent |
 | **Phase 12** | Gemini Vision Multimodal Task Extraction & QuickCapture | **DONE** | Antigravity Agent |
 | **Phase 13** | Firebase Cloud Messaging (FCM Web Push) & SW Receiver | **DONE** | Antigravity Agent |
+| **Phase 14** | Complete Auth System (Google, Email/Password, Guest Linking) | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -320,6 +326,30 @@ CereBruv/
   3. Upgraded `public/sw.js` with Firebase compat SDK imports and configured `messaging.onBackgroundMessage` alongside the PWA offline cache and notification click handling.
   4. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for testing push notifications from the Firebase Console.
+
+---
+
+### Entry #17: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 14 Complete - Complete Authentication System & Guest Linking.
+* **Action:**
+  1. Configured `browserLocalPersistence` on `auth` in `src/services/firebase.ts`.
+  2. Created `src/services/auth/AuthService.ts`:
+     - `signInWithGoogle()`: tries `linkWithPopup` for anonymous guests to preserve UID and existing tasks; handles `auth/credential-already-in-use` fallback; falls back to `signInWithRedirect` if popup blocked in PWA.
+     - `signUpWithEmail(email, password)`: uses `linkWithCredential` for anonymous users to preserve UID and tasks; otherwise calls `createUserWithEmailAndPassword`.
+     - `signInWithEmail(email, password)` and `continueAsGuest()`.
+     - `signOut()`, `onAuthChange()`, `getCurrentUser()`, and `sendPasswordReset()`.
+     - Error normalization translating raw codes to friendly messages.
+  3. Created `src/components/Auth/AuthScreen.ts` and `src/styles/auth.css`:
+     - Mobile-first (max 440px), CereBruv Red/Warm Beige/Black tokens.
+     - Geometric SVG icons (no emojis), segmented toggle (Sign In / Sign Up), email/password fields with eye show/hide, Google button, guest access link, inline validation, and offline notice.
+  4. Updated `src/main.ts` with authentication gate:
+     - Replaced silent anonymous auto-login; checks `onAuthChange` before mounting.
+     - Renders `AuthScreen` when unauthenticated; mounts app on sign-in without page reload.
+     - Preserves data continuity upon guest account upgrade.
+  5. Updated `src/components/Cloud/CloudView.ts`:
+     - Added Account card at top with avatar, display name, guest badge, and "Create Account" (link mode) or "Sign Out" confirmation.
+  6. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Ready for live deployment.
 
 ---
 
