@@ -72,6 +72,7 @@ CereBruv/
 │   │   ├── events.ts           # Central Pub/Sub event bus
 │   │   ├── storage/
 │   │   │   ├── index.ts               # Storage export & swap point
+│   │   │   ├── migrate.ts             # One-time LocalStorage to Firestore data migration
 │   │   │   ├── ITaskRepository.ts     # Abstract Task repository interface
 │   │   │   ├── INoteRepository.ts     # Abstract Note repository interface
 │   │   │   ├── IUserStatsRepository.ts# Abstract UserStats repository interface
@@ -107,6 +108,7 @@ CereBruv/
 | **Phase 7** | Environment Variables Security & Tree Synchronization | **DONE** | Antigravity Agent |
 | **Phase 8** | Firebase Anonymous Auth, Firestore Rules & Offline Resilience | **DONE** | Antigravity Agent |
 | **Phase 9** | Firestore Adapter Implementation & Persistent Offline Cache | **DONE** | Antigravity Agent |
+| **Phase 10** | Live Firestore Cloud Sync & One-Time Local Migration | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -261,6 +263,18 @@ CereBruv/
   5. Kept `src/services/storage/index.ts` unchanged so that the app currently continues running reliably on `LocalStorageAdapter`.
   6. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for swapping active storage adapter in `src/services/storage/index.ts` whenever live cloud sync is desired.
+
+---
+
+### Entry #13: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 10 Complete - Live Firestore Cloud Sync & One-Time Data Migration.
+* **Action:**
+  1. Updated `src/services/storage/index.ts` to export singleton instances of `FirestoreTaskRepository`, `FirestoreNoteRepository`, and `FirestoreUserStatsRepository`.
+  2. Created `src/services/storage/migrate.ts` with `migrateLocalStorageToFirestore()`: reads existing tasks, notes, and stats from localStorage on first authenticated launch, copies them to Firestore under `/users/{uid}/...` via batch write, and records `cerebruv_migrated_to_firestore_{uid}` without deleting the original local data.
+  3. Integrated migration into `src/main.ts` inside `bootstrap()` immediately after `ensureSignedIn()`, with offline/error resilience.
+  4. Verified all UI components (`TaskList`, `FocusOrbit`, `DotGraph`, `CloudView`) handle async repository calls and empty states smoothly.
+  5. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Ready for live deployment or testing with offline cache.
 
 ---
 
