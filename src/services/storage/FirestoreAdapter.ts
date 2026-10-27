@@ -1,14 +1,26 @@
 /**
- * FIRESTORE ADAPTER (FOR TEAMMATE B)
+ * FIRESTORE ADAPTER (FOR FIREBASE BACKEND INTEGRATION)
  * -----------------------------------------------------------
- * This class implements the exact same repository interfaces as LocalStorageAdapter.
- * When you are ready to connect Google Firebase Firestore:
- * 1. Install Firebase: `npm install firebase`
- * 2. Initialize Firebase App and Firestore instance.
- * 3. Replace the placeholder methods below with your Firestore queries.
- * 4. In `src/services/storage/index.ts`, change the exported instance.
+ * Implements repository interfaces using Firebase Firestore Web SDK.
+ * All collections are scoped under users/{uid}/...:
+ * - Tasks: users/{uid}/tasks
+ * - Notes: users/{uid}/notes
+ * - Stats: users/{uid}/stats/main
  */
 
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  increment,
+  runTransaction
+} from 'firebase/firestore';
+import { db, auth } from '../firebase';
 import type { Task } from '../../types/task';
 import type { QuickNote } from '../../types/note';
 import type { UserStats } from '../../types/user';
@@ -16,67 +28,311 @@ import type { ITaskRepository, CreateTaskDTO } from './ITaskRepository';
 import type { INoteRepository, CreateNoteDTO } from './INoteRepository';
 import type { IUserStatsRepository } from './IUserStatsRepository';
 
+function getRequiredUid(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    throw new Error('User is not authenticated with Firebase Auth.');
+  }
+  return uid;
+}
+
 export class FirestoreTaskRepository implements ITaskRepository {
+  private getTodayString(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  private tasksCol(uid: string) {
+    return collection(db, 'users', uid, 'tasks');
+  }
+
   async getAllTasks(): Promise<Task[]> {
-    // TODO (Teammate B): Replace with:
-    // const snapshot = await getDocs(collection(db, 'tasks'));
-    // return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
-    throw new Error('FirestoreTaskRepository not connected yet. Use LocalTaskRepository.');
+    const uid = getRequiredUid();
+    const snapshot = await getDocs(this.tasksCol(uid));
+    const today = this.getTodayString();
+    return snapshot.docs.map(d => {
+      const data = d.data() as Task;
+      return {
+        ...data,
+        id: d.id,
+        date: data.date || today
+      };
+    });
   }
 
   async getTaskById(id: string): Promise<Task | null> {
-    // TODO (Teammate B): Replace with getDoc(doc(db, 'tasks', id))
-    throw new Error(`FirestoreTaskRepository not connected yet (${id}).`);
+    const uid = getRequiredUid();
+    const taskRef = doc(db, 'users', uid, 'tasks', id);
+    const snap = await getDoc(taskRef);
+    if (!snap.exists()) return null;
+    const data = snap.data() as Task;
+    return {
+      ...data,
+      id: snap.id,
+      date: data.date || this.getTodayString()
+    };
   }
 
   async createTask(dto: CreateTaskDTO): Promise<Task> {
-    // TODO (Teammate B): Replace with addDoc(collection(db, 'tasks'), { ...dto, completed: false, ... })
-    throw new Error(`FirestoreTaskRepository not connected yet (${dto.title}).`);
+    const uid = getRequiredUid();
+    const taskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const taskRef = doc(db, 'users', uid, 'tasks', taskId);
+    const now = Date.now();
+
+    const newTask: Task = {
+      id: taskId,
+      title: dto.title.trim(),
+      category: dto.category,
+      date: dto.date || this.getTodayString(),
+      startTime: dto.startTime,
+      durationMinutes: dto.durationMinutes,
+      urgency: dto.urgency,
+      completed: false,
+      notes: dto.notes ? dto.notes.trim() : undefined,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await setDoc(taskRef, newTask);
+    return newTask;
   }
 
   async updateTask(id: string, updates: Partial<Omit<Task, 'id' | 'createdAt'>>): Promise<Task> {
-    // TODO (Teammate B): Replace with updateDoc(doc(db, 'tasks', id), updates)
-    throw new Error(`FirestoreTaskRepository not connected yet (${id}, ${JSON.stringify(updates)}).`);
+    const uid = getRequiredUid();
+    const taskRef = doc(db, 'users', uid, 'tasks', id);
+    const snap = await getDoc(taskRef);
+    if (!snap.exists()) {
+      throw new Error(`Task with id ${id} not found`);
+    }
+
+    const current = snap.data() as Task;
+    const now = Date.now();
+    const updated: Task = {
+      ...current,
+      ...updates,
+      id,
+      updatedAt: now
+    };
+
+    await updateDoc(taskRef, {
+      ...updates,
+      updatedAt: now
+    });
+
+    return updated;
   }
 
   async toggleTaskCompletion(id: string): Promise<Task> {
-    // TODO (Teammate B): Fetch current status, flip, and updateDoc
-    throw new Error(`FirestoreTaskRepository not connected yet (${id}).`);
+    const uid = getRequiredUid();
+    const taskRef = doc(db, 'users', uid, 'tasks', id);
+    const snap = await getDoc(taskRef);
+    if (!snap.exists()) {
+      throw new Error(`Task with id ${id} not found`);
+    }
+
+    const current = snap.data() as Task;
+    const completed = !current.completed;
+    const now = Date.now();
+
+    await updateDoc(taskRef, {
+      completed,
+      updatedAt: now
+    });
+
+    return {
+      ...current,
+      id,
+      completed,
+      updatedAt: now
+    };
   }
 
   async deleteTask(id: string): Promise<boolean> {
-    // TODO (Teammate B): Replace with deleteDoc(doc(db, 'tasks', id))
-    throw new Error(`FirestoreTaskRepository not connected yet (${id}).`);
+    const uid = getRequiredUid();
+    const taskRef = doc(db, 'users', uid, 'tasks', id);
+    const snap = await getDoc(taskRef);
+    if (!snap.exists()) return false;
+    await deleteDoc(taskRef);
+    return true;
   }
 
   async clearAllTasks(): Promise<void> {
-    throw new Error('FirestoreTaskRepository clear not implemented.');
+    const uid = getRequiredUid();
+    const snapshot = await getDocs(this.tasksCol(uid));
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(docSnap => {
+      batch.delete(docSnap.ref);
+    });
+    await batch.commit();
   }
 }
 
 export class FirestoreNoteRepository implements INoteRepository {
+  private notesCol(uid: string) {
+    return collection(db, 'users', uid, 'notes');
+  }
+
   async getAllNotes(): Promise<QuickNote[]> {
-    throw new Error('FirestoreNoteRepository not connected yet.');
+    const uid = getRequiredUid();
+    const snap = await getDocs(this.notesCol(uid));
+    return snap.docs.map(d => ({
+      ...(d.data() as QuickNote),
+      id: d.id
+    }));
   }
+
   async createNote(dto: CreateNoteDTO): Promise<QuickNote> {
-    throw new Error(`FirestoreNoteRepository not connected yet (${dto.content}).`);
+    const uid = getRequiredUid();
+    const noteId = 'note_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const noteRef = doc(db, 'users', uid, 'notes', noteId);
+
+    const newNote: QuickNote = {
+      id: noteId,
+      content: dto.content.trim(),
+      tags: dto.tags || [],
+      audioUrl: dto.audioUrl,
+      photoUrl: dto.photoUrl,
+      createdAt: Date.now()
+    };
+
+    await setDoc(noteRef, newNote);
+    return newNote;
   }
+
   async deleteNote(id: string): Promise<boolean> {
-    throw new Error(`FirestoreNoteRepository not connected yet (${id}).`);
+    const uid = getRequiredUid();
+    const noteRef = doc(db, 'users', uid, 'notes', id);
+    const snap = await getDoc(noteRef);
+    if (!snap.exists()) return false;
+    await deleteDoc(noteRef);
+    return true;
   }
 }
 
 export class FirestoreUserStatsRepository implements IUserStatsRepository {
+  private getTodayString(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  private statsDoc(uid: string) {
+    return doc(db, 'users', uid, 'stats', 'main');
+  }
+
+  private defaultStats(): UserStats {
+    return {
+      streakDays: 0,
+      lastActiveDate: '',
+      experiencePoints: 0,
+      tasksCompletedTotal: 0,
+      level: 1
+    };
+  }
+
   async getStats(): Promise<UserStats> {
-    throw new Error('FirestoreUserStatsRepository not connected yet.');
+    const uid = getRequiredUid();
+    const ref = this.statsDoc(uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      const initial = this.defaultStats();
+      await setDoc(ref, initial);
+      return initial;
+    }
+    return snap.data() as UserStats;
   }
+
   async addExperience(amount: number): Promise<UserStats> {
-    throw new Error(`FirestoreUserStatsRepository not connected yet (+${amount} XP).`);
+    const uid = getRequiredUid();
+    const ref = this.statsDoc(uid);
+
+    return await runTransaction(db, async (txn) => {
+      const snap = await txn.get(ref);
+      const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+      const newXP = current.experiencePoints + amount;
+      const newLevel = Math.floor(newXP / 100) + 1;
+
+      txn.set(
+        ref,
+        {
+          experiencePoints: increment(amount),
+          level: newLevel
+        },
+        { merge: true }
+      );
+
+      return {
+        ...current,
+        experiencePoints: newXP,
+        level: newLevel
+      };
+    });
   }
+
   async recordDailyActivity(): Promise<UserStats> {
-    throw new Error('FirestoreUserStatsRepository not connected yet.');
+    const uid = getRequiredUid();
+    const ref = this.statsDoc(uid);
+    const today = this.getTodayString();
+
+    return await runTransaction(db, async (txn) => {
+      const snap = await txn.get(ref);
+      const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+
+      if (current.lastActiveDate === today) {
+        return current;
+      }
+
+      let newStreak = current.streakDays;
+      if (current.lastActiveDate) {
+        const lastDate = new Date(current.lastActiveDate);
+        const currentDate = new Date(today);
+        const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+
+        if (diffDays === 1) {
+          newStreak += 1;
+        } else if (diffDays > 1) {
+          newStreak = 1;
+        }
+      } else {
+        newStreak = 1;
+      }
+
+      const updated: UserStats = {
+        ...current,
+        streakDays: newStreak,
+        lastActiveDate: today
+      };
+
+      txn.set(ref, updated, { merge: true });
+      return updated;
+    });
   }
+
   async incrementTaskCount(): Promise<UserStats> {
-    throw new Error('FirestoreUserStatsRepository not connected yet.');
+    const uid = getRequiredUid();
+    const ref = this.statsDoc(uid);
+
+    return await runTransaction(db, async (txn) => {
+      const snap = await txn.get(ref);
+      const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+
+      const newXP = current.experiencePoints + 25;
+      const newTasks = current.tasksCompletedTotal + 1;
+      const newLevel = Math.floor(newXP / 100) + 1;
+
+      txn.set(
+        ref,
+        {
+          tasksCompletedTotal: increment(1),
+          experiencePoints: increment(25),
+          level: newLevel
+        },
+        { merge: true }
+      );
+
+      return {
+        ...current,
+        tasksCompletedTotal: newTasks,
+        experiencePoints: newXP,
+        level: newLevel
+      };
+    });
   }
 }

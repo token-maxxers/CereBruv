@@ -106,6 +106,7 @@ CereBruv/
 | **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **DONE** | Antigravity Agent |
 | **Phase 7** | Environment Variables Security & Tree Synchronization | **DONE** | Antigravity Agent |
 | **Phase 8** | Firebase Anonymous Auth, Firestore Rules & Offline Resilience | **DONE** | Antigravity Agent |
+| **Phase 9** | Firestore Adapter Implementation & Persistent Offline Cache | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -247,6 +248,19 @@ CereBruv/
   4. Updated `firebase.json` to configure `"firestore": { "rules": "firestore.rules" }`.
   5. Verified production build compiles cleanly (`npm run build`).
 * **Next Action:** Deploy rules and hosting (`npx firebase-tools deploy --only firestore:rules,hosting`).
+
+---
+
+### Entry #12: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 9 Complete - Firestore Adapter Implementation & Offline Persistent Cache.
+* **Action:**
+  1. Updated `src/services/firebase.ts` to initialize Firestore with `persistentLocalCache` and `persistentMultipleTabManager` enabling robust offline support.
+  2. Implemented all CRUD and query methods in `src/services/storage/FirestoreAdapter.ts` for `FirestoreTaskRepository`, `FirestoreNoteRepository`, and `FirestoreUserStatsRepository`.
+  3. Scoped Firestore collections under `users/{uid}/tasks`, `users/{uid}/notes`, and `users/{uid}/stats/main` obtaining `uid` securely from `auth.currentUser`.
+  4. Utilized `increment()` for atomic XP and task counter increments alongside transaction handling for streak calculation and level updates.
+  5. Kept `src/services/storage/index.ts` unchanged so that the app currently continues running reliably on `LocalStorageAdapter`.
+  6. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Ready for swapping active storage adapter in `src/services/storage/index.ts` whenever live cloud sync is desired.
 
 ---
 
