@@ -1,4 +1,5 @@
 import mascotImg from './assets/mascot.png';
+import { initAnalytics } from './services/firebase';
 import { userStatsRepository, taskRepository } from './services/storage';
 import { eventBus, AppEvents } from './services/events';
 import { notificationService } from './services/notifications/NotificationService';
@@ -242,3 +243,5 @@ if (tabParam && ['orbit', 'tasks', 'graph', 'cloud'].includes(tabParam)) {
 if (actionParam === 'new_task') {
   setTimeout(() => taskFormModal.open(), 300);
 }
+
+initAnalytics();
