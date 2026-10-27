@@ -40,7 +40,8 @@ CereBruv/
 ├── .env                        # Local environment variables (VITE_FIREBASE_*, gitignored)
 ├── .env.example                # Template for environment variables
 ├── .firebaserc                 # Firebase project alias
-├── firebase.json               # Firebase hosting & headers configuration
+├── firebase.json               # Firebase hosting & firestore rules configuration
+├── firestore.rules             # Granular user-scoped Firestore security rules
 ├── index.html                  # HTML5 Entry Point
 ├── package.json                # Scripts & Dependencies (Vite + TypeScript)
 ├── tsconfig.json               # TypeScript Compiler Config
@@ -104,6 +105,7 @@ CereBruv/
 | **Phase 5** | Obsidian-Style Interactive Dot Graph Engine | **DONE** | Antigravity Agent |
 | **Phase 6** | PWA Manifest, Local Notification Shell & Firebase Hand-off | **DONE** | Antigravity Agent |
 | **Phase 7** | Environment Variables Security & Tree Synchronization | **DONE** | Antigravity Agent |
+| **Phase 8** | Firebase Anonymous Auth, Firestore Rules & Offline Resilience | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -233,6 +235,18 @@ CereBruv/
   5. Updated `AI_AGENT_CONTEXT.md` Section 3 directory map to accurately reflect the real repository tree (`mascot.png`, `firebase.ts`, `events.ts`, `Cloud/CloudView.ts`, `IUserStatsRepository.ts`) and labeled `src/services/ai/` as planned.
   6. Verified that `grep -r "AIzaSy" src/` finds zero occurrences and production build (`npm run build`) succeeds cleanly.
 * **Next Action:** Ready for Firebase Hosting deployment (`npx firebase-tools deploy --only hosting`) or Firestore adapter connection.
+
+---
+
+### Entry #11: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 8 Complete - Firebase Anonymous Auth & Security Rules.
+* **Action:**
+  1. Updated `src/services/firebase.ts` to export `auth` and `ensureSignedIn()` helper which initiates anonymous authentication (`signInAnonymously`) or returns existing UID.
+  2. Wrapped `src/main.ts` startup in `bootstrap()`, awaiting `ensureSignedIn()` before rendering the UI with a try/catch fallback ensuring offline resilience.
+  3. Created `firestore.rules` enforcing that only authenticated users can read/write documents located under `/users/{userId}/{document=**}` matching their UID, and explicitly denying all other access.
+  4. Updated `firebase.json` to configure `"firestore": { "rules": "firestore.rules" }`.
+  5. Verified production build compiles cleanly (`npm run build`).
+* **Next Action:** Deploy rules and hosting (`npx firebase-tools deploy --only firestore:rules,hosting`).
 
 ---
 
