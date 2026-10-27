@@ -36,6 +36,37 @@ function getRequiredUid(): string {
   return uid;
 }
 
+
+/**
+ * Removes keys with undefined values recursively.
+ * Preserves null, 0, false, empty strings, and Firestore sentinel values.
+ */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const result = {} as Record<string, unknown>;
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) continue;
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.getPrototypeOf(value) === Object.prototype
+    ) {
+      result[key] = stripUndefined(value as Record<string, unknown>);
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((item) =>
+        item !== null &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        Object.getPrototypeOf(item) === Object.prototype
+          ? stripUndefined(item as Record<string, unknown>)
+          : item
+      );
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as T;
+}
 export class FirestoreTaskRepository implements ITaskRepository {
   private getTodayString(): string {
     return new Date().toISOString().split('T')[0];
@@ -92,7 +123,7 @@ export class FirestoreTaskRepository implements ITaskRepository {
       updatedAt: now
     };
 
-    await setDoc(taskRef, newTask);
+    await setDoc(taskRef, stripUndefined(newTask as unknown as Record<string, unknown>) as unknown as Task);
     return newTask;
   }
 
@@ -113,10 +144,10 @@ export class FirestoreTaskRepository implements ITaskRepository {
       updatedAt: now
     };
 
-    await updateDoc(taskRef, {
+    await updateDoc(taskRef, stripUndefined({
       ...updates,
       updatedAt: now
-    });
+    } as Record<string, unknown>));
 
     return updated;
   }
@@ -194,7 +225,7 @@ export class FirestoreNoteRepository implements INoteRepository {
       createdAt: Date.now()
     };
 
-    await setDoc(noteRef, newNote);
+    await setDoc(noteRef, stripUndefined(newNote as unknown as Record<string, unknown>) as unknown as QuickNote);
     return newNote;
   }
 
@@ -233,7 +264,7 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
     const snap = await getDoc(ref);
     if (!snap.exists()) {
       const initial = this.defaultStats();
-      await setDoc(ref, initial);
+      await setDoc(ref, stripUndefined(initial as unknown as Record<string, unknown>) as unknown as UserStats);
       return initial;
     }
     return snap.data() as UserStats;
@@ -251,10 +282,10 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
 
       txn.set(
         ref,
-        {
+        stripUndefined({
           experiencePoints: increment(amount),
           level: newLevel
-        },
+        } as Record<string, unknown>),
         { merge: true }
       );
 
@@ -300,7 +331,7 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
         lastActiveDate: today
       };
 
-      txn.set(ref, updated, { merge: true });
+      txn.set(ref, stripUndefined(updated as unknown as Record<string, unknown>) as unknown as UserStats, { merge: true });
       return updated;
     });
   }
@@ -319,11 +350,11 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
 
       txn.set(
         ref,
-        {
+        stripUndefined({
           tasksCompletedTotal: increment(1),
           experiencePoints: increment(25),
           level: newLevel
-        },
+        } as Record<string, unknown>),
         { merge: true }
       );
 
