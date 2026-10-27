@@ -1,21 +1,20 @@
 /**
  * REPOSITORY EXPORTS & SWAP POINT
  * ------------------------------------------------------------
- * Active default: LocalStorageAdapter (zero-config, persists in browser).
- * To switch to Google Firestore:
- * Simply switch the active instances below to FirestoreTaskRepository.
+ * Active engine: Google Firebase Firestore (Scoped under users/{uid}/...)
+ * with persistent local caching for full offline capability.
  */
 
 import {
-  LocalTaskRepository,
-  LocalNoteRepository,
-  LocalUserStatsRepository,
-} from './LocalStorageAdapter';
+  FirestoreTaskRepository,
+  FirestoreNoteRepository,
+  FirestoreUserStatsRepository
+} from './FirestoreAdapter';
 
-// Singleton active instances (Swap to Firestore when ready)
-export const taskRepository = new LocalTaskRepository();
-export const noteRepository = new LocalNoteRepository();
-export const userStatsRepository = new LocalUserStatsRepository();
+// Singleton active instances connected to Cloud Firestore
+export const taskRepository = new FirestoreTaskRepository();
+export const noteRepository = new FirestoreNoteRepository();
+export const userStatsRepository = new FirestoreUserStatsRepository();
 
 export * from './ITaskRepository';
 export * from './INoteRepository';
