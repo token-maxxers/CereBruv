@@ -190,6 +190,17 @@ CereBruv/
 
 ---
 
+### Entry #9: 2026-10-27 (Antigravity Agent)
+* **Phase:** Firebase Configuration & Web App Initialization.
+* **Action:**
+  1. Created `src/services/firebase.ts` with the project Firebase credentials for `cere-bruv`, exporting `app`, Firestore `db`, and `initAnalytics`.
+  2. Updated `.firebaserc` default project ID to `cere-bruv`.
+  3. Integrated `initAnalytics()` in `src/main.ts` for real-time app telemetry.
+  4. Verified full production build (`npm run build`) passes cleanly.
+* **Next Action:** Ready for Firebase Hosting deployment (`npx firebase-tools deploy --only hosting`) and Firestore adapter connection.
+
+---
+
 ## 7. How to Deploy to Google Firebase Hosting
 
 1. Build production bundle:
@@ -209,7 +220,7 @@ CereBruv/
    npx firebase-tools deploy --only hosting
    ```
 5. Your live app will be accessible worldwide on Google Cloud at:
-   `https://<project-id>.web.app`
+   `https://cere-bruv.web.app`
 
 ---
 
