@@ -110,6 +110,7 @@ CereBruv/
 | **Phase 9** | Firestore Adapter Implementation & Persistent Offline Cache | **DONE** | Antigravity Agent |
 | **Phase 10** | Live Firestore Cloud Sync & One-Time Local Migration | **DONE** | Antigravity Agent |
 | **Phase 11** | Gemini Workload Analysis & Mascot AI Companion (firebase/ai) | **DONE** | Antigravity Agent |
+| **Phase 12** | Gemini Vision Multimodal Task Extraction & QuickCapture | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -289,6 +290,20 @@ CereBruv/
   5. Updated `updateMascotStatus()` in `src/main.ts` with instant rule-based fallback, debouncing AI calls (400ms) to ensure at most one request per batch of task changes and safely ignoring outdated or offline responses.
   6. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for testing live AI analysis in browser.
+
+---
+
+### Entry #15: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 12 Complete - Gemini Multimodal Task Extraction & QuickCapture Integration.
+* **Action:**
+  1. Updated `src/services/ai/IAIService.ts` with `extractTasksFromImage(imageBlob: Blob): Promise<Partial<Task>[]>`.
+  2. Implemented `extractTasksFromImage` in `src/services/ai/GeminiService.ts` using `firebase/ai` multimodal capabilities with a structured JSON response schema (`title`, `category`, `durationMins`, `urgency`).
+  3. Upgraded `src/components/QuickCapture/QuickCapture.ts`:
+     - When a photo is selected, it dispatches the image to Gemini Vision for scanning.
+     - Saves only descriptive metadata text to Firestore/notes without storing massive raw image data URLs.
+     - Displays proposed tasks in an interactive confirmation drawer allowing the user to tap to schedule them directly into today's Focus Orbit.
+  4. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Ready for end-to-end multimodal testing with real handwritten notes or documents.
 
 ---
 
