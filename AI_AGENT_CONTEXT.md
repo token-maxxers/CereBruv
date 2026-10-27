@@ -111,6 +111,7 @@ CereBruv/
 | **Phase 10** | Live Firestore Cloud Sync & One-Time Local Migration | **DONE** | Antigravity Agent |
 | **Phase 11** | Gemini Workload Analysis & Mascot AI Companion (firebase/ai) | **DONE** | Antigravity Agent |
 | **Phase 12** | Gemini Vision Multimodal Task Extraction & QuickCapture | **DONE** | Antigravity Agent |
+| **Phase 13** | Firebase Cloud Messaging (FCM Web Push) & SW Receiver | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -304,6 +305,21 @@ CereBruv/
      - Displays proposed tasks in an interactive confirmation drawer allowing the user to tap to schedule them directly into today's Focus Orbit.
   4. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for end-to-end multimodal testing with real handwritten notes or documents.
+
+---
+
+### Entry #16: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 13 Complete - Firebase Cloud Messaging (FCM Web Push) Integration.
+* **Action:**
+  1. Updated `src/services/firebase.ts` to export `getFirebaseMessaging()` with feature detection via `isSupported()`.
+  2. Implemented `initFirebaseCloudMessaging()` in `src/services/notifications/NotificationService.ts`:
+     - Obtains registration token with `getToken` using optional VAPID key and active Service Worker registration.
+     - Saves the registration token under `users/{uid}/stats/main` (`fcmToken`, `fcmUpdatedAt`) in Cloud Firestore.
+     - Registers foreground push listener (`onMessage`) to show notifications when the app is active.
+     - Maintained local 10-minute task alarms as the primary zero-latency alert path.
+  3. Upgraded `public/sw.js` with Firebase compat SDK imports and configured `messaging.onBackgroundMessage` alongside the PWA offline cache and notification click handling.
+  4. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Ready for testing push notifications from the Firebase Console.
 
 ---
 

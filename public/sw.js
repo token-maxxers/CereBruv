@@ -1,14 +1,45 @@
 /**
- * CereBruv Service Worker (PWA & FCM Push Receiver)
+ * CereBruv Service Worker (PWA Offline Cache & FCM Push Receiver)
  */
 
-const CACHE_NAME = 'cerebruv-cache-v1';
+// Import official Firebase Messaging service worker scripts
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBQ_YTHADnFFxRe3D1_zNuFLczHExW4zB4",
+  authDomain: "cere-bruv.firebaseapp.com",
+  projectId: "cere-bruv",
+  storageBucket: "cere-bruv.firebasestorage.app",
+  messagingSenderId: "106248948674",
+  appId: "1:106248948674:web:84468c63706ca95a68e45b"
+};
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  const messaging = firebase.messaging();
+
+  // Background message handler for FCM
+  messaging.onBackgroundMessage((payload) => {
+    const notificationTitle = payload.notification?.title || payload.data?.title || 'CereBruv Task Alert';
+    const notificationOptions = {
+      body: payload.notification?.body || payload.data?.body || 'Focus Orbit update from CereBruv.',
+      icon: '/mascot.png',
+      badge: '/mascot.png',
+      data: payload.data || {}
+    };
+
+    return self.registration.showNotification(notificationTitle, notificationOptions);
+  });
+} catch (err) {
+  console.warn('Firebase Messaging SW init skipped or failed:', err);
+}
+
+const CACHE_NAME = 'cerebruv-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
   '/mascot.png'
 ];
 
@@ -39,7 +70,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Background Push Notifications (Ready for Firebase Cloud Messaging)
+// Fallback generic push listener in case of raw web-push
 self.addEventListener('push', (event) => {
   let title = 'CereBruv Reminder';
   let body = 'You have an upcoming task on your Focus Orbit!';
@@ -58,8 +89,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body,
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: '/mascot.png',
+    badge: '/mascot.png',
     vibrate: [100, 50, 100],
     data,
   };
