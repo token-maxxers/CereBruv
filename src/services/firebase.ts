@@ -33,7 +33,8 @@ export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getA
 export const db: Firestore = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
-  })
+  }),
+  ignoreUndefinedProperties: true
 });
 
 // Initialize Auth
