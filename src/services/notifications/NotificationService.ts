@@ -1,9 +1,13 @@
+import { getToken, onMessage } from 'firebase/messaging';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, auth, getFirebaseMessaging } from '../firebase';
 import type { Task } from '../../types/task';
 import { timeStringToFractionalHour } from '../../components/FocusOrbit/orbitCalculator';
 
 class NotificationService {
   private permissionGranted: boolean = false;
   private activeTimers: Map<string, number> = new Map();
+  private fcmInitialized: boolean = false;
 
   constructor() {
     if ('Notification' in window) {
@@ -23,6 +27,9 @@ class NotificationService {
     try {
       const permission = await Notification.requestPermission();
       this.permissionGranted = permission === 'granted';
+      if (this.permissionGranted) {
+        this.initFirebaseCloudMessaging();
+      }
       return this.permissionGranted;
     } catch {
       return false;
@@ -43,20 +50,20 @@ class NotificationService {
       navigator.serviceWorker.ready.then((reg) => {
         reg.showNotification(title, {
           body,
-          icon: '/icon-192.png',
-          badge: '/icon-192.png',
+          icon: '/mascot.png',
+          badge: '/mascot.png',
         } as any);
       });
     } else {
       new Notification(title, {
         body,
-        icon: '/icon-192.png',
+        icon: '/mascot.png',
       });
     }
   }
 
   /**
-   * Schedules a reminder 10 minutes before task starts.
+   * Primary Path: Local 10-minute task reminder alarms.
    */
   scheduleTaskAlert(task: Task): void {
     if (!this.permissionGranted || task.completed) return;
@@ -93,15 +100,59 @@ class NotificationService {
   }
 
   /**
-   * Hook for Teammate D: Connect Google Firebase Cloud Messaging (FCM).
-   * 
-   * Example:
-   * import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-   * const messaging = getMessaging(firebaseApp);
-   * const token = await getToken(messaging, { vapidKey: '...' });
+   * Initializes Firebase Cloud Messaging (FCM Web Push).
+   * Retrieves registration token using VAPID key and registers foreground message handler.
+   * Saves the token under users/{uid}/stats/main in Firestore.
    */
-  initFirebaseCloudMessaging(): void {
-    console.log('[NotificationService] Ready for Teammate D to plug Firebase Cloud Messaging (FCM).');
+  async initFirebaseCloudMessaging(): Promise<string | null> {
+    if (this.fcmInitialized) return null;
+
+    try {
+      const messaging = await getFirebaseMessaging();
+      if (!messaging) {
+        console.warn('FCM is not supported in this browser environment.');
+        return null;
+      }
+
+      const vapidKey = (import.meta as any).env?.VITE_FIREBASE_VAPID_KEY || undefined;
+
+      // Ensure service worker registration is ready
+      let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
+      if ('serviceWorker' in navigator) {
+        serviceWorkerRegistration = await navigator.serviceWorker.ready;
+      }
+
+      const token = await getToken(messaging, {
+        vapidKey,
+        serviceWorkerRegistration
+      });
+
+      if (token) {
+        this.fcmInitialized = true;
+        console.log('FCM Registration Token acquired:', token);
+
+        // Save token under users/{uid}/stats/main
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          const statsRef = doc(db, 'users', uid, 'stats', 'main');
+          await setDoc(statsRef, { fcmToken: token, fcmUpdatedAt: Date.now() }, { merge: true });
+        }
+
+        // Foreground push message listener
+        onMessage(messaging, (payload) => {
+          console.log('Foreground FCM push message received:', payload);
+          const title = payload.notification?.title || payload.data?.title || 'CereBruv Alert';
+          const body = payload.notification?.body || payload.data?.body || 'New message from CereBruv';
+          this.showNotification(title, body);
+        });
+
+        return token;
+      }
+    } catch (err) {
+      console.warn('Failed to initialize Firebase Cloud Messaging:', err);
+    }
+
+    return null;
   }
 }
 
