@@ -71,16 +71,16 @@ CereBruv/
 │   │   ├── firebase.ts         # Firebase App, Analytics & Firestore initialization
 │   │   ├── events.ts           # Central Pub/Sub event bus
 │   │   ├── storage/
-│   │   │   ├── index.ts               # Storage export & swap point
+│   │   │   ├── index.ts               # Active Firestore repository exports
 │   │   │   ├── migrate.ts             # One-time LocalStorage to Firestore data migration
 │   │   │   ├── ITaskRepository.ts     # Abstract Task repository interface
 │   │   │   ├── INoteRepository.ts     # Abstract Note repository interface
 │   │   │   ├── IUserStatsRepository.ts# Abstract UserStats repository interface
-│   │   │   ├── LocalStorageAdapter.ts # Active browser storage implementation
-│   │   │   └── FirestoreAdapter.ts    # Placeholder for Teammate B (Firebase)
-│   │   ├── ai/                        # [PLANNED] Teammate C (Google AI Studio / Gemini)
-│   │   │   ├── IAIService.ts          # [PLANNED] AI Interface contract
-│   │   │   └── GeminiService.ts       # [PLANNED] Gemini API integration
+│   │   │   ├── LocalStorageAdapter.ts # Local browser storage implementation
+│   │   │   └── FirestoreAdapter.ts    # Firestore storage implementation (users/{uid}/...)
+│   │   ├── ai/                        # Firebase AI / Gemini Companion Layer
+│   │   │   ├── IAIService.ts          # AI Interface contract
+│   │   │   └── GeminiService.ts       # Gemini 2.5 Flash companion integration (firebase/ai)
 │   │   └── notifications/
 │   │       └── NotificationService.ts # Local reminder & FCM Web Push shell
 │   ├── types/
@@ -109,6 +109,7 @@ CereBruv/
 | **Phase 8** | Firebase Anonymous Auth, Firestore Rules & Offline Resilience | **DONE** | Antigravity Agent |
 | **Phase 9** | Firestore Adapter Implementation & Persistent Offline Cache | **DONE** | Antigravity Agent |
 | **Phase 10** | Live Firestore Cloud Sync & One-Time Local Migration | **DONE** | Antigravity Agent |
+| **Phase 11** | Gemini Workload Analysis & Mascot AI Companion (firebase/ai) | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -275,6 +276,19 @@ CereBruv/
   4. Verified all UI components (`TaskList`, `FocusOrbit`, `DotGraph`, `CloudView`) handle async repository calls and empty states smoothly.
   5. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for live deployment or testing with offline cache.
+
+---
+
+### Entry #14: 2026-10-27 (Antigravity Agent)
+* **Phase:** Phase 11 Complete - Gemini Workload Analysis & Mascot AI Companion.
+* **Action:**
+  1. Created `src/services/ai/IAIService.ts` defining `analyzeWorkload(tasks: Task[]): Promise<string>`.
+  2. Implemented `src/services/ai/GeminiService.ts` using `firebase/ai` (`getAI`, `GoogleAIBackend`, and `getGenerativeModel` with `gemini-2.5-flash`), without exposing any API key in client code.
+  3. Configured mascot persona system instructions (punchy, friendly CereBruv voice, calling user "bruv", maximum 2 sentences, no emojis).
+  4. Implemented a strict 5-second timeout via `Promise.race` on AI calls.
+  5. Updated `updateMascotStatus()` in `src/main.ts` with instant rule-based fallback, debouncing AI calls (400ms) to ensure at most one request per batch of task changes and safely ignoring outdated or offline responses.
+  6. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Ready for testing live AI analysis in browser.
 
 ---
 
