@@ -7,6 +7,7 @@ import {
   type Firestore
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged, type Auth } from 'firebase/auth';
+import { getMessaging, isSupported as isMessagingSupported, type Messaging } from 'firebase/messaging';
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -30,6 +31,20 @@ export const db: Firestore = initializeFirestore(app, {
 
 // Initialize Auth
 export const auth: Auth = getAuth(app);
+
+// Lazy Messaging reference
+let messagingInstance: Messaging | null = null;
+
+export async function getFirebaseMessaging(): Promise<Messaging | null> {
+  if (typeof window === 'undefined') return null;
+  const supported = await isMessagingSupported().catch(() => false);
+  if (!supported) return null;
+
+  if (!messagingInstance) {
+    messagingInstance = getMessaging(app);
+  }
+  return messagingInstance;
+}
 
 /**
  * Ensures a user is signed in to Firebase Auth.
