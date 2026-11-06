@@ -844,3 +844,93 @@ html, body {
   50% { height: 16px; opacity: 1; }
 }
 
+/* Top Navbar Settings Popover & In-App Alarm Popup Toast */
+.header-settings-popover {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 285px;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  box-shadow: 0 12px 28px rgba(18, 18, 22, 0.16);
+  z-index: 60;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.settings-toggle-row div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-toggle-row strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-black-dominant);
+}
+
+.settings-toggle-row span {
+  font-size: 10px;
+  color: var(--color-black-muted);
+}
+
+.settings-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-red-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+#alarm-toast-container {
+  margin: var(--spacing-2) var(--spacing-4) 0;
+  z-index: 45;
+}
+
+.alarm-toast-popup {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--color-red-primary);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  box-shadow: 0 10px 26px rgba(229, 46, 46, 0.18);
+  animation: fade-slide-in 0.25s ease-out;
+}
+
+.alarm-toast-popup.urgent {
+  background: linear-gradient(155deg, #FFF5F5 0%, var(--bg-surface) 100%);
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vibrate-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) rotate(-0.5deg); }
+  40% { transform: translateX(4px) rotate(0.5deg); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+.vibrate-shake {
+  animation: vibrate-shake 0.42s ease-in-out;
+}
+
+

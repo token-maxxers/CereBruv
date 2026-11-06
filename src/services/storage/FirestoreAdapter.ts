@@ -36,6 +36,20 @@ function getRequiredUid(): string {
   return uid;
 }
 
+/**
+ * Removes any keys whose value is `undefined` so Firestore `setDoc` / `updateDoc`
+ * never throws `Unsupported field value: undefined`.
+ */
+function stripUndefined<T extends Record<string, any>>(obj: T): T {
+  const cleaned: Record<string, any> = {};
+  Object.keys(obj).forEach((key) => {
+    if (obj[key] !== undefined) {
+      cleaned[key] = obj[key];
+    }
+  });
+  return cleaned as T;
+}
+
 export class FirestoreTaskRepository implements ITaskRepository {
   private getTodayString(): string {
     const d = new Date();
@@ -91,12 +105,12 @@ export class FirestoreTaskRepository implements ITaskRepository {
       durationMinutes: dto.durationMinutes,
       urgency: dto.urgency,
       completed: false,
-      notes: dto.notes ? dto.notes.trim() : undefined,
+      ...(dto.notes && dto.notes.trim() ? { notes: dto.notes.trim() } : {}),
       createdAt: now,
       updatedAt: now
     };
 
-    await setDoc(taskRef, newTask);
+    await setDoc(taskRef, stripUndefined(newTask));
     return newTask;
   }
 
@@ -110,17 +124,18 @@ export class FirestoreTaskRepository implements ITaskRepository {
 
     const current = snap.data() as Task;
     const now = Date.now();
+    const cleanedUpdates = stripUndefined({
+      ...updates,
+      updatedAt: now
+    });
     const updated: Task = {
       ...current,
-      ...updates,
+      ...cleanedUpdates,
       id,
       updatedAt: now
     };
 
-    await updateDoc(taskRef, {
-      ...updates,
-      updatedAt: now
-    });
+    await updateDoc(taskRef, cleanedUpdates);
 
     return updated;
   }
@@ -178,27 +193,33 @@ export class FirestoreNoteRepository implements INoteRepository {
   async getAllNotes(): Promise<QuickNote[]> {
     const uid = getRequiredUid();
     const snap = await getDocs(this.notesCol(uid));
-    return snap.docs.map(d => ({
-      ...(d.data() as QuickNote),
-      id: d.id
-    }));
+    return snap.docs
+      .map(d => ({
+        ...(d.data() as QuickNote),
+        id: d.id
+      }))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
 
   async createNote(dto: CreateNoteDTO): Promise<QuickNote> {
     const uid = getRequiredUid();
     const noteId = 'note_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const noteRef = doc(db, 'users', uid, 'notes', noteId);
+    const category = dto.category || ((dto.tags && dto.tags[0]) as any) || 'personal';
+    const priority = dto.priority || 'medium';
 
     const newNote: QuickNote = {
       id: noteId,
       content: dto.content.trim(),
-      tags: dto.tags || [],
-      audioUrl: dto.audioUrl,
-      photoUrl: dto.photoUrl,
+      tags: dto.tags && dto.tags.length > 0 ? dto.tags : [category],
+      category,
+      priority,
+      ...(dto.audioUrl ? { audioUrl: dto.audioUrl } : {}),
+      ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
       createdAt: Date.now()
     };
 
-    await setDoc(noteRef, newNote);
+    await setDoc(noteRef, stripUndefined(newNote));
     return newNote;
   }
 
@@ -210,10 +231,11 @@ export class FirestoreNoteRepository implements INoteRepository {
       throw new Error(`Note with id ${id} not found`);
     }
     const current = snap.data() as QuickNote;
-    await updateDoc(noteRef, { ...updates });
+    const cleanedUpdates = stripUndefined({ ...updates });
+    await updateDoc(noteRef, cleanedUpdates);
     return {
       ...current,
-      ...updates,
+      ...cleanedUpdates,
       id,
     };
   }
@@ -270,13 +292,13 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
     return await runTransaction(db, async (txn) => {
       const snap = await txn.get(ref);
       const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
-      const newXP = current.experiencePoints + amount;
+      const newXP = Math.max(0, current.experiencePoints + amount);
       const newLevel = Math.floor(newXP / 100) + 1;
 
       txn.set(
         ref,
         {
-          experiencePoints: increment(amount),
+          experiencePoints: newXP,
           level: newLevel
         },
         { merge: true }

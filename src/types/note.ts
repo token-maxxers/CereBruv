@@ -1,7 +1,11 @@
+import type { TaskCategory, UrgencyLevel } from './task';
+
 export interface QuickNote {
   id: string;
   content: string;
   tags: string[];
+  category?: TaskCategory;
+  priority?: UrgencyLevel;
   audioUrl?: string;
   photoUrl?: string;
   createdAt: number;

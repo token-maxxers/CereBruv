@@ -35,7 +35,7 @@ try {
   console.warn('Firebase Messaging SW init skipped or failed:', err);
 }
 
-const CACHE_NAME = 'cerebruv-cache-v3';
+const CACHE_NAME = 'cerebruv-cache-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -98,6 +98,43 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, options)
   );
+});
+
+// Background Scheduled Alarm timers inside Service Worker (fires OS Notification even when tab is minimized/backgrounded)
+const swAlarmTimers = new Map();
+
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'SYNC_TASK_ALARMS') return;
+  const alarms = Array.isArray(event.data.alarms) ? event.data.alarms : [];
+
+  // Clear previously scheduled SW timers
+  swAlarmTimers.forEach((timerId) => clearTimeout(timerId));
+  swAlarmTimers.clear();
+
+  const now = Date.now();
+  alarms.forEach((alarm) => {
+    const delay = alarm.triggerAt - now;
+    if (delay > 0 && delay <= 24 * 60 * 60 * 1000) {
+      const timerId = setTimeout(() => {
+        swAlarmTimers.delete(alarm.id);
+        const options = {
+          body: alarm.body,
+          icon: '/mascot.png',
+          badge: '/mascot.png',
+          tag: alarm.id,
+          renotify: true,
+          requireInteraction: alarm.requireInteraction !== false,
+          vibrate: alarm.vibrate ? [220, 100, 220, 100, 350] : undefined,
+          data: { taskId: alarm.taskId, stage: alarm.stage },
+        };
+        if (typeof Notification !== 'undefined' && 'showTrigger' in Notification.prototype && window?.TimestampTrigger) {
+          // Experimental TimestampTrigger support if enabled in browser
+        }
+        self.registration.showNotification(alarm.title, options);
+      }, delay);
+      swAlarmTimers.set(alarm.id, timerId);
+    }
+  });
 });
 
 // Handle notification tap

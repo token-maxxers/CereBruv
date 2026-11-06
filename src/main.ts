@@ -7,23 +7,21 @@ import { initAnalytics } from './services/firebase';
 import { authService, type AuthUser } from './services/auth/AuthService';
 import { userStatsRepository, taskRepository } from './services/storage';
 import { migrateLocalStorageToFirestore } from './services/storage/migrate';
-import { geminiService } from './services/ai/GeminiService';
 import { voiceService } from './services/voice/VoiceService';
 import { eventBus, AppEvents } from './services/events';
-import { notificationService } from './services/notifications/NotificationService';
+import { notificationService, type AlarmPopupPayload } from './services/notifications/NotificationService';
 import { renderAuthScreen } from './components/Auth/AuthScreen';
 import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
 import { renderTaskFormModal } from './components/Tasks/TaskForm';
 import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
 import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
+import { sortTasksSmartly, timeStringToFractionalHour } from './components/FocusOrbit/orbitCalculator';
 import { renderDotGraph } from './components/DotGraph/DotGraph';
 import { renderThoughtsView } from './components/Thoughts/ThoughtsView';
 import type { UserStats } from './types/user';
 
-// Mascot AI request debouncer & race-condition cancellation ID
-let mascotAiDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-let latestMascotRequestId = 0;
+let realTimeAlarmInterval: ReturnType<typeof setInterval> | null = null;
 
 const appContainer = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -47,9 +45,9 @@ async function mountApp(user: AuthUser) {
           <span class="brand-tagline">Think it through, CereBruv's got you</span>
         </div>
       </div>
-      <div class="status-badge-group">
-        <button class="icon-btn" id="notif-bell-btn" title="Enable Task Alerts" style="width: 28px; height: 28px;">
-          <svg viewBox="0 0 24 24" width="14" height="14">
+      <div class="status-badge-group" style="position: relative;">
+        <button class="icon-btn" id="notif-bell-btn" title="Voice, Sound & Alarm Settings" style="width: 30px; height: 30px;">
+          <svg viewBox="0 0 24 24" width="15" height="15">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
           </svg>
@@ -61,8 +59,60 @@ async function mountApp(user: AuthUser) {
         <div class="pill-badge" id="xp-badge">
           <span id="xp-count">0 XP</span>
         </div>
+
+        <!-- Top Navbar Voice, Sound, Vibration & Popup Settings Popover -->
+        <div class="header-settings-popover" id="header-settings-popover" style="display: none;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <span style="font-size: 11px; font-weight: 800; color: var(--color-red-primary); letter-spacing: 0.05em;">CEREBRUV ASSISTANT SETTINGS</span>
+            <button type="button" id="close-header-settings" style="background: none; border: none; font-size: 15px; font-weight: 800; color: var(--color-black-muted); cursor: pointer;">&times;</button>
+          </div>
+
+          <label class="settings-toggle-row">
+            <div>
+              <strong>Talkative Voice Mode</strong>
+              <span>Speak confirmations, 1h/30m reminders & alarms</span>
+            </div>
+            <input type="checkbox" id="pref-voice-talkative" />
+          </label>
+
+          <label class="settings-toggle-row">
+            <div>
+              <strong>Alarm & Action Chimes</strong>
+              <span>Synthesized sound effects on reminders & XP</span>
+            </div>
+            <input type="checkbox" id="pref-sound-chime" />
+          </label>
+
+          <label class="settings-toggle-row">
+            <div>
+              <strong>Vibrate & Haptic Pulse</strong>
+              <span>Device vibration + visual shake on alarms</span>
+            </div>
+            <input type="checkbox" id="pref-vibrate" />
+          </label>
+
+          <label class="settings-toggle-row">
+            <div>
+              <strong>Notification Popups</strong>
+              <span>In-app alarm banner + background OS alerts</span>
+            </div>
+            <input type="checkbox" id="pref-popups" />
+          </label>
+
+          <div style="display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+            <button type="button" id="test-alarm-popup-btn" style="flex: 1; padding: 7px 10px; border-radius: 999px; border: none; background: var(--color-red-primary); color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
+              Test Alarm & Voice
+            </button>
+            <button type="button" id="req-os-notif-btn" style="padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-cream); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
+              Allow OS Alerts
+            </button>
+          </div>
+        </div>
       </div>
     </header>
+
+    <!-- In-App Floating Alarm / Reminder Toast Popup -->
+    <div id="alarm-toast-container" style="display: none;"></div>
 
     <!-- Unified Companion & Quick Capture Card -->
     <div class="mascot-banner" id="mascot-banner">
@@ -182,16 +232,206 @@ async function mountApp(user: AuthUser) {
     taskFormModal.open(currentSelectedDate);
   });
 
-  // Notification Bell Toggle
+  // Top Navbar Voice, Sound, Vibration & Popup Settings Popover + In-App Alarm Toast
   const bellBtn = document.querySelector<HTMLButtonElement>('#notif-bell-btn')!;
-  bellBtn.addEventListener('click', async () => {
+  const settingsPopover = document.querySelector<HTMLDivElement>('#header-settings-popover')!;
+  const closeSettingsBtn = document.querySelector<HTMLButtonElement>('#close-header-settings')!;
+  const prefVoiceCheckbox = document.querySelector<HTMLInputElement>('#pref-voice-talkative')!;
+  const prefSoundCheckbox = document.querySelector<HTMLInputElement>('#pref-sound-chime')!;
+  const prefVibrateCheckbox = document.querySelector<HTMLInputElement>('#pref-vibrate')!;
+  const prefPopupsCheckbox = document.querySelector<HTMLInputElement>('#pref-popups')!;
+  const testAlarmBtn = document.querySelector<HTMLButtonElement>('#test-alarm-popup-btn')!;
+  const reqOsNotifBtn = document.querySelector<HTMLButtonElement>('#req-os-notif-btn')!;
+  const alarmToastContainer = document.querySelector<HTMLDivElement>('#alarm-toast-container')!;
+
+  function syncSettingsPopoverUI() {
+    const prefs = notificationService.getPreferences();
+    const isMuted = voiceService.isMuted();
+    prefVoiceCheckbox.checked = !isMuted;
+    prefSoundCheckbox.checked = prefs.soundChime;
+    prefVibrateCheckbox.checked = prefs.vibrateEnabled;
+    prefPopupsCheckbox.checked = prefs.popupEnabled;
+    bellBtn.style.color = (!isMuted || prefs.soundChime || prefs.popupEnabled)
+      ? 'var(--color-red-primary)'
+      : 'var(--color-black-faint)';
+  }
+
+  // Sync initial voice mute state with saved preferences
+  voiceService.setMuted(notificationService.getPreferences().voiceMuted);
+  syncSettingsPopoverUI();
+
+  bellBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = settingsPopover.style.display !== 'none';
+    settingsPopover.style.display = isOpen ? 'none' : 'block';
+    syncSettingsPopoverUI();
+  });
+
+  closeSettingsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    settingsPopover.style.display = 'none';
+  });
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as Node;
+    if (settingsPopover.style.display !== 'none' && !settingsPopover.contains(target) && !bellBtn.contains(target)) {
+      settingsPopover.style.display = 'none';
+    }
+  });
+
+  prefVoiceCheckbox.addEventListener('change', () => {
+    const shouldMute = !prefVoiceCheckbox.checked;
+    voiceService.setMuted(shouldMute);
+    renderVoiceButtonState();
+    syncSettingsPopoverUI();
+    if (!shouldMute) {
+      voiceService.speak('Talkative voice mode enabled, Bruv! I will voice out your confirmations, reminders, and alarms.', true);
+    }
+  });
+
+  prefSoundCheckbox.addEventListener('change', () => {
+    notificationService.updatePreferences({ soundChime: prefSoundCheckbox.checked });
+    syncSettingsPopoverUI();
+    if (prefSoundCheckbox.checked) {
+      notificationService.playAlarmChime('reminder');
+    }
+  });
+
+  prefVibrateCheckbox.addEventListener('change', () => {
+    notificationService.updatePreferences({ vibrateEnabled: prefVibrateCheckbox.checked });
+    syncSettingsPopoverUI();
+    if (prefVibrateCheckbox.checked) {
+      notificationService.triggerVibration([120, 60, 120]);
+    }
+  });
+
+  prefPopupsCheckbox.addEventListener('change', async () => {
+    notificationService.updatePreferences({ popupEnabled: prefPopupsCheckbox.checked });
+    syncSettingsPopoverUI();
+    if (prefPopupsCheckbox.checked) {
+      await notificationService.requestPermission();
+    }
+  });
+
+  reqOsNotifBtn.addEventListener('click', async () => {
     const granted = await notificationService.requestPermission();
     if (granted) {
-      bellBtn.style.color = 'var(--color-red-primary)';
-      notificationService.showNotification('CereBruv Alerts Active', 'Task reminder popups will alert you 10 minutes prior.');
+      reqOsNotifBtn.textContent = 'OS Alerts Active';
+      notificationService.showNotification(
+        'CereBruv Background Alerts Active',
+        'Your 1-hour, 30-minute, and start-time alarms are synced!',
+        true
+      );
     } else {
-      alert('Notifications blocked in browser settings. Enable them to receive task reminders.');
+      alert('Browser notifications are blocked. Allow notifications in your browser site settings to receive background alerts.');
     }
+  });
+
+  function showAlarmPopupToast(payload: AlarmPopupPayload) {
+    if (!notificationService.getPreferences().popupEnabled) return;
+
+    const badgeConfig: Record<AlarmPopupPayload['stage'], { label: string; bg: string; color: string }> = {
+      '60min': { label: '1 HR REMINDER', bg: 'rgba(99, 102, 241, 0.14)', color: '#4F46E5' },
+      '30min': { label: '30 MIN REMINDER', bg: 'rgba(245, 158, 11, 0.16)', color: '#B45309' },
+      'start': { label: 'ALARM NOW', bg: 'rgba(229, 46, 46, 0.15)', color: '#E52E2E' },
+      'missed': { label: `MISSED (${payload.xpDelta || -10} XP)`, bg: 'rgba(18, 18, 22, 0.12)', color: '#E52E2E' }
+    };
+
+    const cfg = badgeConfig[payload.stage];
+
+    alarmToastContainer.style.display = 'block';
+    alarmToastContainer.innerHTML = `
+      <div class="alarm-toast-popup ${payload.stage === 'start' || payload.stage === 'missed' ? 'urgent' : ''}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: ${cfg.bg}; color: ${cfg.color}; letter-spacing: 0.04em;">
+              ${cfg.label}
+            </span>
+            <span style="font-size: 10px; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+              ${payload.task.startTime} • ${payload.task.durationMinutes}m • ${payload.task.urgency} priority
+            </span>
+          </div>
+          <button type="button" id="alarm-toast-dismiss" style="background: none; border: none; font-size: 16px; font-weight: 800; color: var(--color-black-muted); cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+
+        <div style="font-size: 14px; font-weight: 800; color: var(--color-black-dominant); margin-bottom: 3px;">
+          ${payload.headline}
+        </div>
+        <div style="font-size: 12px; color: var(--color-black-muted); line-height: 1.4; margin-bottom: 10px;">
+          ${payload.message}
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="alarm-toast-complete" style="flex: 1; padding: 7px 10px; border-radius: 999px; border: none; background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
+            Complete (+25 XP)
+          </button>
+          <button type="button" id="alarm-toast-reschedule" style="padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-cream); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
+            Edit / Reschedule
+          </button>
+        </div>
+      </div>
+    `;
+
+    alarmToastContainer.querySelector('#alarm-toast-dismiss')?.addEventListener('click', () => {
+      alarmToastContainer.style.display = 'none';
+    });
+
+    alarmToastContainer.querySelector('#alarm-toast-complete')?.addEventListener('click', async () => {
+      alarmToastContainer.style.display = 'none';
+      if (payload.task.id !== 'test-alarm') {
+        await taskRepository.toggleTaskCompletion(payload.task.id);
+        const updatedStats = await userStatsRepository.addExperience(25);
+        eventBus.emit(AppEvents.TASK_COMPLETED, payload.task);
+        eventBus.emit(AppEvents.STATS_UPDATED, updatedStats);
+      }
+      notificationService.playAlarmChime('success');
+      notificationService.triggerVibration([80, 50, 120]);
+      const msg = `Awesome job, Bruv! You crushed "${payload.task.title}" and earned 25 XP!`;
+      eventBus.emit(AppEvents.MASCOT_SPEAK, {
+        headline: `Crushed "${payload.task.title}"! (+25 XP)`,
+        subspeech: msg
+      });
+      voiceService.speak(msg);
+    });
+
+    alarmToastContainer.querySelector('#alarm-toast-reschedule')?.addEventListener('click', () => {
+      alarmToastContainer.style.display = 'none';
+      if (payload.task.id !== 'test-alarm') {
+        taskFormModal.open(payload.task.date || currentSelectedDate, payload.task);
+      }
+    });
+  }
+
+  testAlarmBtn.addEventListener('click', () => {
+    settingsPopover.style.display = 'none';
+    notificationService.playAlarmChime('start');
+    notificationService.triggerVibration([200, 100, 200]);
+    const demoPayload: AlarmPopupPayload = {
+      id: 'test-alarm-popup',
+      task: {
+        id: 'test-alarm',
+        title: 'Deep Focus Sprint',
+        category: 'work',
+        startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+        durationMinutes: 30,
+        urgency: 'high',
+        completed: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        date: currentSelectedDate
+      },
+      stage: 'start',
+      headline: 'Alarm: "Deep Focus Sprint" starts now!',
+      message: 'Voice + Chime + Vibration + Popup test is working smoothly, Bruv!',
+      spokenText: 'Heads up, Bruv! Alarm test: your high priority task Deep Focus Sprint is starting right now. Let us crush it!'
+    };
+    showAlarmPopupToast(demoPayload);
+    notificationService.showNotification(demoPayload.headline, demoPayload.message, true);
+    eventBus.emit(AppEvents.MASCOT_SPEAK, {
+      headline: demoPayload.headline,
+      subspeech: demoPayload.spokenText
+    });
+    voiceService.speak(demoPayload.spokenText);
   });
 
   // View Router
@@ -313,7 +553,11 @@ async function mountApp(user: AuthUser) {
 
     syncMascotAvatarSprite();
 
-    voiceToggleBtn.style.color = isMuted ? 'var(--color-black-faint)' : 'var(--color-red-primary)';
+    voiceToggleBtn.style.color = isSpeaking
+      ? '#FFFFFF'
+      : isMuted
+        ? 'var(--color-black-faint)'
+        : 'var(--color-red-primary)';
     voiceToggleBtn.classList.toggle('recording', isSpeaking);
 
     if (isMuted) {
@@ -397,6 +641,7 @@ async function mountApp(user: AuthUser) {
     e.stopPropagation();
     const nowMuted = voiceService.toggleMute();
     renderVoiceButtonState();
+    syncSettingsPopoverUI();
     if (!nowMuted) {
       const subText = document.querySelector('#mascot-subspeech')?.textContent || 'Voice active, Bruv.';
       voiceService.speak(subText, true);
@@ -462,57 +707,125 @@ async function mountApp(user: AuthUser) {
     }
   });
 
-  // Update Mascot Status dynamically with rule-based fallback and debounced AI analysis
+  // Real-time 15-second alarm & missed-task check loop
+  async function runRealTimeAlarmCheck() {
+    const tasks = await taskRepository.getAllTasks();
+    const todayStr = getLocalDateString();
+    const todayTasks = tasks.filter(t => (t.date || todayStr) === todayStr);
+
+    const triggeredAlarms = notificationService.checkRealTimeTaskAlarms(todayTasks);
+    for (const alarm of triggeredAlarms) {
+      if (alarm.xpDelta && alarm.xpDelta < 0) {
+        const newStats = await userStatsRepository.addExperience(alarm.xpDelta);
+        updateStatsUI(newStats);
+        eventBus.emit(AppEvents.STATS_UPDATED, newStats);
+      }
+
+      // 1. Play chime sound
+      if (alarm.stage === 'start') {
+        notificationService.playAlarmChime('start');
+      } else if (alarm.stage === 'missed') {
+        notificationService.playAlarmChime('missed');
+      } else {
+        notificationService.playAlarmChime('reminder');
+      }
+
+      // 2. Trigger vibration + visual shake
+      notificationService.triggerVibration(
+        alarm.stage === 'start' || alarm.stage === 'missed' ? [250, 100, 250, 100, 300] : [160, 80, 160]
+      );
+
+      // 3. Show OS / Browser notification
+      notificationService.showNotification(alarm.headline, alarm.message, true);
+
+      // 4. Show in-app interactive toast popup
+      showAlarmPopupToast(alarm);
+
+      // 5. Update Mascot Banner & speak aloud in Voice Mode
+      eventBus.emit(AppEvents.MASCOT_SPEAK, {
+        headline: alarm.headline,
+        subspeech: alarm.spokenText
+      });
+      voiceService.speak(alarm.spokenText);
+    }
+  }
+
+  function formatFriendlyTime(time24: string): string {
+    const [hStr, mStr] = time24.split(':');
+    const h = parseInt(hStr || '0', 10);
+    const m = parseInt(mStr || '0', 10);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  // Update Mascot Status dynamically with clean, natural assistant phrasing
   async function updateMascotStatus() {
     const tasks = await taskRepository.getAllTasks();
     const todayStr = getLocalDateString();
     const todayTasks = tasks.filter(t => (t.date || todayStr) === todayStr);
-    const pending = todayTasks.filter(t => !t.completed);
+    const now = new Date();
+    const currentHourFraction = now.getHours() + now.getMinutes() / 60;
+    const pending = sortTasksSmartly(
+      todayTasks.filter(t => !t.completed),
+      currentHourFraction
+    );
     const statusTitle = document.querySelector('#mascot-status-title');
     const subspeech = document.querySelector('#mascot-subspeech');
 
-    // Schedule notification alarms
-    pending.forEach(t => notificationService.scheduleTaskAlert(t));
+    // Sync background Service Worker alarms & check real-time 1h / 30m / start / missed triggers
+    notificationService.syncAlarmsWithServiceWorker(todayTasks);
+    await runRealTimeAlarmCheck();
 
     // Preserve active voice command subtitle for 7s so user can read what CereBruv just said
     if (Date.now() < voiceSubtitleHoldUntil) {
       return;
     }
 
-    // Rule-based fallback text (displayed immediately)
+    // Separate overdue tasks from active/upcoming tasks for crystal-clear assistant reporting
+    const overdueTasks = pending.filter(t => {
+      const start = timeStringToFractionalHour(t.startTime);
+      const end = start + t.durationMinutes / 60;
+      return end < currentHourFraction;
+    });
+    const upcomingOrActive = pending.filter(t => {
+      const start = timeStringToFractionalHour(t.startTime);
+      const end = start + t.durationMinutes / 60;
+      return end >= currentHourFraction;
+    });
+
+    const primaryNext = upcomingOrActive[0] || overdueTasks[0] || pending[0];
+
     if (statusTitle && subspeech) {
       if (todayTasks.length === 0) {
-        statusTitle.textContent = 'Ready for input, Bruv.';
-        subspeech.textContent = 'No tasks for today. Tap the mic and say "Hey Bruv" or tap + to plan.';
+        statusTitle.textContent = 'Ready when you are, Bruv.';
+        subspeech.textContent = 'Your schedule is open today. Tap my avatar to speak or tap + to add a task.';
       } else if (pending.length === 0) {
         statusTitle.textContent = 'All tasks crushed today, Bruv!';
-        subspeech.textContent = 'Streak protected. Great job staying focused.';
-      } else {
-        statusTitle.textContent = `${pending.length} tasks today, Bruv.`;
-        subspeech.textContent = `Next up: "${pending[0].title}" at ${pending[0].startTime}.`;
+        subspeech.textContent = 'Your streak is protected — enjoy your free time.';
+      } else if (overdueTasks.length > 0 && upcomingOrActive.length > 0) {
+        const topOverdue = overdueTasks[0];
+        const nextUp = upcomingOrActive[0];
+        statusTitle.textContent = `${pending.length} tasks left today, Bruv.`;
+        subspeech.textContent = `"${topOverdue.title}" (${formatFriendlyTime(topOverdue.startTime)}) is past due • Up next: "${nextUp.title}" at ${formatFriendlyTime(nextUp.startTime)}.`;
+      } else if (overdueTasks.length > 0) {
+        const topOverdue = overdueTasks[0];
+        statusTitle.textContent = `Heads up, Bruv — ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''}.`;
+        subspeech.textContent = `"${topOverdue.title}" was set for ${formatFriendlyTime(topOverdue.startTime)}. Complete it now or reschedule!`;
+      } else if (primaryNext) {
+        const prioLabel = primaryNext.urgency === 'high' ? ' • High Priority' : '';
+        statusTitle.textContent = `${pending.length} task${pending.length > 1 ? 's' : ''} on your schedule, Bruv.`;
+        subspeech.textContent = `Up next at ${formatFriendlyTime(primaryNext.startTime)}: "${primaryNext.title}" (${primaryNext.durationMinutes}m${prioLabel}).`;
       }
     }
-
-    // Debounce Gemini AI companion analysis (at most 1 call per task-list change batch)
-    if (mascotAiDebounceTimer) {
-      clearTimeout(mascotAiDebounceTimer);
-    }
-
-    const currentRequestId = ++latestMascotRequestId;
-
-    mascotAiDebounceTimer = setTimeout(async () => {
-      if (todayTasks.length === 0 || Date.now() < voiceSubtitleHoldUntil) return;
-
-      try {
-        const aiMessage = await geminiService.analyzeWorkload(todayTasks);
-        if (currentRequestId === latestMascotRequestId && subspeech && aiMessage && Date.now() >= voiceSubtitleHoldUntil) {
-          subspeech.textContent = aiMessage;
-        }
-      } catch (err) {
-        console.warn('Gemini AI workload analysis fallback active:', err);
-      }
-    }, 400);
   }
+
+  if (realTimeAlarmInterval) {
+    clearInterval(realTimeAlarmInterval);
+  }
+  realTimeAlarmInterval = setInterval(() => {
+    runRealTimeAlarmCheck().catch(() => {});
+  }, 15000);
 
   // Update User Stats (Streak & XP)
   async function initUserStats() {

@@ -355,6 +355,26 @@ CereBruv/
   5. Updated `src/components/Cloud/CloudView.ts`:
      - Added Account card at top with avatar, display name, guest badge, and "Create Account" (link mode) or "Sign Out" confirmation.
   6. Verified production build passes cleanly (`npm run build`).
+* **Next Action:** Proceed to Phase 17 (Talkative Voice Assistant, Smart Alarm Engine & Top Navbar Settings).
+
+---
+
+### Entry #20: 2026-11-07 (Antigravity Agent)
+* **Phase:** Phase 17 Complete - Talkative Voice Assistant, Real-Time Multi-Stage Alarm Engine (1h, 30m, Start, Missed XP Penalty), Top Navbar Settings & Edit Button Fix.
+* **Action:**
+  1. **Smart Assistant Task Sorting (`src/components/FocusOrbit/orbitCalculator.ts`, `src/main.ts`, `src/components/Tasks/TaskList.ts`, `src/services/voice/VoiceService.ts`)**:
+     - Added `sortTasksSmartly()` to rank active/imminent tasks (`start <= now + 45m && end >= now`) first (with High Priority tie-breaking), followed by upcoming tasks and overdue tasks.
+     - Fixed `updateMascotStatus()` in `src/main.ts` so "Next up" and overdue warnings accurately prioritize imminent/high-priority tasks (e.g., `01:42 HIGH PRIORITY`) instead of insertion order.
+  2. **Fixed Edit Pencil Button Triggering Delete Confirmation (`src/components/Tasks/TaskList.ts`)**:
+     - Separated `.task-edit-btn` from `.task-remove-btn` so clicking the pencil icon opens the Edit Task modal cleanly without triggering the delete confirmation prompt.
+  3. **Real-Time Multi-Stage Voice & Chime Alarm Engine (`src/services/notifications/NotificationService.ts`, `public/sw.js`, `src/main.ts`)**:
+     - Added real-time 15-second heartbeat checking 4 stages per task: **1 hour before**, **30 minutes before**, **at start time (Alarm)**, and **missed/overdue window**.
+     - Added synthesized Web Audio API chimes (`playAlarmChime`), device & visual vibration (`triggerVibration`), interactive in-app floating alarm toast (`#alarm-toast-container` with `Complete (+25 XP)` and `Edit / Reschedule`), and Service Worker background alarm syncing (`SYNC_TASK_ALARMS` in `public/sw.js`).
+     - Added **Missed Task XP Penalty** (`-15 XP` for High Priority, `-10 XP` for Medium/Low, floored at `0 XP` in `LocalStorageAdapter.ts` and `FirestoreAdapter.ts`) with spoken alert when a task's time window passes uncompleted.
+  4. **Top Navbar Assistant Settings Popover (`src/main.ts`, `src/styles/main.css`)**:
+     - Clicking the top navbar bell button opens the **CereBruv Assistant Settings** popover with toggles for **Talkative Voice Mode (Speak / Muted)**, **Alarm & Action Chimes**, **Vibrate & Haptic Pulse**, **Notification Popups**, plus a **Test Alarm & Voice** button.
+  5. **Talkative CereBruv Across All Actions (`TaskForm.ts`, `TaskList.ts`, `FocusOrbit.ts`, `ThoughtsView.ts`, `QuickCapture.ts`)**:
+     - Speaks aloud when saving/updating tasks, saving thoughts, completing tasks (congratulating the user + `+25 XP`), and answering schedule queries whenever voice mode is unmuted.
 * **Next Action:** Ready for live deployment.
 
 ---
@@ -395,6 +415,26 @@ CereBruv/
      - Upgraded Web Speech API to `continuous = true` with a 6.5-second pause retention window (or tap avatar again to finish) so CereBruv never cuts off after a single word like `"Add"`.
      - Added a **Live Syntax Guide Bar** (`getLiveSyntaxTemplate()`) directly under the input field and in the banner that updates dynamically as the user speaks or types (e.g., saying `"Add"` shows `Add [Task Name] at [Time] for [Duration] under [Study | Work | Personal | Event | Rest]`).
      - Only after the user finishes speaking (by tapping the avatar again or after the 6.5s pause) does CereBruv ask for any missing Category, Duration, or Priority details via the interactive 1-tap pill drawer.
+* **Next Action:** Proceed to Phase 17 (Talkative Voice Assistant, Smart Alarm Engine & Top Navbar Settings).
+
+---
+
+### Entry #20: 2026-11-07 (Antigravity Agent)
+* **Phase:** Phase 17 Complete - Talkative Voice Assistant, Real-Time Multi-Stage Alarm Engine (1h, 30m, Start, Missed XP Penalty), Top Navbar Settings & Edit Button Fix.
+* **Action:**
+  1. **Smart Assistant Task Sorting (`src/components/FocusOrbit/orbitCalculator.ts`, `src/main.ts`, `src/components/Tasks/TaskList.ts`, `src/services/voice/VoiceService.ts`)**:
+     - Added `sortTasksSmartly()` to rank active/imminent tasks (`start <= now + 45m && end >= now`) first (with High Priority tie-breaking), followed by upcoming tasks and overdue tasks.
+     - Fixed `updateMascotStatus()` in `src/main.ts` so "Next up" and overdue warnings accurately prioritize imminent/high-priority tasks (e.g., `01:42 HIGH PRIORITY`) instead of insertion order.
+  2. **Fixed Edit Pencil Button Triggering Delete Confirmation (`src/components/Tasks/TaskList.ts`)**:
+     - Separated `.task-edit-btn` from `.task-remove-btn` so clicking the pencil icon opens the Edit Task modal cleanly without triggering the delete confirmation prompt.
+  3. **Real-Time Multi-Stage Voice & Chime Alarm Engine (`src/services/notifications/NotificationService.ts`, `public/sw.js`, `src/main.ts`)**:
+     - Added real-time 15-second heartbeat checking 4 stages per task: **1 hour before**, **30 minutes before**, **at start time (Alarm)**, and **missed/overdue window**.
+     - Added synthesized Web Audio API chimes (`playAlarmChime`), device & visual vibration (`triggerVibration`), interactive in-app floating alarm toast (`#alarm-toast-container` with `Complete (+25 XP)` and `Edit / Reschedule`), and Service Worker background alarm syncing (`SYNC_TASK_ALARMS` in `public/sw.js`).
+     - Added **Missed Task XP Penalty** (`-15 XP` for High Priority, `-10 XP` for Medium/Low, floored at `0 XP` in `LocalStorageAdapter.ts` and `FirestoreAdapter.ts`) with spoken alert when a task's time window passes uncompleted.
+  4. **Top Navbar Assistant Settings Popover (`src/main.ts`, `src/styles/main.css`)**:
+     - Clicking the top navbar bell button opens the **CereBruv Assistant Settings** popover with toggles for **Talkative Voice Mode (Speak / Muted)**, **Alarm & Action Chimes**, **Vibrate & Haptic Pulse**, **Notification Popups**, plus a **Test Alarm & Voice** button.
+  5. **Talkative CereBruv Across All Actions (`TaskForm.ts`, `TaskList.ts`, `FocusOrbit.ts`, `ThoughtsView.ts`, `QuickCapture.ts`)**:
+     - Speaks aloud when saving/updating tasks, saving thoughts, completing tasks (congratulating the user + `+25 XP`), and answering schedule queries whenever voice mode is unmuted.
 * **Next Action:** Ready for live deployment.
 
 ---

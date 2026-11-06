@@ -1,7 +1,7 @@
 import { taskRepository, noteRepository, userStatsRepository } from '../storage';
 import { geminiService } from '../ai/GeminiService';
 import { eventBus, AppEvents } from '../events';
-import { analyzeDayWorkload } from '../../components/FocusOrbit/orbitCalculator';
+import { analyzeDayWorkload, sortTasksSmartly, timeStringToFractionalHour } from '../../components/FocusOrbit/orbitCalculator';
 import type { TaskCategory, UrgencyLevel } from '../../types/task';
 
 export type LocalVoiceIntent =
@@ -43,6 +43,25 @@ export interface VoiceExecutionOutcome {
   intent: LocalVoiceIntent;
   headline: string;
   spokenReply: string;
+}
+
+export interface VoiceSyntaxStep {
+  label: string;
+  status: 'done' | 'active' | 'pending';
+}
+
+export interface VoicePredictionChip {
+  label: string;
+  insertText: string;
+  replaceInput?: boolean;
+}
+
+export interface VoicePredictionGuide {
+  template: string;
+  nextPart: string;
+  ghostSuffix: string;
+  steps: VoiceSyntaxStep[];
+  predictions: VoicePredictionChip[];
 }
 
 const MUTE_STORAGE_KEY = 'cerebruv_voice_muted';
@@ -115,6 +134,13 @@ export class VoiceService {
   private manualStopRequested: boolean = false;
   private useMediaRecorderFallback: boolean = false;
   private pendingTaskDraft: PendingTaskDraft | null = null;
+  private liveOverrideTranscript: string | null = null;
+
+  public setLiveTranscriptFromInput(text: string): void {
+    if (this.listening) {
+      this.liveOverrideTranscript = text;
+    }
+  }
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -154,14 +180,62 @@ export class VoiceService {
   }
 
   /**
-   * Computes a live syntax guide template based on what the user has spoken or typed so far.
+   * Fixes common speech-to-text homophones at the start of a voice command
+   * (e.g., Web Speech API frequently transcribes "Add" as "at", "ad", "had", or "and").
    */
-  public getLiveSyntaxTemplate(rawInput: string): { template: string; nextPart: string } | null {
+  public normalizeSpokenCommandStart(raw: string): string {
+    const trimmed = raw.trim();
+    if (!trimmed) return raw;
+
+    // Match optional "Hey Bruv" prefix followed by the first word
+    const prefixMatch = trimmed.match(/^((?:hey|yo|ok|okay|hi|hello)\s+(?:cerebruv|bruv|bro|brev|brave|brad|bruh)[,.:!\s]*)?(.*)$/i);
+    if (!prefixMatch) return raw;
+
+    const wakePrefix = prefixMatch[1] || '';
+    const rest = (prefixMatch[2] || '').trim();
+    if (!rest) return raw;
+
+    // If first word is "at", "ad", "had", "and", "ed", "odd" (and not "at [clock time]" like "at 8am")
+    if (/^(?:at|ad|had|and|ed|odd)$/i.test(rest)) {
+      return `${wakePrefix}Add`;
+    }
+    if (/^(?:at|ad|had|and|ed)\s+(?!\d{1,2}\b|noon\b|midnight\b)(.+)$/i.test(rest)) {
+      return rest.replace(/^(?:at|ad|had|and|ed)\s+/i, `${wakePrefix}Add `);
+    }
+    if (/^(?:no|not|know|node)$/i.test(rest)) {
+      return `${wakePrefix}Note`;
+    }
+    if (/^(?:no|not|know|node)\s+(.+)$/i.test(rest)) {
+      return rest.replace(/^(?:no|not|know|node)\s+/i, `${wakePrefix}Note `);
+    }
+    return raw;
+  }
+
+  /**
+   * Computes a simultaneous Predictive + Step-by-Step Guiding syntax model
+   * for both inline input ghost-text and the interactive prediction bar.
+   */
+  public getLiveSyntaxTemplate(rawInput: string): VoicePredictionGuide | null {
     const trimmed = rawInput.trim();
     if (!trimmed) {
       return {
-        template: 'Say: "Add [Task] at [Time]" • "Done with [Task]" • "Note [Thought]" • "What\'s my schedule?"',
-        nextPart: '[Command]',
+        template: 'Add [Task] at [Time] for [Duration] • Note [Thought] • Done with [Task]',
+        nextPart: 'Choose or speak a command to start:',
+        ghostSuffix: 'Add [Task Name] at [8:00 AM] for [45 mins]',
+        steps: [
+          { label: '1. Command (Add / Note / Done)', status: 'active' },
+          { label: '2. Task or Thought', status: 'pending' },
+          { label: '3. at [Time]', status: 'pending' },
+          { label: '4. for [Duration]', status: 'pending' },
+          { label: '5. Category & Priority', status: 'pending' },
+        ],
+        predictions: [
+          { label: 'Add [Task]...', insertText: 'Add ', replaceInput: true },
+          { label: 'Note [Thought]...', insertText: 'Note ', replaceInput: true },
+          { label: 'Done with [Task]...', insertText: 'Done with ', replaceInput: true },
+          { label: "What's my schedule?", insertText: "What's my schedule today?", replaceInput: true },
+          { label: 'Open Thoughts', insertText: 'Open thoughts', replaceInput: true },
+        ],
       };
     }
 
@@ -169,87 +243,439 @@ export class VoiceService {
     const body = normalized.replace(/^hey bruv[,.:!\s]*/i, '').trim();
     const lower = body.toLowerCase();
 
-    if (/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(lower)) {
-      const afterVerb = body.replace(/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\s*/i, '').trim();
-      const hasTime = /\b(at|by|around|from|noon|midnight|morning|afternoon|evening|tonight|\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?|:))\b/i.test(afterVerb);
-      const hasDuration = /\b(for\s+\d+|\d+\s*(?:hours?|hrs?|hr|minutes?|mins?|min))\b/i.test(afterVerb);
-      const hasCategory = /\b(study|work|personal|event|rest)\b/i.test(afterVerb);
-
-      if (!afterVerb) {
-        return {
-          template: 'Add [Task Name] at [Time] for [Duration] under [Study | Work | Personal | Event | Rest]',
-          nextPart: 'Say [Task Name] next...',
-        };
-      }
-      if (!hasTime) {
-        return {
-          template: `Add "${afterVerb}" at [Time] for [Duration] under [Category]`,
-          nextPart: 'Say "at [Time]" next (e.g. "at 8 AM")...',
-        };
-      }
-      if (!hasDuration) {
-        return {
-          template: `${trimmed} for [Duration] under [Study | Work | Personal | Event | Rest]`,
-          nextPart: 'Optional: Say "for [Duration]" or tap avatar to finish',
-        };
-      }
-      if (!hasCategory) {
-        return {
-          template: `${trimmed} under [Study | Work | Personal | Event | Rest]`,
-          nextPart: 'Optional: Say "under [Category]" or tap avatar to finish',
-        };
-      }
+    // Partial prefix prediction while typing/speaking 1-3 characters (e.g. "a", "ad", "at", "sc", "pl")
+    if (/^(?:a|ad|at|had|and|sc|sch|sche|sched|pl|pla|cr|cre)$/i.test(lower)) {
+      const needsCompletion = !/^add$/i.test(lower);
       return {
-        template: `Ready: "${trimmed}"`,
-        nextPart: 'Tap CereBruv avatar (or pause) to schedule!',
+        template: 'Add [Task Name] at [Time] for [Duration] under [Category] [Priority]',
+        nextPart: needsCompletion
+          ? 'Predicted "Add" — press Tab / tap chip or keep speaking [Task Name]'
+          : 'Next: Say or type [Task Name]...',
+        ghostSuffix: needsCompletion
+          ? ' → Add [Task Name] at [8:00 AM] for [45m]'
+          : ' [Task Name] at [8:00 AM] for [45m]',
+        steps: [
+          { label: '1. Add', status: 'active' },
+          { label: '2. [Task Name]', status: 'pending' },
+          { label: '3. at [Time]', status: 'pending' },
+          { label: '4. for [Duration]', status: 'pending' },
+          { label: '5. [Category / Priority]', status: 'pending' },
+        ],
+        predictions: [
+          { label: 'Add ', insertText: 'Add ', replaceInput: true },
+          { label: 'Add meeting at 9 AM', insertText: 'Add meeting at 9:00 AM for 45 mins under Work', replaceInput: true },
+          { label: 'Add study session at 8 PM', insertText: 'Add study session at 8:00 PM for 1 hour under Study', replaceInput: true },
+          { label: 'Add wake up at 7 AM', insertText: 'Add wake up at 7:00 AM for 30 mins under Personal high priority', replaceInput: true },
+        ],
       };
     }
 
+    // Partial prefix prediction for "Note" ("n", "no", "not")
+    if (/^(?:n|no|not)$/i.test(lower)) {
+      return {
+        template: 'Note [Your Thought or Idea] under [Study | Work | Personal]',
+        nextPart: 'Predicted "Note" — press Tab / tap chip or speak your thought',
+        ghostSuffix: `${ 'Note'.slice(lower.length) } [Your Thought] under [Personal]`,
+        steps: [
+          { label: '1. Note', status: 'active' },
+          { label: '2. [Your Thought]', status: 'pending' },
+          { label: '3. under [Category]', status: 'pending' },
+        ],
+        predictions: [
+          { label: 'Note ', insertText: 'Note ', replaceInput: true },
+          { label: 'Note idea for project', insertText: 'Note idea for project under Work', replaceInput: true },
+        ],
+      };
+    }
+
+    // Partial prefix prediction for "Done with" ("d", "do", "don", "c", "co", "com")
+    if (/^(?:d|do|don|c|co|com|f|fi|fin)$/i.test(lower)) {
+      return {
+        template: 'Done with [Task Name]',
+        nextPart: 'Predicted "Done with" — press Tab / tap chip or say task name',
+        ghostSuffix: ' → Done with [Task Name]',
+        steps: [
+          { label: '1. Done with', status: 'active' },
+          { label: '2. [Task Name] (+25 XP)', status: 'pending' },
+        ],
+        predictions: [
+          { label: 'Done with ', insertText: 'Done with ', replaceInput: true },
+        ],
+      };
+    }
+
+    // Partial prefix prediction for "What's my schedule" ("w", "wh", "wha", "s", "st", "sta")
+    if (/^(?:w|wh|wha|s|st|sta)$/i.test(lower)) {
+      return {
+        template: "What's my schedule [today | tomorrow]?",
+        nextPart: 'Predicted Schedule Check — tap chip or press Enter',
+        ghostSuffix: " → What's my schedule today?",
+        steps: [
+          { label: "1. What's my schedule", status: 'active' },
+          { label: '2. [today | tomorrow]', status: 'pending' },
+        ],
+        predictions: [
+          { label: "What's my schedule today?", insertText: "What's my schedule today?", replaceInput: true },
+          { label: "What's my schedule tomorrow?", insertText: "What's my schedule tomorrow?", replaceInput: true },
+        ],
+      };
+    }
+
+    // RULE 1: Full "Add / Schedule / Plan / Create" Guided + Predictive Flow
+    if (/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(lower)) {
+      const afterVerb = body.replace(/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\s*/i, '').trim();
+      const hasTime = /\b(at|by|around|from|noon|midnight|morning|afternoon|evening|tonight|\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?|:))\b/i.test(afterVerb);
+      const endsWithAtPreposition = /\b(?:at|around|by|from)\s*$/i.test(afterVerb);
+      const hasDuration = /\b(for\s+\d+|\d+\s*(?:hours?|hrs?|hr|minutes?|mins?|min))\b/i.test(afterVerb);
+      const endsWithForPreposition = /\bfor\s*$/i.test(afterVerb);
+      const hasCategory = /\b(study|work|personal|event|rest)\b/i.test(afterVerb);
+      const endsWithUnderPreposition = /\b(?:under|in|category)\s*$/i.test(afterVerb);
+      const hasPriority = /\b(high|medium|low|urgent|priority|critical)\b/i.test(afterVerb);
+
+      const cleanTaskPreview = afterVerb
+        .replace(/\b(at|by|around|from|for|under|in)\b.*$/i, '')
+        .trim();
+
+      const step1: VoiceSyntaxStep = { label: '✓ Add', status: 'done' };
+      const step2: VoiceSyntaxStep = {
+        label: cleanTaskPreview ? `✓ Task: "${cleanTaskPreview.slice(0, 18)}"` : '2. [Task Name]',
+        status: cleanTaskPreview ? 'done' : 'active',
+      };
+      const step3: VoiceSyntaxStep = {
+        label: hasTime && !endsWithAtPreposition ? '✓ Time' : '3. at [Time]',
+        status: hasTime && !endsWithAtPreposition ? 'done' : cleanTaskPreview ? 'active' : 'pending',
+      };
+      const step4: VoiceSyntaxStep = {
+        label: hasDuration && !endsWithForPreposition ? '✓ Duration' : '4. for [Duration]',
+        status:
+          hasDuration && !endsWithForPreposition
+            ? 'done'
+            : hasTime && !endsWithAtPreposition
+              ? 'active'
+              : 'pending',
+      };
+      const step5: VoiceSyntaxStep = {
+        label: hasCategory && !endsWithUnderPreposition ? '✓ Category' : '5. under [Category]',
+        status:
+          hasCategory && !endsWithUnderPreposition
+            ? 'done'
+            : hasDuration && !endsWithForPreposition
+              ? 'active'
+              : 'pending',
+      };
+      const step6: VoiceSyntaxStep = {
+        label: hasPriority ? '✓ Priority' : '6. [Priority]',
+        status: hasPriority ? 'done' : hasCategory && !endsWithUnderPreposition ? 'active' : 'pending',
+      };
+
+      const steps = [step1, step2, step3, step4, step5, step6];
+
+      // Step 2: Needs [Task Name]
+      if (!afterVerb) {
+        return {
+          template: 'Add [Task Name] at [Time] for [Duration] under [Category] [Priority]',
+          nextPart: 'Next: Say or type [Task Name] (e.g. "team meeting", "wake up")',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? '[Task Name] at [8:00 AM] for [45 mins]'
+            : ' [Task Name] at [8:00 AM] for [45 mins]',
+          steps,
+          predictions: [
+            { label: 'meeting', insertText: 'meeting ' },
+            { label: 'study session', insertText: 'study session ' },
+            { label: 'workout', insertText: 'workout ' },
+            { label: 'wake up', insertText: 'wake up ' },
+          ],
+        };
+      }
+
+      // Step 3a: User just typed/said "Add [Task] at" -> predict clock times directly!
+      if (endsWithAtPreposition) {
+        return {
+          template: `${trimmed} [8:00 AM] for [45 mins] under [Category]`,
+          nextPart: 'Next: Say or tap the [Time] (e.g. "8:00 AM", "2:30 PM")',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? '[8:00 AM] for [45 mins] under [Work]'
+            : ' [8:00 AM] for [45 mins] under [Work]',
+          steps,
+          predictions: [
+            { label: '8:00 AM', insertText: '8:00 AM ' },
+            { label: '9:00 AM', insertText: '9:00 AM ' },
+            { label: '1:00 PM', insertText: '1:00 PM ' },
+            { label: '6:00 PM', insertText: '6:00 PM ' },
+            { label: '9:00 PM', insertText: '9:00 PM ' },
+          ],
+        };
+      }
+
+      // Step 3b: User has [Task Name], needs "at [Time]"
+      if (!hasTime) {
+        return {
+          template: `Add "${afterVerb}" at [Time] for [Duration] under [Category]`,
+          nextPart: 'Next: Say or tap "at [Time]" (e.g. "at 8:00 AM")',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? 'at [8:00 AM] for [45 mins]'
+            : ' at [8:00 AM] for [45 mins]',
+          steps,
+          predictions: [
+            { label: 'at 8:00 AM', insertText: 'at 8:00 AM ' },
+            { label: 'at 9:00 AM', insertText: 'at 9:00 AM ' },
+            { label: 'at 2:00 PM', insertText: 'at 2:00 PM ' },
+            { label: 'at 6:00 PM', insertText: 'at 6:00 PM ' },
+            { label: 'tomorrow at 9 AM', insertText: 'tomorrow at 9:00 AM ' },
+          ],
+        };
+      }
+
+      // Step 4a: User ended with "for" -> predict durations directly
+      if (endsWithForPreposition) {
+        return {
+          template: `${trimmed} [30 mins | 45 mins | 1 hour] under [Category]`,
+          nextPart: 'Next: Say or tap the [Duration]',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? '[45 mins] under [Work]'
+            : ' [45 mins] under [Work]',
+          steps,
+          predictions: [
+            { label: '30 mins', insertText: '30 mins ' },
+            { label: '45 mins', insertText: '45 mins ' },
+            { label: '1 hour', insertText: '1 hour ' },
+            { label: '2 hours', insertText: '2 hours ' },
+          ],
+        };
+      }
+
+      // Step 4b: Needs "for [Duration]"
+      if (!hasDuration) {
+        return {
+          template: `${trimmed} for [Duration] under [Study | Work | Personal | Event | Rest]`,
+          nextPart: 'Next: Say "for [Duration]" (or tap avatar / Enter to finish)',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? 'for [45 mins] under [Category]'
+            : ' for [45 mins] under [Category]',
+          steps,
+          predictions: [
+            { label: 'for 30 mins', insertText: 'for 30 mins ' },
+            { label: 'for 45 mins', insertText: 'for 45 mins ' },
+            { label: 'for 1 hour', insertText: 'for 1 hour ' },
+            { label: 'for 2 hours', insertText: 'for 2 hours ' },
+          ],
+        };
+      }
+
+      // Step 5a: User ended with "under" -> predict categories directly
+      if (endsWithUnderPreposition) {
+        return {
+          template: `${trimmed} [Study | Work | Personal | Event | Rest] [Priority]`,
+          nextPart: 'Next: Say or tap [Category]',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? '[Work | Study | Personal] [high priority]'
+            : ' [Work | Study | Personal] [high priority]',
+          steps,
+          predictions: [
+            { label: 'Work', insertText: 'Work ' },
+            { label: 'Study', insertText: 'Study ' },
+            { label: 'Personal', insertText: 'Personal ' },
+            { label: 'Event', insertText: 'Event ' },
+            { label: 'Rest', insertText: 'Rest ' },
+          ],
+        };
+      }
+
+      // Step 5b: Needs "under [Category]"
+      if (!hasCategory) {
+        return {
+          template: `${trimmed} under [Study | Work | Personal | Event | Rest] [high priority]`,
+          nextPart: 'Next: Say "under [Category]" (or tap avatar / Enter to finish)',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? 'under [Work | Study | Personal]'
+            : ' under [Work | Study | Personal]',
+          steps,
+          predictions: [
+            { label: 'under Work', insertText: 'under Work ' },
+            { label: 'under Study', insertText: 'under Study ' },
+            { label: 'under Personal', insertText: 'under Personal ' },
+            { label: 'under Event', insertText: 'under Event ' },
+            { label: 'under Rest', insertText: 'under Rest ' },
+          ],
+        };
+      }
+
+      // Step 6: Needs [Priority]
+      if (!hasPriority) {
+        return {
+          template: `${trimmed} [high | medium | low priority]`,
+          nextPart: 'Optional: Say "[high | medium | low] priority" or tap avatar / Enter!',
+          ghostSuffix: rawInput.endsWith(' ') ? '[high priority]' : ' [high priority]',
+          steps,
+          predictions: [
+            { label: 'high priority', insertText: 'high priority' },
+            { label: 'medium priority', insertText: 'medium priority' },
+            { label: 'low priority', insertText: 'low priority' },
+          ],
+        };
+      }
+
+      return {
+        template: `Ready to schedule: "${trimmed}"`,
+        nextPart: 'All details set! Tap CereBruv avatar or press Enter to schedule.',
+        ghostSuffix: ' ✓ (Press Enter or Tap Avatar)',
+        steps,
+        predictions: [],
+      };
+    }
+
+    // RULE 2: Done with [Task Name]
     if (/^(?:done|done with|complete|finish|check off|mark)\b/i.test(lower)) {
       const afterVerb = body.replace(/^(?:done with|done|complete|finish|check off|mark)\s*/i, '').trim();
+      const steps: VoiceSyntaxStep[] = [
+        { label: '✓ Done with', status: 'done' },
+        { label: afterVerb ? `✓ "${afterVerb}"` : '2. [Task Name]', status: afterVerb ? 'done' : 'active' },
+      ];
       if (!afterVerb) {
         return {
           template: 'Done with [Task Name]',
-          nextPart: 'Say the [Task Name] you completed...',
+          nextPart: 'Next: Say or type the [Task Name] you completed (+25 XP)',
+          ghostSuffix: /^done$/i.test(lower)
+            ? ' with [Task Name]'
+            : rawInput.endsWith(' ')
+              ? '[Task Name]'
+              : ' [Task Name]',
+          steps,
+          predictions: /^done$/i.test(lower)
+            ? [{ label: 'Done with ', insertText: 'Done with ', replaceInput: true }]
+            : [],
         };
       }
       return {
         template: `Done with "${afterVerb}" (+25 XP)`,
-        nextPart: 'Tap CereBruv avatar (or pause) to mark complete!',
+        nextPart: 'Tap CereBruv avatar or press Enter to mark complete!',
+        ghostSuffix: ' ✓ (+25 XP)',
+        steps,
+        predictions: [],
       };
     }
 
+    // RULE 3: Note [Your Thought]
     if (/^(?:note|take a note|save note|brain dump|remember to|remember)\b/i.test(lower)) {
       const afterVerb = body.replace(/^(?:note|take a note|save note|brain dump|remember to|remember)\s*[:,-]?\s*/i, '').trim();
+      const hasCat = /\b(study|work|personal|event|rest)\b/i.test(afterVerb);
+      const steps: VoiceSyntaxStep[] = [
+        { label: '✓ Note', status: 'done' },
+        { label: afterVerb ? `✓ Thought` : '2. [Your Thought]', status: afterVerb ? 'done' : 'active' },
+        { label: hasCat ? '✓ Category' : '3. under [Category]', status: hasCat ? 'done' : afterVerb ? 'active' : 'pending' },
+      ];
       if (!afterVerb) {
         return {
           template: 'Note [Your Thought or Idea] under [Study | Work | Personal]',
-          nextPart: 'Speak your thought or idea next...',
+          nextPart: 'Next: Speak or type your thought...',
+          ghostSuffix: rawInput.endsWith(' ')
+            ? '[Your Thought] under [Personal]'
+            : ' [Your Thought] under [Personal]',
+          steps,
+          predictions: [
+            { label: 'under Personal', insertText: 'under Personal' },
+            { label: 'under Work', insertText: 'under Work' },
+            { label: 'under Study', insertText: 'under Study' },
+          ],
         };
       }
       return {
         template: `Note: "${afterVerb}" → Thoughts & Mind Graph`,
-        nextPart: 'Tap CereBruv avatar (or pause) to save thought!',
+        nextPart: hasCat
+          ? 'Tap CereBruv avatar or press Enter to save thought!'
+          : 'Optional: Tag category or tap avatar / Enter to save!',
+        ghostSuffix: hasCat
+          ? ' ✓'
+          : rawInput.endsWith(' ')
+            ? 'under [Personal | Work | Study]'
+            : ' under [Personal | Work | Study]',
+        steps,
+        predictions: hasCat
+          ? []
+          : [
+              { label: 'under Personal', insertText: 'under Personal' },
+              { label: 'under Work', insertText: 'under Work' },
+              { label: 'under Study', insertText: 'under Study' },
+            ],
       };
     }
 
+    // RULE 4: Open [Tab]
     if (/^(?:open|show|go to|switch to)\b/i.test(lower)) {
+      const hasTab = /\b(orbit|tasks?|thoughts?|notes?|graph|cloud)\b/i.test(lower);
       return {
         template: 'Open [orbit | tasks | thoughts | graph | cloud]',
-        nextPart: 'Say which tab to open...',
+        nextPart: hasTab ? 'Tap avatar or press Enter to switch tab!' : 'Next: Say or tap which tab to open',
+        ghostSuffix: hasTab
+          ? ' ✓'
+          : rawInput.endsWith(' ')
+            ? '[orbit | tasks | thoughts | graph | cloud]'
+            : ' [orbit | tasks | thoughts | graph | cloud]',
+        steps: [
+          { label: '✓ Open', status: 'done' },
+          { label: hasTab ? '✓ Tab Selected' : '2. [Tab Name]', status: hasTab ? 'done' : 'active' },
+        ],
+        predictions: [
+          { label: 'orbit', insertText: 'Open orbit', replaceInput: true },
+          { label: 'tasks', insertText: 'Open tasks', replaceInput: true },
+          { label: 'thoughts', insertText: 'Open thoughts', replaceInput: true },
+          { label: 'graph', insertText: 'Open graph', replaceInput: true },
+          { label: 'cloud', insertText: 'Open cloud', replaceInput: true },
+        ],
       };
     }
 
+    // RULE 5: Schedule Query
     if (/^(?:what|read|check|tell|how|schedule|status)\b/i.test(lower)) {
       return {
         template: "What's my schedule [today | tomorrow]?",
-        nextPart: 'Tap CereBruv avatar (or pause) to hear schedule!',
+        nextPart: 'Tap CereBruv avatar or press Enter to hear your schedule!',
+        ghostSuffix: /\b(today|tomorrow)\b/i.test(lower) ? ' ✓' : ' today?',
+        steps: [
+          { label: "✓ Check Schedule", status: 'done' },
+          { label: '2. [today | tomorrow]', status: 'active' },
+        ],
+        predictions: [
+          { label: "What's my schedule today?", insertText: "What's my schedule today?", replaceInput: true },
+          { label: "What's my schedule tomorrow?", insertText: "What's my schedule tomorrow?", replaceInput: true },
+        ],
       };
     }
 
+    // Fallback: User typed/spoke a task title or thought directly without "Add" or "Note" prefix
+    const hasTime = /\b(at|by|around|from|\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?|:))\b/i.test(lower);
     return {
-      template: `"${trimmed}" — Add "at [Time]" to schedule as Task, or tap avatar to save as Thought`,
-      nextPart: 'Keep speaking or tap CereBruv avatar when finished',
+      template: hasTime
+        ? `Schedule Task: "${trimmed}" for [Duration] under [Category]`
+        : `"${trimmed}" — Add "at [Time]" to schedule as Task, or press Enter for Thought`,
+      nextPart: hasTime
+        ? 'Next: Add "for [Duration]" or tap avatar / Enter to schedule!'
+        : 'Predict: Tap "at [Time]" to schedule on Orbit, or save as Thought',
+      ghostSuffix: hasTime
+        ? rawInput.endsWith(' ')
+          ? 'for [45 mins] under [Work]'
+          : ' for [45 mins] under [Work]'
+        : rawInput.endsWith(' ')
+          ? 'at [8:00 AM] for [45 mins]'
+          : ' at [8:00 AM] for [45 mins]',
+      steps: [
+        { label: `✓ "${trimmed.slice(0, 16)}"`, status: 'done' },
+        { label: hasTime ? '✓ Time' : '2. at [Time] (for Task)', status: hasTime ? 'done' : 'active' },
+        { label: '3. for [Duration]', status: hasTime ? 'active' : 'pending' },
+      ],
+      predictions: hasTime
+        ? [
+            { label: 'for 30 mins', insertText: 'for 30 mins ' },
+            { label: 'for 45 mins', insertText: 'for 45 mins ' },
+            { label: 'under Work', insertText: 'under Work ' },
+            { label: 'high priority', insertText: 'high priority' },
+          ]
+        : [
+            { label: `Add ${trimmed} at 8:00 AM`, insertText: `Add ${trimmed} at 8:00 AM `, replaceInput: true },
+            { label: 'at 8:00 AM', insertText: 'at 8:00 AM ' },
+            { label: 'at 2:00 PM', insertText: 'at 2:00 PM ' },
+            { label: `Note ${trimmed}`, insertText: `Note ${trimmed}`, replaceInput: true },
+          ],
     };
   }
 
@@ -342,6 +768,15 @@ export class VoiceService {
     return this.muted;
   }
 
+  public setMuted(muted: boolean): void {
+    this.muted = muted;
+    localStorage.setItem(MUTE_STORAGE_KEY, String(this.muted));
+    if (this.muted) {
+      this.stopSpeaking();
+    }
+    this.emitState();
+  }
+
   public stopSpeaking(): void {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -367,6 +802,7 @@ export class VoiceService {
     this.stopSpeaking();
     this.listening = true;
     this.manualStopRequested = false;
+    this.liveOverrideTranscript = null;
     this.emitState('Listening, Bruv... Tap avatar again when finished');
 
     const initialHint = this.getLiveSyntaxTemplate('');
@@ -423,8 +859,10 @@ export class VoiceService {
           }
         }
 
-        const combined = (accumulatedTranscript + ' ' + sessionFinal + ' ' + interim).replace(/\s{2,}/g, ' ').trim();
+        const rawCombined = (accumulatedTranscript + ' ' + sessionFinal + ' ' + interim).replace(/\s{2,}/g, ' ').trim();
+        const combined = this.normalizeSpokenCommandStart(rawCombined);
         currentInterim = combined;
+        this.liveOverrideTranscript = null;
 
         if (combined) {
           onTranscriptUpdate?.(combined);
@@ -495,7 +933,8 @@ export class VoiceService {
         eventBus.emit(AppEvents.VOICE_SYNTAX_HINT, null);
         this.emitState();
 
-        const spoken = (currentInterim || accumulatedTranscript).trim();
+        const spoken = (this.liveOverrideTranscript ?? (currentInterim || accumulatedTranscript)).trim();
+        this.liveOverrideTranscript = null;
         if (spoken) {
           onTranscriptUpdate?.('');
           await this.executeVoiceCommand(spoken, getSelectedDate());
@@ -830,23 +1269,37 @@ export class VoiceService {
       };
     }
 
-    // RULE 4: Explicit Brain-Dump Note
-    const explicitNoteMatch = body.match(/^(?:note|take a note|save note|brain dump|remember to|remember)\s*[:,-]?\s*(.+)$/i);
+    // RULE 4: Explicit Brain-Dump Note / Idea (Supports "note", "notes", "idea", "ideas")
+    const explicitNoteMatch = body.match(/^(?:notes?|take a note|save a? note|brain dump|ideas?|remember to|remember)\b\s*[:,-]?\s*(.+)$/i);
     if (explicitNoteMatch && explicitNoteMatch[1]) {
+      const rawNoteBody = explicitNoteMatch[1].trim();
+      const catExtract = this.extractExplicitCategory(rawNoteBody);
+      const urgExtract = this.extractUrgency(catExtract.remainingText);
+      const cleanNoteText =
+        urgExtract.remainingText
+          .replace(/^(?:notes?|ideas?)\b\s*[:,-]?\s*/i, '')
+          .replace(/[.,;!?]+\s*$/, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim() || rawNoteBody;
+      const resolvedCat = catExtract.matched ? catExtract.category : this.inferCategory(cleanNoteText);
       return {
         intent: 'create_note',
-        title: explicitNoteMatch[1].trim(),
+        title: cleanNoteText,
         date: referenceDateStr,
         startTime: '09:00',
         durationMinutes: 30,
-        category: 'personal',
-        urgency: 'medium',
-        rawText: explicitNoteMatch[1].trim(),
+        category: resolvedCat,
+        categorySpecified: catExtract.matched,
+        urgency: urgExtract.matched ? urgExtract.urgency : 'medium',
+        urgencySpecified: urgExtract.matched,
+        rawText: cleanNoteText,
       };
     }
 
     // RULE 5: Add / Schedule Task
-    let working = body;
+    let working = body.replace(/^(?:(?:please|add|schedule|plan|book|set|create)\b\s*)+/i, '').trim();
+    const startsWithTaskVerb = /^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(body);
+
     const dateExtraction = this.extractDate(working, referenceDateStr);
     working = dateExtraction.remainingText;
 
@@ -862,29 +1315,32 @@ export class VoiceService {
     const categoryExtraction = this.extractExplicitCategory(working);
     working = categoryExtraction.remainingText;
 
-    const startsWithTaskVerb = /^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(working);
-
     if (!startsWithTaskVerb && !dateExtraction.matched && !timeExtraction.matched && !durationExtraction.matched) {
       const inferredNoteCat = categoryExtraction.matched
         ? categoryExtraction.category
-        : this.inferCategory(body || rawTranscript);
+        : this.inferCategory(working || body || rawTranscript);
+      const cleanIdea = (working || body || rawTranscript)
+        .replace(/^(?:notes?|ideas?)\b\s*[:,-]?\s*/i, '')
+        .replace(/[.,;!?]+\s*$/, '')
+        .trim();
       return {
         intent: 'create_note',
-        title: body || rawTranscript,
+        title: cleanIdea,
         date: referenceDateStr,
         startTime: timeExtraction.startTime,
         durationMinutes: durationExtraction.durationMinutes,
         category: inferredNoteCat,
-        urgency: 'medium',
-        rawText: body || rawTranscript,
+        urgency: urgencyExtraction.matched ? urgencyExtraction.urgency : 'medium',
+        rawText: cleanIdea,
       };
     }
 
     let cleanedTitle = working
-      .replace(/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\s+(?:a\s+|an\s+|my\s+|the\s+)?(?:task\s+(?:to|for)?\s*|event\s+(?:to|for)?\s*)?/i, '')
+      .replace(/^(?:(?:please|add|schedule|plan|book|set|create|a|an|my|the|task|event|to|for)\b\s*)+/i, '')
       .replace(/\b(?:will be|is at|scheduled)\b/gi, ' ')
       .replace(/\s+(?:on|at|for|in|by|to|the|my|a|an)\s*$/gi, '')
       .replace(/^\s*(?:on|at|for|in|to)\s+/gi, '')
+      .replace(/[.,;!?]+\s*$/g, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
 
@@ -990,7 +1446,7 @@ export class VoiceService {
       const now = new Date();
       const currentHourFraction = now.getHours() + now.getMinutes() / 60;
       const analysis = analyzeDayWorkload(dayTasks, currentHourFraction);
-      const pending = dayTasks.filter(t => !t.completed);
+      const pending = sortTasksSmartly(dayTasks.filter(t => !t.completed), currentHourFraction);
       const freeHours = (analysis.totalFreeMinutes / 60).toFixed(1).replace(/\.0$/, '');
 
       const dateLabel = this.formatSpokenDateLabel(targetDate);
@@ -1005,12 +1461,16 @@ export class VoiceService {
         spokenReply = `I got you, Bruv. You crushed all ${dayTasks.length} tasks for ${dateLabel}. Enjoy your ${freeHours} hours of free time.`;
       } else {
         const nextTask = analysis.realisticNextTask || pending[0];
+        const overdueCount = pending.filter(
+          t => timeStringToFractionalHour(t.startTime) + t.durationMinutes / 60 < currentHourFraction
+        ).length;
         const taskListSummary = pending
           .slice(0, 3)
-          .map(t => `${t.title} at ${this.formatSpokenTime(t.startTime)}`)
+          .map(t => `${t.title} (${t.urgency} priority) at ${this.formatSpokenTime(t.startTime)}`)
           .join(', ');
         headline = `I got you, Bruv — ${pending.length} task${pending.length > 1 ? 's' : ''} ${dateLabel}.`;
-        spokenReply = `I got you, Bruv. Here is your schedule for ${dateLabel}: ${taskListSummary}. Priority next task is ${nextTask.title}, with ${freeHours} hours of free orbit time.`;
+        const overdueNote = overdueCount > 0 ? ` Note: ${overdueCount} task${overdueCount > 1 ? 's have' : ' has'} passed its scheduled window.` : '';
+        spokenReply = `I got you, Bruv. Top priority next up is ${nextTask.title} at ${this.formatSpokenTime(nextTask.startTime)}. Full queue: ${taskListSummary}.${overdueNote} You have ${freeHours} hours of free orbit time.`;
       }
 
       eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
@@ -1105,16 +1565,20 @@ export class VoiceService {
       return { intent: 'create_task', headline, spokenReply };
     }
 
-    // 5. Create Note (Saved to Thoughts Tab & linked to Mind Graph Category Hub)
-    const noteCategory = this.inferCategory(parsed.rawText);
-    await noteRepository.createNote({
-      content: parsed.rawText,
+    // 5. Create Note / Idea (Saved to Thoughts Tab with Category & Priority — no alarms or deadlines)
+    const noteCategory = parsed.category || this.inferCategory(parsed.rawText);
+    const notePriority = parsed.urgency || 'medium';
+    const noteContent = (parsed.title || parsed.rawText).trim();
+    const savedNote = await noteRepository.createNote({
+      content: noteContent,
       tags: [noteCategory],
+      category: noteCategory,
+      priority: notePriority,
     });
-    eventBus.emit(AppEvents.NOTE_CREATED);
+    eventBus.emit(AppEvents.NOTE_CREATED, savedNote);
 
-    const headline = `I got you, Bruv — Saved to Thoughts (${noteCategory}).`;
-    const spokenReply = `I got you, Bruv. Saved "${parsed.rawText}" to your Thoughts tab and linked it to ${noteCategory} in your Mind Graph.`;
+    const headline = `Saved idea: "${noteContent}"`;
+    const spokenReply = `Got it, Bruv. Saved "${noteContent}" to your Thoughts under ${noteCategory}.`;
     eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
     this.speak(spokenReply);
     return { intent: 'create_note', headline, spokenReply };

@@ -133,10 +133,14 @@ export class LocalNoteRepository implements INoteRepository {
 
   async createNote(dto: CreateNoteDTO): Promise<QuickNote> {
     const notes = this.read();
+    const category = dto.category || ((dto.tags && dto.tags[0]) as any) || 'personal';
+    const priority = dto.priority || 'medium';
     const newNote: QuickNote = {
       id: 'note_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       content: dto.content.trim(),
-      tags: dto.tags || [],
+      tags: dto.tags && dto.tags.length > 0 ? dto.tags : [category],
+      category,
+      priority,
       audioUrl: dto.audioUrl,
       photoUrl: dto.photoUrl,
       createdAt: Date.now(),
@@ -207,7 +211,7 @@ export class LocalUserStatsRepository implements IUserStatsRepository {
 
   async addExperience(amount: number): Promise<UserStats> {
     const stats = this.read();
-    stats.experiencePoints += amount;
+    stats.experiencePoints = Math.max(0, stats.experiencePoints + amount);
     // Calculate level: 100 XP per level
     stats.level = Math.floor(stats.experiencePoints / 100) + 1;
     this.write(stats);

@@ -1,5 +1,7 @@
 import { taskRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
+import { voiceService } from '../../services/voice/VoiceService';
+import { notificationService } from '../../services/notifications/NotificationService';
 import type { Task, TaskCategory, UrgencyLevel } from '../../types/task';
 
 export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDate?: string, editTask?: Task) => void; close: () => void } {
@@ -181,6 +183,13 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
       });
       eventBus.emit(AppEvents.TASK_UPDATED, updatedTask);
       eventBus.emit(AppEvents.TASK_CREATED, updatedTask);
+      const msg = `I got you, Bruv. Updated "${updatedTask.title}" under ${updatedTask.category} (${updatedTask.urgency} priority) at ${updatedTask.startTime}.`;
+      eventBus.emit(AppEvents.MASCOT_SPEAK, {
+        headline: `Updated "${updatedTask.title}", Bruv!`,
+        subspeech: msg,
+      });
+      voiceService.speak(msg);
+      notificationService.playAlarmChime('success');
     } else {
       const newTask = await taskRepository.createTask({
         title,
@@ -192,6 +201,13 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
         notes: notes.trim() || undefined,
       });
       eventBus.emit(AppEvents.TASK_CREATED, newTask);
+      const msg = `I got you, Bruv. Scheduled "${newTask.title}" under ${newTask.category} (${newTask.urgency} priority) at ${newTask.startTime} for ${newTask.durationMinutes} minutes.`;
+      eventBus.emit(AppEvents.MASCOT_SPEAK, {
+        headline: `Scheduled "${newTask.title}", Bruv!`,
+        subspeech: msg,
+      });
+      voiceService.speak(msg);
+      notificationService.playAlarmChime('success');
     }
 
     form.reset();

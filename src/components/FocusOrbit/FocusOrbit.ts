@@ -1,5 +1,7 @@
 import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
+import { voiceService } from '../../services/voice/VoiceService';
+import { notificationService } from '../../services/notifications/NotificationService';
 import {
   calculateOrbitSegments,
   analyzeDayWorkload,
@@ -51,11 +53,15 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       <div style="position: relative; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center;">
         <canvas id="focus-orbit-canvas" width="280" height="280" style="width: 280px; height: 280px; cursor: pointer;"></canvas>
 
-        <!-- Center Hub Information -->
-        <div style="position: absolute; width: 124px; height: 124px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: var(--spacing-2);">
-          <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.05em;" id="center-month-day"></div>
-          <div style="font-size: var(--font-size-xl); font-weight: 800; color: var(--color-black-dominant); line-height: 1.1;" id="center-busy-hours">0h</div>
-          <div style="font-size: 0.7rem; color: var(--color-black-muted); font-weight: 600;" id="center-free-time">Free: 16h</div>
+        <!-- Center Hub Information (With Real-Time Live Clock) -->
+        <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px; gap: 1px;">
+          <div style="display: inline-flex; align-items: center; gap: 4px; background: rgba(229, 46, 46, 0.1); border: 1px solid rgba(229, 46, 46, 0.25); padding: 2px 7px; border-radius: 999px; margin-bottom: 1px;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: var(--color-red-primary);"></span>
+            <span style="font-size: 0.68rem; font-weight: 800; color: var(--color-red-primary); font-variant-numeric: tabular-nums;" id="center-live-clock">--:--:--</span>
+          </div>
+          <div style="font-size: 0.62rem; font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.03em;" id="center-month-day"></div>
+          <div style="font-size: 1.2rem; font-weight: 800; color: var(--color-black-dominant); line-height: 1.05;" id="center-busy-hours">0h</div>
+          <div style="font-size: 0.65rem; color: var(--color-black-muted); font-weight: 600;" id="center-free-time">Free: 16h</div>
         </div>
 
         <!-- Interactive Arc Popover Card -->
@@ -111,9 +117,33 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const jumpTodayBtn = container.querySelector<HTMLButtonElement>('#jump-today-btn')!;
   const prevDayBtn = container.querySelector<HTMLButtonElement>('#prev-day-btn')!;
   const nextDayBtn = container.querySelector<HTMLButtonElement>('#next-day-btn')!;
+  const centerLiveClock = container.querySelector<HTMLElement>('#center-live-clock')!;
   const centerMonthDay = container.querySelector<HTMLElement>('#center-month-day')!;
   const centerBusyHours = container.querySelector<HTMLElement>('#center-busy-hours')!;
   const centerFreeTime = container.querySelector<HTMLElement>('#center-free-time')!;
+
+  function formatFriendlyTime12(time24: string): string {
+    const [hStr, mStr] = time24.split(':');
+    const h = parseInt(hStr || '0', 10);
+    const m = parseInt(mStr || '0', 10);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  function updateLiveDigitalClock() {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const s = now.getSeconds();
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const time12 = `${h12}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} ${period}`;
+    const time24 = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    centerLiveClock.textContent = time12;
+    const targetDate = new Date(selectedDate + 'T00:00:00');
+    centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()} • ${time24}`;
+  }
   const nextTaskBody = container.querySelector<HTMLElement>('#next-task-body')!;
   const nextTaskTimePill = container.querySelector<HTMLElement>('#next-task-time-pill')!;
   const nextTaskRationale = container.querySelector<HTMLElement>('#next-task-rationale')!;
@@ -148,6 +178,14 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     if (updated.completed) {
       const stats = await userStatsRepository.incrementTaskCount();
       eventBus.emit(AppEvents.STATS_UPDATED, stats);
+      const congrats = `Awesome job, Bruv! You crushed "${updated.title}" and earned 25 XP!`;
+      eventBus.emit(AppEvents.MASCOT_SPEAK, {
+        headline: `Crushed "${updated.title}" (+25 XP)!`,
+        subspeech: congrats,
+      });
+      voiceService.speak(congrats);
+      notificationService.playAlarmChime('success');
+      notificationService.triggerVibration([120, 60, 180]);
     }
     eventBus.emit(AppEvents.TASK_COMPLETED, updated);
     arcPopover.style.display = 'none';
@@ -208,9 +246,9 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const now = new Date();
     const currentFraction = isToday ? now.getHours() + now.getMinutes() / 60 : 0;
 
-    // Set date labels
+    // Set date & live clock labels
     fullDateEl.textContent = targetDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
+    updateLiveDigitalClock();
 
     // Render Weekly Strip with dots for tasks
     renderWeeklyStrip(weeklyStrip, allTasks, selectedDate);
@@ -223,7 +261,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
     // Update workload badges
     const busyHours = (analysis.totalBusyMinutes / 60).toFixed(1);
-    centerBusyHours.textContent = `${busyHours}h`;
+    centerBusyHours.textContent = `${busyHours}h Planned`;
     const freeHours = (analysis.totalFreeMinutes / 60).toFixed(1);
     centerFreeTime.textContent = `Free: ${freeHours}h`;
 
@@ -244,16 +282,19 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       workloadBadge.style.background = '#E0F2F1';
     }
 
-    // Update Realistic Next Task Section
+    // Update Realistic Next Task Section with clean, natural wording
     if (analysis.realisticNextTask) {
       const next = analysis.realisticNextTask;
+      const friendlyTime = formatFriendlyTime12(next.startTime);
+      const prioLabel = next.urgency === 'high' ? 'High Priority' : next.urgency === 'medium' ? 'Medium Priority' : 'Low Priority';
+      const catLabel = next.category.charAt(0).toUpperCase() + next.category.slice(1);
       nextTaskBody.textContent = next.title;
-      nextTaskTimePill.textContent = `${next.startTime} (${next.durationMinutes}m)`;
-      nextTaskRationale.textContent = `Suggested for ${targetDate.toLocaleDateString(undefined, { weekday: 'short' })} based on urgency (${next.urgency}) and duration.`;
+      nextTaskTimePill.textContent = `${friendlyTime} (${next.startTime}) • ${next.durationMinutes}m`;
+      nextTaskRationale.textContent = `${catLabel} • ${prioLabel}`;
     } else {
-      nextTaskBody.textContent = dayTasks.length === 0 ? 'No tasks scheduled for this day.' : 'All tasks completed!';
+      nextTaskBody.textContent = dayTasks.length === 0 ? 'No tasks scheduled yet.' : 'All tasks completed for today!';
       nextTaskTimePill.textContent = '';
-      nextTaskRationale.textContent = dayTasks.length === 0 ? 'Tap + Add Task to schedule ahead.' : 'Great job! Day is clear.';
+      nextTaskRationale.textContent = dayTasks.length === 0 ? 'Tap + or speak to CereBruv to plan your day.' : 'Great job staying on track, Bruv.';
     }
 
     // Canvas Retina Scaling
@@ -344,6 +385,16 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       ctx.arc(centerX + Math.cos(currentAngle) * needleR, centerY + Math.sin(currentAngle) * needleR, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = '#E52E2E';
       ctx.fill();
+
+      // Draw live time label next to needle tip so user can see exact time on the ring
+      const tipX = centerX + Math.cos(currentAngle) * (needleR + 13);
+      const tipY = centerY + Math.sin(currentAngle) * (needleR + 13);
+      const nowTime24 = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      ctx.font = '800 8.5px -apple-system, sans-serif';
+      ctx.fillStyle = '#E52E2E';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(nowTime24, Math.max(18, Math.min(size - 18, tipX)), Math.max(10, Math.min(size - 10, tipY)));
     }
   }
 
@@ -531,13 +582,16 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     }
   });
 
-  // Real-time live clock tick (updates needle every 15s and rolls over date at midnight)
+  // Real-time 1-second live clock ticker + 15-second orbit needle redraw & midnight rollover
   let lastKnownToday = getTodayString();
+  let lastRedrawMinute = new Date().getMinutes();
   const liveClockTimer = setInterval(() => {
     if (!container.isConnected) {
       clearInterval(liveClockTimer);
       return;
     }
+    updateLiveDigitalClock();
+    const now = new Date();
     const currentToday = getTodayString();
     if (currentToday !== lastKnownToday) {
       if (selectedDate === lastKnownToday) {
@@ -545,9 +599,12 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
         eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
       }
       lastKnownToday = currentToday;
+      drawOrbit();
+    } else if (now.getMinutes() !== lastRedrawMinute) {
+      lastRedrawMinute = now.getMinutes();
+      drawOrbit();
     }
-    drawOrbit();
-  }, 15000);
+  }, 1000);
 
   drawOrbit();
   return container;

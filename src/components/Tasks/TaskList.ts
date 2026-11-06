@@ -1,5 +1,8 @@
 import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
+import { voiceService } from '../../services/voice/VoiceService';
+import { notificationService } from '../../services/notifications/NotificationService';
+import { sortTasksSmartly } from '../FocusOrbit/orbitCalculator';
 import type { Task } from '../../types/task';
 
 export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => void): HTMLElement {
@@ -21,10 +24,12 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
     const todayStr = getTodayString();
 
     // Filter by activeDate
-    const tasks = allTasks.filter(t => (t.date || todayStr) === activeDate);
+    const rawTasks = allTasks.filter(t => (t.date || todayStr) === activeDate);
 
-    // Sort by startTime
-    tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    // Smart Assistant Sort (Active/Imminent High-Priority first, then upcoming, then overdue)
+    const now = new Date();
+    const currentFraction = activeDate === todayStr ? now.getHours() + now.getMinutes() / 60 : 0;
+    const tasks = sortTasksSmartly(rawTasks, currentFraction);
 
     const isToday = activeDate === todayStr;
     const dateFormatted = new Date(activeDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -94,7 +99,7 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
           </svg>
         </button>
-        <button class="task-delete-btn" data-delete-id="${task.id}" title="Delete Task">
+        <button class="task-delete-btn task-remove-btn" data-delete-id="${task.id}" title="Delete Task">
           <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -110,6 +115,14 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       if (updated.completed) {
         const stats = await userStatsRepository.incrementTaskCount();
         eventBus.emit(AppEvents.STATS_UPDATED, stats);
+        const congrats = `Awesome job, Bruv! You crushed "${updated.title}" and earned 25 XP!`;
+        eventBus.emit(AppEvents.MASCOT_SPEAK, {
+          headline: `Crushed "${updated.title}" (+25 XP)!`,
+          subspeech: congrats,
+        });
+        voiceService.speak(congrats);
+        notificationService.playAlarmChime('success');
+        notificationService.triggerVibration([120, 60, 180]);
       }
       eventBus.emit(AppEvents.TASK_COMPLETED, updated);
       loadTasks();
@@ -117,13 +130,15 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
 
     // Edit handler
     const editBtn = el.querySelector('.task-edit-btn')!;
-    editBtn.addEventListener('click', () => {
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       onOpenForm(task.date, task);
     });
 
     // Delete handler
-    const deleteBtn = el.querySelector('.task-delete-btn')!;
-    deleteBtn.addEventListener('click', async () => {
+    const deleteBtn = el.querySelector('.task-remove-btn')!;
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       if (confirm(`Delete task "${task.title}"?`)) {
         await taskRepository.deleteTask(task.id);
         eventBus.emit(AppEvents.TASK_DELETED, task.id);

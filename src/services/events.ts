@@ -45,5 +45,7 @@ export const AppEvents = {
   VOICE_STATE_CHANGED: 'voice:state_changed',
   VOICE_SYNTAX_HINT: 'voice:syntax_hint',
   VOICE_CLARIFY_TASK: 'voice:clarify_task',
+  ALARM_POPUP: 'alarm:popup',
+  SETTINGS_CHANGED: 'settings:changed',
   NAVIGATE_TAB: 'nav:tab',
 } as const;

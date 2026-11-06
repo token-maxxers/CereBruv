@@ -1,11 +1,42 @@
 import { getAI, GoogleAIBackend, getGenerativeModel, Schema } from 'firebase/ai';
 import { app } from '../firebase';
+import { sortTasksSmartly, timeStringToFractionalHour } from '../../components/FocusOrbit/orbitCalculator';
 import type { Task, TaskCategory, UrgencyLevel } from '../../types/task';
 import type { IAIService } from './IAIService';
 
 export class GeminiService implements IAIService {
   private textModel: ReturnType<typeof getGenerativeModel> | null = null;
   private visionModel: ReturnType<typeof getGenerativeModel> | null = null;
+  private appCheckOrAuthBlocked: boolean = false;
+
+  private isLocalhostWithoutAppCheck(): boolean {
+    if (this.appCheckOrAuthBlocked) return true;
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private buildSmartLocalCheckIn(tasks: Task[]): string {
+    const pending = tasks.filter(t => !t.completed);
+    if (pending.length === 0) {
+      return 'All tasks crushed today, Bruv! Streak protected.';
+    }
+    const now = new Date();
+    const nowHour = now.getHours() + now.getMinutes() / 60;
+    const sorted = sortTasksSmartly(pending, nowHour);
+    const next = sorted[0];
+    const startH = timeStringToFractionalHour(next.startTime);
+    const endH = startH + next.durationMinutes / 60;
+    if (endH < nowHour) {
+      return `Heads up, Bruv: "${next.title}" (${next.startTime}) is overdue. Complete it or reschedule to protect your XP!`;
+    }
+    const prio = next.urgency === 'high' ? 'high-priority ' : '';
+    return `Focus on your ${prio}${next.category} block "${next.title}" at ${next.startTime} (${next.durationMinutes}m), Bruv.`;
+  }
 
   private getTextModel() {
     if (!this.textModel) {
@@ -55,6 +86,10 @@ export class GeminiService implements IAIService {
   }
 
   async analyzeWorkload(tasks: Task[]): Promise<string> {
+    if (this.isLocalhostWithoutAppCheck()) {
+      return this.buildSmartLocalCheckIn(tasks);
+    }
+
     const taskSummary = tasks.map(t => ({
       title: t.title,
       category: t.category,
@@ -75,16 +110,24 @@ In 1-2 short sentences (max 2 sentences), give me your mascot check-in and advic
     });
 
     const aiCall = async (): Promise<string> => {
-      const model = this.getTextModel();
-      const result = await model.generateContent(prompt);
-      const text = result.response.text().trim();
-      if (!text) {
-        throw new Error('Empty AI response received.');
+      try {
+        const model = this.getTextModel();
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        if (!text) {
+          return this.buildSmartLocalCheckIn(tasks);
+        }
+        return text;
+      } catch (err: any) {
+        const msg = String(err?.message || err || '');
+        if (msg.includes('401') || msg.includes('App Check') || msg.includes('fetch-error')) {
+          this.appCheckOrAuthBlocked = true;
+        }
+        return this.buildSmartLocalCheckIn(tasks);
       }
-      return text;
     };
 
-    return Promise.race([aiCall(), timeoutPromise]);
+    return Promise.race([aiCall(), timeoutPromise]).catch(() => this.buildSmartLocalCheckIn(tasks));
   }
 
   async extractTasksFromImage(imageBlob: Blob): Promise<Partial<Task>[]> {

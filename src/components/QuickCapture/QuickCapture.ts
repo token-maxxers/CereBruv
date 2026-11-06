@@ -1,6 +1,10 @@
 import { noteRepository, taskRepository } from '../../services/storage';
 import { geminiService } from '../../services/ai/GeminiService';
-import { voiceService, type PendingTaskDraft } from '../../services/voice/VoiceService';
+import {
+  voiceService,
+  type PendingTaskDraft,
+  type VoicePredictionGuide,
+} from '../../services/voice/VoiceService';
 import { eventBus, AppEvents } from '../../services/events';
 import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
 import type { TaskCategory, UrgencyLevel } from '../../types/task';
@@ -21,12 +25,19 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
 
   container.innerHTML = `
     <div class="quick-capture-container">
-      <input 
-        type="text" 
-        class="quick-capture-input" 
-        id="quick-capture-input" 
-        placeholder="Tap CereBruv above to speak, or type 'Hey Bruv...' / note"
-      />
+      <div class="quick-capture-input-wrap" style="position: relative; flex: 1; display: flex; align-items: center; overflow: hidden;">
+        <div id="quick-capture-ghost" aria-hidden="true" style="position: absolute; inset: 0; display: flex; align-items: center; pointer-events: none; white-space: pre; overflow: hidden; font-size: var(--font-size-sm); font-family: inherit;">
+          <span id="ghost-mirror-text" style="color: transparent;"></span><span id="ghost-suffix-text" style="color: var(--color-red-primary); opacity: 0.55; font-weight: 600;"></span>
+        </div>
+        <input 
+          type="text" 
+          class="quick-capture-input" 
+          id="quick-capture-input" 
+          autocomplete="off"
+          placeholder="Tap CereBruv above to speak, or type 'Add [Task] at [Time]'"
+          style="position: relative; z-index: 2; background: transparent; width: 100%;"
+        />
+      </div>
       <button class="icon-btn" id="voice-guide-btn" title="Voice Command Rules & Voice Settings">
         <svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" />
@@ -43,13 +54,22 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       <input type="file" id="photo-file-input" accept="image/*" style="display: none;" />
     </div>
 
-    <!-- Live Syntax Guidance Bar (Displays dynamically as user speaks or types "Add...", "Done...", "Note...") -->
-    <div id="live-syntax-guide-bar" style="display: none; margin-top: 6px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(229, 46, 46, 0.08); border: 1px dashed rgba(229, 46, 46, 0.4); font-size: 0.7rem; color: var(--color-black-dominant); align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-      <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
-        <span style="font-weight: 800; color: var(--color-red-primary); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em;">GUIDE:</span>
-        <code id="live-syntax-template" style="font-weight: 700; color: var(--color-black-dominant); font-family: inherit;">Add [Task Name] at [Time]</code>
+    <!-- Simultaneous Predictive + Step-by-Step Syntax Guide Bar -->
+    <div id="live-syntax-guide-bar" style="display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(229, 46, 46, 0.06); border: 1px dashed rgba(229, 46, 46, 0.4); font-size: 0.7rem; color: var(--color-black-dominant);">
+      <!-- Step-by-Step Syntax Progression Row -->
+      <div id="live-syntax-steps" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;"></div>
+
+      <!-- Template & Next Instruction Row -->
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+          <span style="font-weight: 800; color: var(--color-red-primary); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em;">SYNTAX:</span>
+          <code id="live-syntax-template" style="font-weight: 700; color: var(--color-black-dominant); font-family: inherit;">Add [Task Name] at [Time]</code>
+        </div>
+        <span id="live-syntax-next" style="font-size: 0.65rem; font-weight: 700; color: var(--color-red-primary);"></span>
       </div>
-      <span id="live-syntax-next" style="font-size: 0.65rem; font-weight: 700; color: var(--color-red-primary);"></span>
+
+      <!-- 1-Tap Predictive Autocomplete Chips Row -->
+      <div id="live-prediction-row" style="display: none; align-items: center; gap: 5px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid rgba(229, 46, 46, 0.15);"></div>
     </div>
 
     <!-- In-App Voice Command Rules & Voice Settings Guide (Strictly No Fake/Demo Data) -->
@@ -170,6 +190,37 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       </div>
     </div>
 
+    <!-- Newly Saved Note / Idea Category & Priority Dropdown Bar (No Alarms or Deadlines) -->
+    <div id="quick-note-meta-bar" style="display: none; margin-top: var(--spacing-2); background: #FFFDF9; border: 1.5px dashed var(--border-medium); border-radius: var(--radius-md); padding: 10px 12px; box-shadow: var(--shadow-card);">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+          <span style="font-size: 0.6rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: var(--color-black-dominant); color: #FAF7F2; text-transform: uppercase;">IDEA SAVED</span>
+          <strong id="quick-note-meta-title" style="font-size: var(--font-size-xs); color: var(--color-black-dominant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></strong>
+        </div>
+        <button type="button" id="quick-note-meta-done" class="pill-badge" style="cursor: pointer; font-size: 0.65rem; background: var(--color-red-primary); color: #FFFFFF; border: none; padding: 3px 10px;">Done</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 5px; font-size: 0.65rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+          Category:
+          <select id="quick-note-cat-select" style="padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.72rem; font-weight: 700; color: var(--color-black-dominant); cursor: pointer;">
+            <option value="personal">Personal</option>
+            <option value="work">Work</option>
+            <option value="study">Study</option>
+            <option value="event">Event</option>
+            <option value="rest">Rest</option>
+          </select>
+        </label>
+        <label style="display: flex; align-items: center; gap: 5px; font-size: 0.65rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+          Priority:
+          <select id="quick-note-prio-select" style="padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.72rem; font-weight: 700; color: var(--color-black-dominant); cursor: pointer;">
+            <option value="high">High Priority</option>
+            <option value="medium" selected>Medium Priority</option>
+            <option value="low">Low Priority</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
     <!-- Extracted Tasks Confirmation Drawer/Panel -->
     <div id="ai-task-proposals" style="display: none; margin-top: var(--spacing-2); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--spacing-3);">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-2);">
@@ -189,25 +240,126 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
   `;
 
   const inputEl = container.querySelector<HTMLInputElement>('#quick-capture-input')!;
+  const ghostMirrorEl = container.querySelector<HTMLSpanElement>('#ghost-mirror-text')!;
+  const ghostSuffixEl = container.querySelector<HTMLSpanElement>('#ghost-suffix-text')!;
   const guideBtn = container.querySelector<HTMLButtonElement>('#voice-guide-btn')!;
   const photoBtn = container.querySelector<HTMLButtonElement>('#photo-upload-btn')!;
   const fileInput = container.querySelector<HTMLInputElement>('#photo-file-input')!;
 
   const liveSyntaxBar = container.querySelector<HTMLDivElement>('#live-syntax-guide-bar')!;
+  const liveSyntaxSteps = container.querySelector<HTMLDivElement>('#live-syntax-steps')!;
   const liveSyntaxTemplate = container.querySelector<HTMLElement>('#live-syntax-template')!;
   const liveSyntaxNext = container.querySelector<HTMLElement>('#live-syntax-next')!;
+  const livePredictionRow = container.querySelector<HTMLDivElement>('#live-prediction-row')!;
 
-  function updateSyntaxBar(hint: { template: string; nextPart: string } | null) {
+  let currentActiveHint: VoicePredictionGuide | null = null;
+
+  function applyPredictionChip(insertText: string, replaceInput?: boolean) {
+    if (replaceInput) {
+      inputEl.value = insertText;
+    } else {
+      const base = inputEl.value.endsWith(' ') || !inputEl.value ? inputEl.value : `${inputEl.value} `;
+      inputEl.value = `${base}${insertText}`;
+    }
+    inputEl.focus();
+    voiceService.setLiveTranscriptFromInput(inputEl.value);
+    const updatedHint = voiceService.getLiveSyntaxTemplate(inputEl.value);
+    updateSyntaxBar(updatedHint);
+  }
+
+  function updateSyntaxBar(hint: VoicePredictionGuide | null) {
+    currentActiveHint = hint;
     if (!hint) {
       liveSyntaxBar.style.display = 'none';
+      ghostMirrorEl.textContent = '';
+      ghostSuffixEl.textContent = '';
+      inputEl.placeholder = "Tap CereBruv above to speak, or type 'Add [Task] at [Time]'";
       return;
     }
+
     liveSyntaxBar.style.display = 'flex';
     liveSyntaxTemplate.textContent = hint.template;
     liveSyntaxNext.textContent = hint.nextPart;
+
+    // 1. Update Inline Ghost Prediction right inside the input field
+    const currentVal = inputEl.value;
+    if (currentVal) {
+      ghostMirrorEl.textContent = currentVal;
+      ghostSuffixEl.textContent = hint.ghostSuffix || '';
+    } else if (voiceService.isListening()) {
+      inputEl.placeholder = '';
+      ghostMirrorEl.textContent = '';
+      ghostSuffixEl.textContent = hint.ghostSuffix || 'Add [Task Name] at [8:00 AM] for [45 mins]';
+    } else {
+      ghostMirrorEl.textContent = '';
+      ghostSuffixEl.textContent = '';
+      inputEl.placeholder = "Tap CereBruv above to speak, or type 'Add [Task] at [Time]'";
+    }
+
+    // 2. Render Step-by-Step Syntax Guide Progression
+    if (hint.steps && hint.steps.length > 0) {
+      liveSyntaxSteps.style.display = 'flex';
+      liveSyntaxSteps.innerHTML = hint.steps
+        .map((step, idx) => {
+          const isDone = step.status === 'done';
+          const isActive = step.status === 'active';
+          const bg = isDone
+            ? 'rgba(16, 185, 129, 0.14)'
+            : isActive
+              ? 'var(--color-red-primary)'
+              : 'rgba(18, 18, 22, 0.06)';
+          const col = isDone
+            ? '#047857'
+            : isActive
+              ? '#FFFFFF'
+              : 'var(--color-black-muted)';
+          const arrow = idx < hint.steps.length - 1
+            ? `<span style="color: var(--color-black-faint); font-size: 0.6rem;">→</span>`
+            : '';
+          return `
+            <span style="padding: 2px 7px; border-radius: 999px; background: ${bg}; color: ${col}; font-size: 0.62rem; font-weight: ${isActive || isDone ? '800' : '600'};">
+              ${isActive ? '⬅ ' : ''}${step.label}
+            </span>
+            ${arrow}
+          `;
+        })
+        .join('');
+    } else {
+      liveSyntaxSteps.style.display = 'none';
+    }
+
+    // 3. Render 1-Tap Predictive Autocomplete Chips
+    if (hint.predictions && hint.predictions.length > 0) {
+      livePredictionRow.style.display = 'flex';
+      livePredictionRow.innerHTML = `
+        <span style="font-size: 0.6rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">PREDICT:</span>
+      `;
+      hint.predictions.forEach((pred, index) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.style.cssText = `
+          padding: 3px 9px;
+          border-radius: 999px;
+          border: 1px solid ${index === 0 ? 'var(--color-red-primary)' : 'var(--border-medium)'};
+          background: ${index === 0 ? 'rgba(229, 46, 46, 0.12)' : 'var(--bg-surface)'};
+          color: ${index === 0 ? 'var(--color-red-primary)' : 'var(--color-black-dominant)'};
+          font-size: 0.65rem;
+          font-weight: 700;
+          cursor: pointer;
+        `;
+        chip.textContent = index === 0 ? `${pred.label} ↹` : pred.label;
+        chip.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // Keep input focused
+          applyPredictionChip(pred.insertText, pred.replaceInput);
+        });
+        livePredictionRow.appendChild(chip);
+      });
+    } else {
+      livePredictionRow.style.display = 'none';
+    }
   }
 
-  eventBus.on(AppEvents.VOICE_SYNTAX_HINT, (hint: { template: string; nextPart: string } | null) => {
+  eventBus.on(AppEvents.VOICE_SYNTAX_HINT, (hint: VoicePredictionGuide | null) => {
     updateSyntaxBar(hint);
   });
 
@@ -220,6 +372,42 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
   const clarifyHeading = container.querySelector<HTMLElement>('#clarify-task-heading')!;
   const clarifyCancelBtn = container.querySelector<HTMLButtonElement>('#clarify-cancel-btn')!;
   const clarifyConfirmBtn = container.querySelector<HTMLButtonElement>('#clarify-confirm-btn')!;
+
+  const quickNoteMetaBar = container.querySelector<HTMLDivElement>('#quick-note-meta-bar')!;
+  const quickNoteMetaTitle = container.querySelector<HTMLElement>('#quick-note-meta-title')!;
+  const quickNoteCatSelect = container.querySelector<HTMLSelectElement>('#quick-note-cat-select')!;
+  const quickNotePrioSelect = container.querySelector<HTMLSelectElement>('#quick-note-prio-select')!;
+  const quickNoteMetaDone = container.querySelector<HTMLButtonElement>('#quick-note-meta-done')!;
+  let activeQuickNoteId: string | null = null;
+
+  eventBus.on(AppEvents.NOTE_CREATED, (savedNote?: any) => {
+    if (savedNote && savedNote.id) {
+      activeQuickNoteId = savedNote.id;
+      quickNoteMetaTitle.textContent = `"${savedNote.content}"`;
+      quickNoteCatSelect.value = savedNote.category || (savedNote.tags && savedNote.tags[0]) || 'personal';
+      quickNotePrioSelect.value = savedNote.priority || 'medium';
+      quickNoteMetaBar.style.display = 'block';
+    }
+  });
+
+  quickNoteCatSelect.addEventListener('change', async () => {
+    if (!activeQuickNoteId) return;
+    const cat = quickNoteCatSelect.value as TaskCategory;
+    await noteRepository.updateNote(activeQuickNoteId, { category: cat, tags: [cat] });
+    eventBus.emit(AppEvents.NOTE_UPDATED);
+  });
+
+  quickNotePrioSelect.addEventListener('change', async () => {
+    if (!activeQuickNoteId) return;
+    const prio = quickNotePrioSelect.value as UrgencyLevel;
+    await noteRepository.updateNote(activeQuickNoteId, { priority: prio });
+    eventBus.emit(AppEvents.NOTE_UPDATED);
+  });
+
+  quickNoteMetaDone.addEventListener('click', () => {
+    quickNoteMetaBar.style.display = 'none';
+    activeQuickNoteId = null;
+  });
 
   function renderClarifyDrawer(draft: PendingTaskDraft | null) {
     if (!draft) {
@@ -370,25 +558,36 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     });
   });
 
-  // Live syntax guide while typing in the input field
+  // Show predictive + guiding bar immediately on focus or while typing/speaking
+  inputEl.addEventListener('focus', () => {
+    const hint = voiceService.getLiveSyntaxTemplate(inputEl.value);
+    updateSyntaxBar(hint);
+  });
+
   inputEl.addEventListener('input', () => {
     const val = inputEl.value;
-    if (val.trim()) {
-      const hint = voiceService.getLiveSyntaxTemplate(val);
-      updateSyntaxBar(hint);
-    } else if (!voiceService.isListening()) {
-      updateSyntaxBar(null);
-    }
+    voiceService.setLiveTranscriptFromInput(val);
+    const hint = voiceService.getLiveSyntaxTemplate(val);
+    updateSyntaxBar(hint);
   });
 
   inputEl.addEventListener('blur', () => {
-    if (!voiceService.isListening() && !inputEl.value.trim()) {
-      updateSyntaxBar(null);
-    }
+    setTimeout(() => {
+      if (!voiceService.isListening() && !inputEl.value.trim() && document.activeElement !== inputEl) {
+        updateSyntaxBar(null);
+      }
+    }, 150);
   });
 
-  // Handle Typed Input Submission
+  // Handle Typed Input Submission & Tab Autocomplete
   inputEl.addEventListener('keydown', async (e) => {
+    if (e.key === 'Tab' && currentActiveHint && currentActiveHint.predictions.length > 0) {
+      e.preventDefault();
+      const topPred = currentActiveHint.predictions[0];
+      applyPredictionChip(topPred.insertText, topPred.replaceInput);
+      return;
+    }
+
     if (e.key === 'Enter' && inputEl.value.trim()) {
       if (voiceService.isListening()) {
         voiceService.stopListening();
@@ -404,18 +603,25 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
         inputEl.disabled = false;
         inputEl.placeholder = outcome.headline;
       } else {
-        await noteRepository.createNote({ content: text, tags: ['personal'] });
-        eventBus.emit(AppEvents.NOTE_CREATED);
-        eventBus.emit(AppEvents.MASCOT_SPEAK, {
-          headline: 'Saved to Thoughts, Bruv!',
-          subspeech: `Saved "${text}" to your Thoughts tab and Mind Graph.`,
+        const savedNote = await noteRepository.createNote({
+          content: text,
+          tags: ['personal'],
+          category: 'personal',
+          priority: 'medium',
         });
+        eventBus.emit(AppEvents.NOTE_CREATED, savedNote);
+        const spoken = `Got it, Bruv. Saved "${text}" to your Thoughts.`;
+        eventBus.emit(AppEvents.MASCOT_SPEAK, {
+          headline: `Saved idea: "${text}"`,
+          subspeech: 'Use the Category and Priority dropdowns below to tag its importance.',
+        });
+        voiceService.speak(spoken);
         inputEl.disabled = false;
-        inputEl.placeholder = 'Saved to Thoughts tab! Type another...';
+        inputEl.placeholder = 'Saved to Thoughts! Type another...';
       }
 
       setTimeout(() => {
-        inputEl.placeholder = "Tap CereBruv above to speak, or type 'Hey Bruv...' / note";
+        inputEl.placeholder = "Tap CereBruv above to speak, or type 'Add [Task] at [Time]'";
       }, 3000);
     }
   });

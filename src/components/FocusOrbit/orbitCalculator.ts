@@ -66,6 +66,52 @@ export function calculateOrbitSegments(tasks: Task[]): OrbitArcSegment[] {
 }
 
 /**
+ * Smart Assistant Task Prioritizer:
+ * Ranks uncompleted tasks by:
+ * 1. Currently in-progress or starting within 30 mins (with urgency tie-breaker)
+ * 2. Upcoming tasks today ordered by earliest start time & urgency
+ * 3. Overdue uncompleted tasks ordered by urgency & start time
+ */
+export function sortTasksSmartly(tasks: Task[], currentHourFraction: number): Task[] {
+  const urgencyWeight = { high: 3, medium: 2, low: 1 };
+  return [...tasks].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+
+    const aStart = timeStringToFractionalHour(a.startTime);
+    const aEnd = aStart + a.durationMinutes / 60;
+    const bStart = timeStringToFractionalHour(b.startTime);
+    const bEnd = bStart + b.durationMinutes / 60;
+
+    // Group 0: Active right now or starting within 45 mins
+    // Group 1: Future upcoming today
+    // Group 2: Past window (missed/overdue)
+    const getGroup = (start: number, end: number) => {
+      if (end >= currentHourFraction && start <= currentHourFraction + 0.75) return 0;
+      if (start > currentHourFraction + 0.75) return 1;
+      return 2;
+    };
+
+    const groupA = getGroup(aStart, aEnd);
+    const groupB = getGroup(bStart, bEnd);
+    if (groupA !== groupB) return groupA - groupB;
+
+    // Within Group 0 (imminent/active) or Group 2 (overdue), rank High Priority first, then earliest time
+    if (groupA === 0 || groupA === 2) {
+      const urgDiff = urgencyWeight[b.urgency] - urgencyWeight[a.urgency];
+      if (urgDiff !== 0) return urgDiff;
+      return aStart - bStart;
+    }
+
+    // Within Group 1 (upcoming later today): if within 60 mins of each other, High Priority wins; otherwise earliest time wins
+    if (Math.abs(aStart - bStart) <= 1.0) {
+      const urgDiff = urgencyWeight[b.urgency] - urgencyWeight[a.urgency];
+      if (urgDiff !== 0) return urgDiff;
+    }
+    return aStart - bStart;
+  });
+}
+
+/**
  * Evaluates day workload and determines the Realistic Next Task based on urgency, effort, and available free time.
  */
 export function analyzeDayWorkload(tasks: Task[], currentHourFraction: number): DayWorkloadAnalysis {
@@ -80,21 +126,8 @@ export function analyzeDayWorkload(tasks: Task[], currentHourFraction: number): 
   const totalFreeMinutes = Math.max(0, 960 - totalBusyMinutes);
   const isOverloaded = totalBusyMinutes > 600; // Over 10 hours of scheduled work
 
-  // Find tasks scheduled after current time
-  const upcomingTasks = uncompleted.filter(t => {
-    const start = timeStringToFractionalHour(t.startTime);
-    return start >= currentHourFraction - 0.25; // within 15 mins or in future
-  });
-
-  upcomingTasks.sort((a, b) => {
-    // Sort by urgency first, then by earliest start time
-    const urgencyWeight = { high: 3, medium: 2, low: 1 };
-    const diff = urgencyWeight[b.urgency] - urgencyWeight[a.urgency];
-    if (diff !== 0) return diff;
-    return a.startTime.localeCompare(b.startTime);
-  });
-
-  let realisticNextTask: Task | null = upcomingTasks[0] || uncompleted[0] || null;
+  const smartSorted = sortTasksSmartly(uncompleted, currentHourFraction);
+  const realisticNextTask: Task | null = smartSorted[0] || null;
 
   let companionMessage = '';
   if (tasks.length === 0) {

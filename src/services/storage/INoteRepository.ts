@@ -1,8 +1,11 @@
 import type { QuickNote } from '../../types/note';
+import type { TaskCategory, UrgencyLevel } from '../../types/task';
 
 export interface CreateNoteDTO {
   content: string;
   tags?: string[];
+  category?: TaskCategory;
+  priority?: UrgencyLevel;
   audioUrl?: string;
   photoUrl?: string;
 }
