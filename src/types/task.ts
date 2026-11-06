@@ -2,6 +2,16 @@ export type UrgencyLevel = 'low' | 'medium' | 'high';
 
 export type TaskCategory = 'study' | 'work' | 'personal' | 'event' | 'rest';
 
+export type ReminderTimeMode = 'none' | 'one-time' | 'duration';
+
+export type ReminderBodyFormat = 'paragraph' | 'bullets' | 'checkboxes';
+
+export interface ReminderChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface SavedLink {
   url: string;
   label: string;
@@ -17,11 +27,33 @@ export interface Task {
   durationMinutes: number; // e.g. 45, or 0 when no duration was specified
   urgency: UrgencyLevel;
   completed: boolean;
+  timeMode?: ReminderTimeMode;
+  bodyFormat?: ReminderBodyFormat;
+  checklistItems?: ReminderChecklistItem[];
+  eventGroupId?: string;
   notes?: string;
   photoUrl?: string;
   links?: SavedLink[];
   createdAt: number; // Unix timestamp
   updatedAt: number;
+}
+
+/**
+ * Resolves the effective ReminderTimeMode cleanly for both new and legacy Firestore/LocalStorage tasks.
+ */
+export function resolveReminderTimeMode(
+  task: Pick<Task, 'timeMode' | 'startTime' | 'durationMinutes' | 'date'>
+): ReminderTimeMode {
+  if (task.timeMode === 'none' || task.timeMode === 'one-time' || task.timeMode === 'duration') {
+    return task.timeMode;
+  }
+  if (task.startTime && task.durationMinutes > 0) {
+    return 'duration';
+  }
+  if (task.startTime || task.date) {
+    return 'one-time';
+  }
+  return 'none';
 }
 
 export interface OrbitArcSegment {

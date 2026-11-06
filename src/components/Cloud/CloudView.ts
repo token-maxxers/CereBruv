@@ -95,10 +95,6 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
             <div style="font-size: var(--font-size-xs); color: var(--color-black-muted);">${stats.streakDays} Day Active Streak</div>
           </div>
         </div>
-
-        <button class="btn btn-secondary" id="clear-storage-btn" style="color: var(--color-red-primary); border-color: var(--color-red-primary);">
-          Reset Local Database
-        </button>
       </div>
     `;
 
@@ -116,13 +112,6 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
             options.onSignOut();
           }
         }
-      }
-    });
-
-    container.querySelector('#clear-storage-btn')?.addEventListener('click', async () => {
-      if (confirm('Clear all tasks from your account database?')) {
-        await taskRepository.clearAllTasks();
-        location.reload();
       }
     });
   }

@@ -45,7 +45,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           class="quick-capture-input" 
           id="quick-capture-input" 
           autocomplete="off"
-          placeholder="Tap CereBruv above to speak, or type 'Add [Task] at [Time]'"
+          placeholder="Say 'Hey Bruv, remind me...' or type here"
           style="position: relative; z-index: 2; background: transparent; width: 100%;"
         />
       </div>
@@ -94,21 +94,21 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     </div>
 
     <!-- Simultaneous Predictive + Step-by-Step Syntax Guide Bar -->
-    <div id="live-syntax-guide-bar" style="display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(229, 46, 46, 0.06); border: 1px dashed rgba(229, 46, 46, 0.4); font-size: 0.7rem; color: var(--color-black-dominant);">
+    <div id="live-syntax-guide-bar" style="display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); border: 1px solid var(--border-medium); font-size: 0.7rem; color: var(--color-black-dominant);">
       <!-- Step-by-Step Syntax Progression Row -->
       <div id="live-syntax-steps" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;"></div>
 
       <!-- Template & Next Instruction Row -->
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
         <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
-          <span style="font-weight: 800; color: var(--color-red-primary); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em;">SYNTAX:</span>
-          <code id="live-syntax-template" style="font-weight: 700; color: var(--color-black-dominant); font-family: inherit;">Add [Task Name] at [Time]</code>
+          <span style="font-weight: 800; color: var(--color-red-primary); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em;">GUIDE:</span>
+          <code id="live-syntax-template" style="font-weight: 700; color: var(--color-black-dominant); font-family: inherit;">Remind me to [Task] at [Time]</code>
         </div>
         <span id="live-syntax-next" style="font-size: 0.65rem; font-weight: 700; color: var(--color-red-primary);"></span>
       </div>
 
       <!-- 1-Tap Predictive Autocomplete Chips Row -->
-      <div id="live-prediction-row" style="display: none; align-items: center; gap: 5px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid rgba(229, 46, 46, 0.15);"></div>
+      <div id="live-prediction-row" style="display: none; align-items: center; gap: 5px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--border-subtle);"></div>
     </div>
 
     <!-- In-App Voice Command Rules & Voice Settings Guide (Strictly No Fake/Demo Data) -->
@@ -127,29 +127,34 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       </p>
 
       <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--spacing-3);">
-        <div class="voice-rule-row" data-prefix="Hey Bruv, what's my schedule?" style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
-          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">1. Check Schedule</strong>
-          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, what's my schedule?"</code></span>
+        <div class="voice-rule-row" data-prefix="Hey Bruv, remind me to " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">1. Set Reminder / Alarm</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, remind me to [Task] at [Time]"</code></span>
         </div>
 
         <div class="voice-rule-row" data-prefix="Hey Bruv, add " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
-          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">2. Schedule a Task</strong>
-          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, add [Task Name] at [Time] for [Duration]"</code></span>
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">2. Schedule Duration Block</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, add [Task Name] at [Time] for [45 mins]"</code></span>
+        </div>
+
+        <div class="voice-rule-row" data-prefix="Hey Bruv, what's my schedule?" style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">3. Check Schedule</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, what's my schedule?"</code></span>
         </div>
 
         <div class="voice-rule-row" data-prefix="Hey Bruv, done with " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
-          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">3. Complete a Task (+25 XP)</strong>
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">4. Complete Task (+25 XP)</strong>
           <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, done with [Task Name]"</code></span>
         </div>
 
         <div class="voice-rule-row" data-prefix="Hey Bruv, note " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
-          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">4. Save a Brain-Dump Note</strong>
-          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, note [Your Thought]"</code></span>
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">5. Save Timeless Note / Idea</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, note [Your Idea]"</code></span>
         </div>
 
         <div class="voice-rule-row" data-prefix="Hey Bruv, open " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
-          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">5. Switch View Tab</strong>
-          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, open [orbit | tasks | thoughts | graph | cloud]"</code></span>
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">6. Switch View Tab</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, open [orbit | reminders | graph | cloud]"</code></span>
         </div>
       </div>
 
@@ -878,8 +883,9 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           const cat = (noteCatSelect.value as TaskCategory) || 'work';
           const prio = (notePrioSelect.value as UrgencyLevel) || 'high';
           const finalNoteLinks = mergeSavedLinks(currentLinks, extractLinksFromText(noteText));
+          const sharedEventGroupId = `event_${Date.now()}`;
           saveNoteBtn.disabled = true;
-          saveNoteBtn.textContent = 'Saved to Thoughts';
+          saveNoteBtn.textContent = 'Saved to Reminders';
           saveNoteBtn.style.background = '#047857';
 
           await noteRepository.createNote({
@@ -888,12 +894,13 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
             category: cat,
             priority: prio,
             photoUrl: scanResult.photoDataUrl,
+            eventGroupId: sharedEventGroupId,
             ...(finalNoteLinks.length > 0 ? { links: finalNoteLinks } : {}),
           });
           eventBus.emit(AppEvents.NOTE_CREATED);
-          const spoken = `Saved your image${finalNoteLinks.length > 0 ? ' and clickable links' : ''} under ${cat} in your Thoughts tab, Bruv.`;
+          const spoken = `Saved your image${finalNoteLinks.length > 0 ? ' and clickable links' : ''} to Reminders and connected to Graph, Bruv.`;
           eventBus.emit(AppEvents.MASCOT_SPEAK, {
-            headline: 'Image & links saved to Thoughts!',
+            headline: 'Saved to Reminders & connected in Graph!',
             subspeech: spoken,
           });
           voiceService.speak(spoken);

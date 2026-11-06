@@ -168,19 +168,10 @@ async function mountApp(user: AuthUser) {
 
       <button class="nav-item" data-tab="tasks">
         <svg class="nav-icon" viewBox="0 0 24 24">
-          <rect x="3" y="5" width="18" height="14" rx="2" />
-          <path d="M7 12l3 3 7-7" />
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
-        <span>Tasks</span>
-      </button>
-
-      <button class="nav-item" data-tab="thoughts">
-        <svg class="nav-icon" viewBox="0 0 24 24">
-          <path d="M9 18h6" />
-          <path d="M10 22h4" />
-          <path d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z" />
-        </svg>
-        <span>Thoughts</span>
+        <span>Reminders</span>
       </button>
 
       <button class="nav-item" data-tab="graph">

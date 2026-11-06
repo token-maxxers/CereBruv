@@ -1,11 +1,20 @@
 import type { QuickNote } from '../../types/note';
-import type { SavedLink, TaskCategory, UrgencyLevel } from '../../types/task';
+import type {
+  ReminderBodyFormat,
+  ReminderChecklistItem,
+  SavedLink,
+  TaskCategory,
+  UrgencyLevel,
+} from '../../types/task';
 
 export interface CreateNoteDTO {
   content: string;
   tags?: string[];
   category?: TaskCategory;
   priority?: UrgencyLevel;
+  bodyFormat?: ReminderBodyFormat;
+  checklistItems?: ReminderChecklistItem[];
+  eventGroupId?: string;
   audioUrl?: string;
   photoUrl?: string;
   links?: SavedLink[];

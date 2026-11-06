@@ -109,12 +109,21 @@ html, body {
   font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--color-black-soft);
+  transition: all var(--transition-fast);
+  cursor: pointer;
 }
 
+.pill-badge:hover {
+  background: var(--bg-surface-hover);
+  color: var(--color-black-dominant);
+}
+
+.pill-badge.active,
 .pill-badge.active-streak {
-  border-color: var(--color-red-primary);
-  color: var(--color-red-primary);
-  background: var(--color-red-subtle);
+  border-color: var(--color-red-primary) !important;
+  color: #FFFFFF !important;
+  background: var(--color-red-primary) !important;
+  box-shadow: 0 2px 8px rgba(229, 46, 46, 0.28);
 }
 
 /* Unified Mascot & Command Hub Card */

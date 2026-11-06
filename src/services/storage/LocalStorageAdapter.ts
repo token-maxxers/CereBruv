@@ -49,15 +49,20 @@ export class LocalTaskRepository implements ITaskRepository {
 
   async createTask(dto: CreateTaskDTO): Promise<Task> {
     const tasks = this.read();
+    const defaultDate = dto.timeMode === 'none' ? '' : this.getTodayString();
     const newTask: Task = {
       id: 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       title: dto.title.trim(),
       category: dto.category,
-      date: typeof dto.date === 'string' ? dto.date : this.getTodayString(),
+      date: typeof dto.date === 'string' ? dto.date : defaultDate,
       startTime: dto.startTime ?? '',
       durationMinutes: typeof dto.durationMinutes === 'number' ? dto.durationMinutes : 0,
       urgency: dto.urgency,
       completed: false,
+      ...(dto.timeMode ? { timeMode: dto.timeMode } : {}),
+      ...(dto.bodyFormat ? { bodyFormat: dto.bodyFormat } : {}),
+      ...(dto.checklistItems && dto.checklistItems.length > 0 ? { checklistItems: dto.checklistItems } : {}),
+      ...(dto.eventGroupId ? { eventGroupId: dto.eventGroupId } : {}),
       notes: dto.notes,
       ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
       ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),
@@ -143,6 +148,9 @@ export class LocalNoteRepository implements INoteRepository {
       tags: dto.tags && dto.tags.length > 0 ? dto.tags : [category],
       category,
       priority,
+      ...(dto.bodyFormat ? { bodyFormat: dto.bodyFormat } : {}),
+      ...(dto.checklistItems && dto.checklistItems.length > 0 ? { checklistItems: dto.checklistItems } : {}),
+      ...(dto.eventGroupId ? { eventGroupId: dto.eventGroupId } : {}),
       audioUrl: dto.audioUrl,
       photoUrl: dto.photoUrl,
       ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),

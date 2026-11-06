@@ -219,22 +219,21 @@ export class VoiceService {
     const trimmed = rawInput.trim();
     if (!trimmed) {
       return {
-        template: 'Add [Task] at [Time] for [Duration] • Note [Thought] • Done with [Task]',
+        template: 'Remind me to [Task] at [Time] • Add [Task] for [Duration] • Note [Idea]',
         nextPart: 'Choose or speak a command to start:',
-        ghostSuffix: 'Add [Task Name] at [8:00 AM] for [45 mins]',
+        ghostSuffix: 'Remind me to [Task] at [8:00 AM]',
         steps: [
-          { label: '1. Command (Add / Note / Done)', status: 'active' },
-          { label: '2. Task or Thought', status: 'pending' },
-          { label: '3. at [Time]', status: 'pending' },
-          { label: '4. for [Duration]', status: 'pending' },
-          { label: '5. Category & Priority', status: 'pending' },
+          { label: '1. Command (Remind / Add / Note)', status: 'active' },
+          { label: '2. Reminder Name', status: 'pending' },
+          { label: '3. at [Time] (optional)', status: 'pending' },
+          { label: '4. for [Duration] (optional)', status: 'pending' },
         ],
         predictions: [
+          { label: 'Remind me to [Task]...', insertText: 'Remind me to ', replaceInput: true },
           { label: 'Add [Task]...', insertText: 'Add ', replaceInput: true },
-          { label: 'Note [Thought]...', insertText: 'Note ', replaceInput: true },
+          { label: 'Note [Idea]...', insertText: 'Note ', replaceInput: true },
           { label: 'Done with [Task]...', insertText: 'Done with ', replaceInput: true },
           { label: "What's my schedule?", insertText: "What's my schedule today?", replaceInput: true },
-          { label: 'Open Thoughts', insertText: 'Open thoughts', replaceInput: true },
         ],
       };
     }
@@ -1296,9 +1295,9 @@ export class VoiceService {
       };
     }
 
-    // RULE 5: Add / Schedule Task
-    let working = body.replace(/^(?:(?:please|add|schedule|plan|book|set|create)\b\s*)+/i, '').trim();
-    const startsWithTaskVerb = /^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(body);
+    // RULE 5: Add / Remind / Schedule Task
+    let working = body.replace(/^(?:(?:please|remind me to|remind me|remind|add|schedule|plan|book|set|create)\b\s*)+/i, '').trim();
+    const startsWithTaskVerb = /^(?:please\s+)?(?:remind me to|remind me|remind|add|schedule|plan|book|set|create)\b/i.test(body);
 
     const dateExtraction = this.extractDate(working, referenceDateStr);
     working = dateExtraction.remainingText;

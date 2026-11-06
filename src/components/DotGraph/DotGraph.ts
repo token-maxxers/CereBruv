@@ -23,7 +23,7 @@ export function renderDotGraph(): HTMLElement {
       </div>
       <div style="display: flex; gap: 4px;" id="graph-filter-group">
         <button class="pill-badge active" data-filter="all" style="cursor: pointer; font-size: 0.65rem;">ALL</button>
-        <button class="pill-badge" data-filter="task" style="cursor: pointer; font-size: 0.65rem;">TASKS</button>
+        <button class="pill-badge" data-filter="task" style="cursor: pointer; font-size: 0.65rem;">REMINDERS</button>
         <button class="pill-badge" data-filter="note" style="cursor: pointer; font-size: 0.65rem;">NOTES</button>
         <button class="pill-badge" data-filter="tag" style="cursor: pointer; font-size: 0.65rem;">TOPICS</button>
       </div>
@@ -155,8 +155,10 @@ export function renderDotGraph(): HTMLElement {
   };
 
   async function buildGraphData() {
-    const tasks = await taskRepository.getAllTasks();
-    const notes = await noteRepository.getAllNotes();
+    const [tasks, notes] = await Promise.all([
+      taskRepository.getAllTasks(),
+      noteRepository.getAllNotes(),
+    ]);
 
     const newNodes: GraphNode[] = [];
     const newLinks: GraphLink[] = [];
@@ -165,7 +167,7 @@ export function renderDotGraph(): HTMLElement {
     const usedCategories = new Set<string>();
     tasks.forEach(t => usedCategories.add(t.category));
     notes.forEach(n => {
-      const cat = (n.tags && n.tags[0]) || 'personal';
+      const cat = (n.tags && n.tags[0]) || n.category || 'personal';
       usedCategories.add(cat);
     });
 
@@ -180,17 +182,30 @@ export function renderDotGraph(): HTMLElement {
       });
     });
 
+    // Helper: extracts key significant words for title/topic matching
+    const extractSignificantWords = (str: string): string[] => {
+      const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'have', 'meeting', 'task', 'note', 'idea', 'at', 'on', 'in']);
+      return str
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 4 && !stopWords.has(w));
+    };
+
     // Map user's real Tasks
     tasks.forEach(task => {
       const taskNodeId = `node_task_${task.id}`;
+      const taskKeywords = extractSignificantWords(task.title + ' ' + (task.notes || ''));
       const taskNode: GraphNode = {
         id: taskNodeId,
         label: task.title,
         type: 'task',
         radius: task.urgency === 'high' ? 8 : 6,
-        color: '#E52E2E',
+        color: task.timeMode === 'duration' ? '#0D9488' : task.timeMode === 'one-time' ? '#D97706' : '#E52E2E',
         photoUrl: task.photoUrl,
         links: mergeSavedLinks(task.links, extractLinksFromText(task.notes || '')),
+        eventGroupId: task.eventGroupId,
+        keywords: taskKeywords,
       };
       newNodes.push(taskNode);
 
@@ -199,21 +214,25 @@ export function renderDotGraph(): HTMLElement {
         sourceId: taskNodeId,
         targetId: `topic_${task.category}`,
         weight: 2,
+        kind: 'category',
       });
     });
 
-    // Map user's real Quick Notes / Brain-dumps and connect each to its Category Hub (and same-category tasks)
+    // Map user's real Quick Notes / Brain-dumps and connect directly to related Tasks
     notes.forEach((note) => {
       const noteNodeId = `node_note_${note.id}`;
-      const noteCategory = (note.tags && note.tags[0]) || 'personal';
+      const noteCategory = (note.tags && note.tags[0]) || note.category || 'personal';
+      const noteKeywords = extractSignificantWords(note.content);
       newNodes.push({
         id: noteNodeId,
         label: note.content.length > 25 ? note.content.substring(0, 22) + '...' : note.content,
         type: 'note',
         radius: 6,
-        color: '#38BDF8', // Cyan
+        color: '#38BDF8', // Cyan for Notes
         photoUrl: note.photoUrl,
         links: mergeSavedLinks(note.links, extractLinksFromText(note.content)),
+        eventGroupId: note.eventGroupId,
+        keywords: noteKeywords,
       });
 
       // Connect note directly to its Category Topic Hub
@@ -221,17 +240,41 @@ export function renderDotGraph(): HTMLElement {
         sourceId: noteNodeId,
         targetId: `topic_${noteCategory}`,
         weight: 2,
+        kind: 'category',
       });
 
-      // Also connect to the latest task in the same category if one exists
-      const relatedTask = tasks.find(t => t.category === noteCategory);
-      if (relatedTask) {
-        newLinks.push({
-          sourceId: noteNodeId,
-          targetId: `node_task_${relatedTask.id}`,
-          weight: 1,
-        });
-      }
+      // Direct Event Connection: connect Note directly to Task if sharing eventGroupId, screenshot, or overlapping words
+      tasks.forEach(task => {
+        let isDirectlyConnected = false;
+
+        // 1. Same eventGroupId (from screenshot scanner or grouping)
+        if (note.eventGroupId && task.eventGroupId && note.eventGroupId === task.eventGroupId) {
+          isDirectlyConnected = true;
+        }
+
+        // 2. Shared screenshot image
+        if (!isDirectlyConnected && note.photoUrl && task.photoUrl && note.photoUrl === task.photoUrl) {
+          isDirectlyConnected = true;
+        }
+
+        // 3. Shared significant keywords in title/content (e.g. "Startup", "Challenge", "Scholarship")
+        if (!isDirectlyConnected) {
+          const taskKeywords = extractSignificantWords(task.title + ' ' + (task.notes || ''));
+          const common = noteKeywords.filter(k => taskKeywords.includes(k));
+          if (common.length >= 1) {
+            isDirectlyConnected = true;
+          }
+        }
+
+        if (isDirectlyConnected) {
+          newLinks.push({
+            sourceId: noteNodeId,
+            targetId: `node_task_${task.id}`,
+            weight: 3, // Thicker link between related task & note
+            kind: 'event',
+          });
+        }
+      });
     });
 
     // Toggle empty overlay
@@ -367,17 +410,24 @@ export function renderDotGraph(): HTMLElement {
     const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
 
     // Draw Links
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     links.forEach(link => {
       if (visibleNodeIds.has(link.sourceId) && visibleNodeIds.has(link.targetId)) {
         const source = nodes.find(n => n.id === link.sourceId);
         const target = nodes.find(n => n.id === link.targetId);
         if (source && target && source.x && source.y && target.x && target.y) {
+          const isEventLink = link.kind === 'event';
           ctx.beginPath();
           ctx.moveTo(source.x, source.y);
           ctx.lineTo(target.x, target.y);
+          ctx.lineWidth = isEventLink ? 2 : 1;
+          ctx.strokeStyle = isEventLink ? 'rgba(56, 189, 248, 0.65)' : 'rgba(255, 255, 255, 0.15)';
+          if (isEventLink) {
+            ctx.setLineDash([4, 4]);
+          } else {
+            ctx.setLineDash([]);
+          }
           ctx.stroke();
+          ctx.setLineDash([]);
         }
       }
     });

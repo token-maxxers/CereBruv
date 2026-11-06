@@ -1,4 +1,10 @@
-import type { SavedLink, Task } from '../../types/task';
+import type {
+  ReminderBodyFormat,
+  ReminderChecklistItem,
+  ReminderTimeMode,
+  SavedLink,
+  Task,
+} from '../../types/task';
 
 export interface CreateTaskDTO {
   title: string;
@@ -7,6 +13,10 @@ export interface CreateTaskDTO {
   startTime: string; // HH:mm or "" when untimed
   durationMinutes: number; // 0 when no duration specified
   urgency: Task['urgency'];
+  timeMode?: ReminderTimeMode;
+  bodyFormat?: ReminderBodyFormat;
+  checklistItems?: ReminderChecklistItem[];
+  eventGroupId?: string;
   notes?: string;
   photoUrl?: string;
   links?: SavedLink[];
