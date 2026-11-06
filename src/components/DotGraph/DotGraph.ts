@@ -33,8 +33,11 @@ export function renderDotGraph(): HTMLElement {
         <div style="font-size: var(--font-size-xs); color: #BDB2A1; margin-top: 4px;">Add tasks or quick notes to see your personal knowledge network grow.</div>
       </div>
 
-      <!-- Zoom / Center Controls Overlay -->
-      <div style="position: absolute; bottom: 8px; right: 8px; display: flex; gap: 4px;">
+      <!-- Zoom / Center & Clear Controls Overlay -->
+      <div style="position: absolute; bottom: 8px; right: 8px; display: flex; gap: 6px;">
+        <button id="graph-clear-all-btn" class="pill-badge" style="background: rgba(229,46,46,0.18); color: #FCA5A5; border-color: rgba(229,46,46,0.4); cursor: pointer; font-size: 0.65rem;">
+          Clear All
+        </button>
         <button id="graph-reset-btn" class="pill-badge" style="background: rgba(32,32,40,0.8); color: #F5EFEB; border-color: rgba(255,255,255,0.15); cursor: pointer; font-size: 0.65rem;">
           Center
         </button>
@@ -44,7 +47,10 @@ export function renderDotGraph(): HTMLElement {
       <div id="node-inspector" style="display: none; position: absolute; top: 8px; left: 8px; right: 8px; background: rgba(26,26,34,0.92); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15); border-radius: var(--radius-sm); padding: var(--spacing-2) var(--spacing-3); color: #F5EFEB; z-index: 10;">
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <span id="inspector-badge" style="font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;"></span>
-          <button id="inspector-close" style="background: none; border: none; color: #BDB2A1; cursor: pointer; font-size: 1rem; line-height: 1;">&times;</button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="inspector-delete" style="display: none; background: #E52E2E; border: none; color: #FFFFFF; cursor: pointer; font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px;">DELETE</button>
+            <button id="inspector-close" style="background: none; border: none; color: #BDB2A1; cursor: pointer; font-size: 1rem; line-height: 1;">&times;</button>
+          </div>
         </div>
         <div id="inspector-title" style="font-size: var(--font-size-sm); font-weight: 700; margin-top: 2px;"></div>
       </div>
@@ -73,11 +79,47 @@ export function renderDotGraph(): HTMLElement {
   const inspector = container.querySelector<HTMLElement>('#node-inspector')!;
   const inspectorBadge = container.querySelector<HTMLElement>('#inspector-badge')!;
   const inspectorTitle = container.querySelector<HTMLElement>('#inspector-title')!;
+  const inspectorDelete = container.querySelector<HTMLButtonElement>('#inspector-delete')!;
   const inspectorClose = container.querySelector<HTMLButtonElement>('#inspector-close')!;
   const resetBtn = container.querySelector<HTMLButtonElement>('#graph-reset-btn')!;
+  const clearAllBtn = container.querySelector<HTMLButtonElement>('#graph-clear-all-btn')!;
+
+  let selectedNode: GraphNode | null = null;
 
   inspectorClose.addEventListener('click', () => {
     inspector.style.display = 'none';
+    selectedNode = null;
+  });
+
+  inspectorDelete.addEventListener('click', async () => {
+    if (!selectedNode) return;
+    if (selectedNode.id.startsWith('node_task_')) {
+      const taskId = selectedNode.id.replace('node_task_', '');
+      await taskRepository.deleteTask(taskId);
+      eventBus.emit(AppEvents.TASK_DELETED);
+    } else if (selectedNode.id.startsWith('node_note_')) {
+      const noteId = selectedNode.id.replace('node_note_', '');
+      await noteRepository.deleteNote(noteId);
+      eventBus.emit(AppEvents.NOTE_CREATED);
+    }
+    inspector.style.display = 'none';
+    selectedNode = null;
+    await buildGraphData();
+  });
+
+  clearAllBtn.addEventListener('click', async () => {
+    const tasks = await taskRepository.getAllTasks();
+    const notes = await noteRepository.getAllNotes();
+    if (tasks.length === 0 && notes.length === 0) return;
+
+    await Promise.all([
+      ...tasks.map(t => taskRepository.deleteTask(t.id)),
+      ...notes.map(n => noteRepository.deleteNote(n.id)),
+    ]);
+    inspector.style.display = 'none';
+    selectedNode = null;
+    eventBus.emit(AppEvents.TASK_DELETED);
+    await buildGraphData();
   });
 
   let nodes: GraphNode[] = [];
@@ -363,6 +405,7 @@ export function renderDotGraph(): HTMLElement {
     const node = findNodeUnderPointer(coords);
     if (node) {
       draggedNode = node;
+      selectedNode = node;
       isDragging = true;
 
       inspector.style.display = 'block';
@@ -370,6 +413,7 @@ export function renderDotGraph(): HTMLElement {
       inspectorBadge.textContent = node.type;
       inspectorBadge.style.background = node.color;
       inspectorBadge.style.color = '#FFFFFF';
+      inspectorDelete.style.display = node.type === 'task' || node.type === 'note' ? 'inline-block' : 'none';
     }
   }
 

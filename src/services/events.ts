@@ -39,4 +39,7 @@ export const AppEvents = {
   NOTE_CREATED: 'note:created',
   STATS_UPDATED: 'stats:updated',
   DATE_SELECTED: 'date:selected',
+  MASCOT_SPEAK: 'mascot:speak',
+  VOICE_STATE_CHANGED: 'voice:state_changed',
+  NAVIGATE_TAB: 'nav:tab',
 } as const;

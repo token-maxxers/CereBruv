@@ -1,10 +1,14 @@
 import mascotImg from './assets/mascot.png';
+import mascotTalk1Img from './assets/CerebruvTalk-1.png';
+import mascotTalk2Img from './assets/CerebruvTalk-2.png';
+import mascotListenImg from './assets/CerebruvListen.png';
 import './styles/auth.css';
 import { initAnalytics } from './services/firebase';
 import { authService, type AuthUser } from './services/auth/AuthService';
 import { userStatsRepository, taskRepository } from './services/storage';
 import { migrateLocalStorageToFirestore } from './services/storage/migrate';
 import { geminiService } from './services/ai/GeminiService';
+import { voiceService } from './services/voice/VoiceService';
 import { eventBus, AppEvents } from './services/events';
 import { notificationService } from './services/notifications/NotificationService';
 import { renderAuthScreen } from './components/Auth/AuthScreen';
@@ -59,17 +63,33 @@ async function mountApp(user: AuthUser) {
       </div>
     </header>
 
-    <!-- Companion Dynamic Banner -->
+    <!-- Unified Companion & Quick Capture Card -->
     <div class="mascot-banner" id="mascot-banner">
-      <img src="${mascotImg}" alt="CereBruv Mascot" class="mascot-avatar-small" />
-      <div class="mascot-speech" id="mascot-speech">
-        <strong id="mascot-status-title">Ready for input, Bruv.</strong>
-        <span id="mascot-subspeech">No scheduled tasks yet. Add one below to ignite your Focus Orbit.</span>
+      <button class="icon-btn" id="mascot-voice-toggle" title="Toggle Talk-Back Voice (Speak / Mute)" style="position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; z-index: 5;">
+        <svg viewBox="0 0 24 24" id="mascot-voice-icon">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+        </svg>
+      </button>
+      <div class="mascot-top-row" id="mascot-top-row">
+        <button class="siri-avatar-orb" id="mascot-siri-orb" title="Tap CereBruv to Speak ('Hey Bruv...')">
+          <img src="${mascotImg}" id="mascot-avatar-img" alt="CereBruv Siri Voice Assistant" />
+        </button>
+        <div class="mascot-speech" id="mascot-speech" title="Tap to interact with CereBruv" style="flex: 1; cursor: pointer;">
+          <div class="mascot-headline-row">
+            <strong id="mascot-status-title">Ready for input, Bruv.</strong>
+            <div class="siri-wave-bars" id="siri-wave-bars">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          <span id="mascot-subspeech">Tap my avatar and say "Hey Bruv", or type below.</span>
+        </div>
       </div>
-    </div>
 
-    <!-- Quick Capture Bar -->
-    <div id="quick-capture-mount"></div>
+      <!-- Nested Quick Capture Input Bar -->
+      <div id="quick-capture-mount"></div>
+    </div>
 
     <!-- Main Content Area -->
     <main class="main-content" id="main-content">
@@ -137,7 +157,7 @@ async function mountApp(user: AuthUser) {
 
   // Mount Quick Capture
   const qcMount = document.querySelector('#quick-capture-mount')!;
-  qcMount.appendChild(renderQuickCapture());
+  qcMount.appendChild(renderQuickCapture(() => currentSelectedDate));
 
   // Mount Floating Action Button
   const fabBtn = document.querySelector('#fab-add-task')!;
@@ -200,6 +220,197 @@ async function mountApp(user: AuthUser) {
     });
   });
 
+  // Mascot Talk-Back Controls, Expandable Card & Sprite Animation Loop
+  let voiceSubtitleHoldUntil = 0;
+  let isCardExpanded = false;
+  let isUserTyping = false;
+  let talkAnimationTimer: ReturnType<typeof setInterval> | null = null;
+  let talkFrameToggle = false;
+
+  const mascotBanner = document.querySelector<HTMLDivElement>('#mascot-banner')!;
+  const mascotTopRow = document.querySelector<HTMLDivElement>('#mascot-top-row')!;
+  const mascotSpeechEl = document.querySelector<HTMLDivElement>('#mascot-speech')!;
+  const mascotSiriOrb = document.querySelector<HTMLButtonElement>('#mascot-siri-orb')!;
+  const mascotAvatarImg = document.querySelector<HTMLImageElement>('#mascot-avatar-img')!;
+  const siriWaveBars = document.querySelector<HTMLDivElement>('#siri-wave-bars')!;
+  const voiceToggleBtn = document.querySelector<HTMLButtonElement>('#mascot-voice-toggle')!;
+  const voiceIconEl = document.querySelector<SVGElement>('#mascot-voice-icon')!;
+  const qcInputEl = document.querySelector<HTMLInputElement>('#quick-capture-input');
+
+  function syncMascotAvatarSprite() {
+    const isSpeaking = voiceService.isSpeaking();
+    const isListening = voiceService.isListening();
+
+    // 1. Talking state: alternate CerebruvTalk-1 and CerebruvTalk-2 in loop
+    if (isSpeaking) {
+      if (!talkAnimationTimer) {
+        talkFrameToggle = false;
+        mascotAvatarImg.src = mascotTalk2Img;
+        talkAnimationTimer = setInterval(() => {
+          talkFrameToggle = !talkFrameToggle;
+          mascotAvatarImg.src = talkFrameToggle ? mascotTalk1Img : mascotTalk2Img;
+        }, 175);
+      }
+      return;
+    }
+
+    // Stop talking loop if not speaking
+    if (talkAnimationTimer) {
+      clearInterval(talkAnimationTimer);
+      talkAnimationTimer = null;
+    }
+
+    // 2. Listening (user speaking) or Typing on the input field -> CerebruvListen
+    if (isListening || isUserTyping) {
+      mascotAvatarImg.src = mascotListenImg;
+      return;
+    }
+
+    // 3. Default / Idle expression: always return to original logo (mascot.png)
+    mascotAvatarImg.src = mascotImg;
+  }
+
+  function renderVoiceButtonState() {
+    const isMuted = voiceService.isMuted();
+    const isSpeaking = voiceService.isSpeaking();
+    const isListening = voiceService.isListening();
+
+    if (isListening || isSpeaking || isUserTyping) {
+      isCardExpanded = true;
+    }
+
+    mascotBanner.classList.toggle('expanded', isCardExpanded);
+    mascotBanner.classList.toggle('siri-active', isListening || isSpeaking);
+    mascotSiriOrb.classList.toggle('listening', isListening);
+    mascotSiriOrb.classList.toggle('speaking', isSpeaking && !isListening);
+    siriWaveBars.classList.toggle('active', isListening || isSpeaking);
+
+    syncMascotAvatarSprite();
+
+    voiceToggleBtn.style.color = isMuted ? 'var(--color-black-faint)' : 'var(--color-red-primary)';
+    voiceToggleBtn.classList.toggle('recording', isSpeaking);
+
+    if (isMuted) {
+      voiceIconEl.innerHTML = `
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+        <line x1="23" y1="9" x2="17" y2="15" />
+        <line x1="17" y1="9" x2="23" y2="15" />
+      `;
+    } else {
+      voiceIconEl.innerHTML = `
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+      `;
+    }
+  }
+
+  renderVoiceButtonState();
+
+  // Bind input field focus/typing to expand container and switch to CerebruvListen
+  if (qcInputEl) {
+    qcInputEl.addEventListener('focus', () => {
+      isCardExpanded = true;
+      isUserTyping = true;
+      renderVoiceButtonState();
+    });
+
+    qcInputEl.addEventListener('input', () => {
+      isCardExpanded = true;
+      isUserTyping = true;
+      renderVoiceButtonState();
+    });
+
+    qcInputEl.addEventListener('blur', () => {
+      isUserTyping = false;
+      renderVoiceButtonState();
+    });
+  }
+
+  const speakCurrentBannerAloud = () => {
+    const titleText = document.querySelector('#mascot-status-title')?.textContent || '';
+    const subText = document.querySelector('#mascot-subspeech')?.textContent || '';
+    voiceService.speak(`${titleText} ${subText}`, true);
+  };
+
+  // Clicking the container or speech text expands card and speaks current status aloud (Talk-1 <-> Talk-2 loop)
+  mascotBanner.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('#mascot-siri-orb') ||
+      target.closest('#mascot-voice-toggle') ||
+      target.closest('#quick-capture-mount')
+    ) {
+      return;
+    }
+    isCardExpanded = true;
+    isUserTyping = false;
+    if (voiceService.isListening()) {
+      voiceService.stopListening();
+    }
+    speakCurrentBannerAloud();
+    renderVoiceButtonState();
+  });
+
+  // Clicking outside #mascot-banner collapses it if idle
+  document.addEventListener('click', (e) => {
+    const target = e.target as Node;
+    if (
+      isCardExpanded &&
+      !mascotBanner.contains(target) &&
+      !voiceService.isListening() &&
+      !voiceService.isSpeaking() &&
+      !isUserTyping
+    ) {
+      isCardExpanded = false;
+      renderVoiceButtonState();
+    }
+  });
+
+  voiceToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const nowMuted = voiceService.toggleMute();
+    renderVoiceButtonState();
+    if (!nowMuted) {
+      const subText = document.querySelector('#mascot-subspeech')?.textContent || 'Voice active, Bruv.';
+      voiceService.speak(subText, true);
+    }
+  });
+
+  // Clicking ONLY the CereBruv Avatar Orb triggers Voice Listening (CerebruvListen expression)
+  mascotSiriOrb.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isCardExpanded = true;
+    voiceService.toggleListening(
+      () => currentSelectedDate,
+      (liveText) => {
+        if (qcInputEl) qcInputEl.value = liveText;
+      }
+    );
+    renderVoiceButtonState();
+  });
+
+  void mascotTopRow;
+  void mascotSpeechEl;
+
+  eventBus.on(AppEvents.VOICE_STATE_CHANGED, () => {
+    renderVoiceButtonState();
+  });
+
+  eventBus.on(AppEvents.MASCOT_SPEAK, (payload: { headline: string; subspeech: string }) => {
+    voiceSubtitleHoldUntil = Date.now() + 7000;
+    const statusTitle = document.querySelector('#mascot-status-title');
+    const subspeech = document.querySelector('#mascot-subspeech');
+    if (statusTitle && payload.headline) statusTitle.textContent = payload.headline;
+    if (subspeech && payload.subspeech) subspeech.textContent = payload.subspeech;
+  });
+
+  eventBus.on(AppEvents.NAVIGATE_TAB, (tab: string) => {
+    if (['orbit', 'tasks', 'graph', 'cloud'].includes(tab)) {
+      switchTab(tab);
+    }
+  });
+
   // Update Mascot Status dynamically with rule-based fallback and debounced AI analysis
   async function updateMascotStatus() {
     const tasks = await taskRepository.getAllTasks();
@@ -209,11 +420,19 @@ async function mountApp(user: AuthUser) {
     const statusTitle = document.querySelector('#mascot-status-title');
     const subspeech = document.querySelector('#mascot-subspeech');
 
+    // Schedule notification alarms
+    pending.forEach(t => notificationService.scheduleTaskAlert(t));
+
+    // Preserve active voice command subtitle for 7s so user can read what CereBruv just said
+    if (Date.now() < voiceSubtitleHoldUntil) {
+      return;
+    }
+
     // Rule-based fallback text (displayed immediately)
     if (statusTitle && subspeech) {
       if (todayTasks.length === 0) {
         statusTitle.textContent = 'Ready for input, Bruv.';
-        subspeech.textContent = 'No tasks for today. Tap the red + button to plan or browse upcoming days.';
+        subspeech.textContent = 'No tasks for today. Tap the mic and say "Hey Bruv" or tap + to plan.';
       } else if (pending.length === 0) {
         statusTitle.textContent = 'All tasks crushed today, Bruv!';
         subspeech.textContent = 'Streak protected. Great job staying focused.';
@@ -223,9 +442,6 @@ async function mountApp(user: AuthUser) {
       }
     }
 
-    // Schedule notification alarms
-    pending.forEach(t => notificationService.scheduleTaskAlert(t));
-
     // Debounce Gemini AI companion analysis (at most 1 call per task-list change batch)
     if (mascotAiDebounceTimer) {
       clearTimeout(mascotAiDebounceTimer);
@@ -234,11 +450,11 @@ async function mountApp(user: AuthUser) {
     const currentRequestId = ++latestMascotRequestId;
 
     mascotAiDebounceTimer = setTimeout(async () => {
-      if (todayTasks.length === 0) return;
+      if (todayTasks.length === 0 || Date.now() < voiceSubtitleHoldUntil) return;
 
       try {
         const aiMessage = await geminiService.analyzeWorkload(todayTasks);
-        if (currentRequestId === latestMascotRequestId && subspeech && aiMessage) {
+        if (currentRequestId === latestMascotRequestId && subspeech && aiMessage && Date.now() >= voiceSubtitleHoldUntil) {
           subspeech.textContent = aiMessage;
         }
       } catch (err) {

@@ -140,6 +140,39 @@ In 1-2 short sentences (max 2 sentences), give me your mascot check-in and advic
       return [];
     }
   }
+
+  async transcribeAudio(audioBlob: Blob): Promise<string> {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const res = reader.result as string;
+        const commaIdx = res.indexOf(',');
+        resolve(commaIdx >= 0 ? res.slice(commaIdx + 1) : res);
+      };
+      reader.onerror = () => reject(new Error('Failed to read audio blob'));
+      reader.readAsDataURL(audioBlob);
+    });
+
+    const mimeType = audioBlob.type || 'audio/webm';
+    const ai = getAI(app, { backend: new GoogleAIBackend() });
+    const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+
+    const result = await model.generateContent([
+      {
+        type: 'inlineData',
+        inlineData: {
+          mimeType,
+          data: base64Data
+        }
+      },
+      {
+        type: 'text',
+        text: 'Transcribe the spoken English voice command in this audio clip verbatim. Return ONLY the raw transcribed words with no quotes, no markdown, and no extra commentary. If silence or unintelligible, return empty string.'
+      }
+    ]);
+
+    return result.response.text().trim();
+  }
 }
 
 export const geminiService = new GeminiService();

@@ -44,7 +44,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
         <canvas id="focus-orbit-canvas" width="280" height="280" style="width: 280px; height: 280px; cursor: pointer;"></canvas>
 
         <!-- Center Hub Information -->
-        <div style="position: absolute; width: 140px; height: 140px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: var(--spacing-2);">
+        <div style="position: absolute; width: 124px; height: 124px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: var(--spacing-2);">
           <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.05em;" id="center-month-day"></div>
           <div style="font-size: var(--font-size-xl); font-weight: 800; color: var(--color-black-dominant); line-height: 1.1;" id="center-busy-hours">0h</div>
           <div style="font-size: 0.7rem; color: var(--color-black-muted); font-weight: 600;" id="center-free-time">Free: 16h</div>
@@ -176,8 +176,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
 
     const centerX = size / 2;
     const centerY = size / 2;
-    const dialRadius = 105;
-    const arcLineWidth = 18;
+    const dialRadius = 108;
+    const arcLineWidth = 17;
 
     // 1. Base Circular Track
     ctx.beginPath();
@@ -186,11 +186,12 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
     ctx.strokeStyle = '#EAE2D5';
     ctx.stroke();
 
-    // 2. Hour Ticks (0, 6, 12, 18)
+    // 2. Full 24-Hour Clock Ticks & Hour Numbers (0 through 23)
     for (let h = 0; h < 24; h++) {
       const angle = (h / 24) * Math.PI * 2 - Math.PI / 2;
-      const isMajor = h % 6 === 0;
-      const innerR = isMajor ? dialRadius - 16 : dialRadius - 12;
+      const isCardinal = h % 6 === 0;
+      const isThreeHour = h % 3 === 0;
+      const innerR = isCardinal ? dialRadius - 15 : isThreeHour ? dialRadius - 13.5 : dialRadius - 12;
       const outerR = dialRadius - 9;
 
       const x1 = centerX + Math.cos(angle) * innerR;
@@ -201,20 +202,23 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.lineWidth = isMajor ? 2 : 1;
-      ctx.strokeStyle = isMajor ? '#121216' : '#A89F91';
+      ctx.lineWidth = isCardinal ? 2 : isThreeHour ? 1.4 : 1;
+      ctx.strokeStyle = isCardinal ? '#121216' : isThreeHour ? '#5E5D67' : '#B6ADA0';
       ctx.stroke();
 
-      if (isMajor) {
-        const textR = dialRadius - 26;
-        const tx = centerX + Math.cos(angle) * textR;
-        const ty = centerY + Math.sin(angle) * textR;
-        ctx.fillStyle = '#5E5D67';
-        ctx.font = 'bold 9px -apple-system, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(h), tx, ty);
-      }
+      // Render every hour number (0 - 23) around the clock ring
+      const textR = dialRadius - 24;
+      const tx = centerX + Math.cos(angle) * textR;
+      const ty = centerY + Math.sin(angle) * textR;
+      ctx.fillStyle = isCardinal ? '#121216' : isThreeHour ? '#45444C' : '#857E73';
+      ctx.font = isCardinal
+        ? '800 9.5px -apple-system, sans-serif'
+        : isThreeHour
+          ? '700 8px -apple-system, sans-serif'
+          : '600 7.2px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(h), tx, ty);
     }
 
     // 3. Task & Activity Arcs for the Selected Day

@@ -52,7 +52,10 @@ CereBruv/
 ├── src/
 │   ├── vite-env.d.ts           # Vite client & ImportMetaEnv type definitions
 │   ├── assets/
-│   │   ├── mascot.png          # Official CereBruv Mascot (Transparent PNG)
+│   │   ├── mascot.png          # Official CereBruv Mascot (Idle Transparent PNG)
+│   │   ├── CerebruvTalk-1.png  # Mascot Speaking Frame 1 (Closed Smile)
+│   │   ├── CerebruvTalk-2.png  # Mascot Speaking Frame 2 (Open Smile)
+│   │   ├── CerebruvListen.png  # Mascot Listening / Typing Expression
 │   │   └── mascot.svg          # Mascot vector asset
 │   ├── components/             # Self-contained UI modules
 │   │   ├── Auth/
@@ -85,6 +88,8 @@ CereBruv/
 │   │   ├── ai/                        # Firebase AI / Gemini Companion Layer
 │   │   │   ├── IAIService.ts          # AI Interface contract
 │   │   │   └── GeminiService.ts       # Gemini 2.5 Flash companion integration (firebase/ai)
+│   │   ├── voice/
+│   │   │   └── VoiceService.ts        # Local keyword/date/time parser, TTS Talk-Back & STT engine
 │   │   └── notifications/
 │   │       └── NotificationService.ts # Local reminder & FCM Web Push shell
 │   ├── types/
@@ -118,6 +123,7 @@ CereBruv/
 | **Phase 12** | Gemini Vision Multimodal Task Extraction & QuickCapture | **DONE** | Antigravity Agent |
 | **Phase 13** | Firebase Cloud Messaging (FCM Web Push) & SW Receiver | **DONE** | Antigravity Agent |
 | **Phase 14** | Complete Auth System (Google, Email/Password, Guest Linking) | **DONE** | Antigravity Agent |
+| **Phase 15** | Siri-Style Voice Command & Talk-Back Engine, Sprite Loop & 24h Clock Dial | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -350,6 +356,26 @@ CereBruv/
      - Added Account card at top with avatar, display name, guest badge, and "Create Account" (link mode) or "Sign Out" confirmation.
   6. Verified production build passes cleanly (`npm run build`).
 * **Next Action:** Ready for live deployment.
+
+---
+
+### Entry #18: 2026-11-07 (Antigravity Agent)
+* **Phase:** Phase 15 Complete - Siri-Style Voice Command & Talk-Back Engine, Custom Mascot Expressions & 24-Hour Clock Orbit.
+* **Action:**
+  1. Created `src/services/voice/VoiceService.ts`:
+     - 100% local deterministic keyword, date, time, duration, category, and urgency parser supporting 5 core `"Hey Bruv"` commands (schedule check, add task, complete task +25 XP, save brain-dump note, and switch view tabs) with zero Gemini quota usage for parsing.
+     - Offline-capable Talk-Back speech synthesis (`window.speechSynthesis`) with voice clarity selector and mute persistence.
+     - Hybrid Speech-to-Text (`SpeechRecognition` in Chrome/Edge + automatic `MediaRecorder` silence-detecting fallback with `geminiService.transcribeAudio()` for Brave Browser).
+  2. Added custom transparent mascot expression sprites (`src/assets/CerebruvTalk-1.png`, `src/assets/CerebruvTalk-2.png`, `src/assets/CerebruvListen.png`):
+     - Loops `CerebruvTalk-1` and `CerebruvTalk-2` while CereBruv speaks.
+     - Transitions to `CerebruvListen` when listening to user speech or when typing in the Quick Capture input field.
+  3. Unified Mascot Banner & Quick Capture container (`src/main.ts`, `src/components/QuickCapture/QuickCapture.ts`, `src/styles/main.css`):
+     - Nested Quick Capture input and read-only `"Hey Bruv"` Keyword Guide inside `.mascot-banner`.
+     - Clicking the container expands the card, centers the enlarged avatar with a rotating circular conic-gradient light halo strictly behind the logo, moves red text below, and speaks current status aloud.
+     - Clicking the avatar triggers voice listening (`CerebruvListen`).
+  4. Upgraded `src/components/FocusOrbit/FocusOrbit.ts` to render all 24 hour numbers (`0` through `23`) around the clock dial.
+  5. Added node deletion and `Clear All` controls to `src/components/DotGraph/DotGraph.ts` with strictly zero demo data.
+* **Next Action:** Awaiting user local verification before git commit/push.
 
 ---
 

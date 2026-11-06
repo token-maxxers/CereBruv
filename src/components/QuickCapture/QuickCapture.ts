@@ -1,12 +1,16 @@
 import { noteRepository, taskRepository } from '../../services/storage';
 import { geminiService } from '../../services/ai/GeminiService';
+import { voiceService } from '../../services/voice/VoiceService';
 import { eventBus, AppEvents } from '../../services/events';
 import type { TaskCategory, UrgencyLevel } from '../../types/task';
 
-export function renderQuickCapture(): HTMLElement {
+export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement {
   const container = document.createElement('div');
   container.className = 'quick-capture-wrapper';
   container.style.position = 'relative';
+
+  const resolveActiveDate = () =>
+    getSelectedDate ? getSelectedDate() : new Date().toISOString().split('T')[0];
 
   container.innerHTML = `
     <div class="quick-capture-container">
@@ -14,14 +18,13 @@ export function renderQuickCapture(): HTMLElement {
         type="text" 
         class="quick-capture-input" 
         id="quick-capture-input" 
-        placeholder="Brain-dump a thought, task, or note..."
+        placeholder="Tap CereBruv above to speak, or type 'Hey Bruv...' / note"
       />
-      <button class="icon-btn" id="voice-memo-btn" title="Voice Dictation (Web Speech API / Gemini ready)">
+      <button class="icon-btn" id="voice-guide-btn" title="Voice Command Rules & Voice Settings">
         <svg viewBox="0 0 24 24">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-          <line x1="12" y1="19" x2="12" y2="23" />
-          <line x1="8" y1="23" x2="16" y2="23" />
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       </button>
       <button class="icon-btn" id="photo-upload-btn" title="Scan to-do list / notes with Gemini Vision">
@@ -33,8 +36,64 @@ export function renderQuickCapture(): HTMLElement {
       <input type="file" id="photo-file-input" accept="image/*" style="display: none;" />
     </div>
 
+    <!-- In-App Voice Command Rules & Voice Settings Guide (Strictly No Fake/Demo Data) -->
+    <div id="voice-guide-drawer" style="display: none; margin-top: var(--spacing-2); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--spacing-3);">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-red-primary);"></span>
+          <strong style="font-size: var(--font-size-xs); color: var(--color-black-dominant); text-transform: uppercase; letter-spacing: 0.05em;">
+            "Hey Bruv" Voice Keyword Guide
+          </strong>
+        </div>
+        <button id="voice-guide-close" class="icon-btn" style="width: 22px; height: 22px; font-size: 1rem; border: none; background: transparent; cursor: pointer;">&times;</button>
+      </div>
+      <p style="font-size: 0.72rem; color: var(--color-black-muted); margin-bottom: var(--spacing-2); line-height: 1.35;">
+        Tap the <strong>CereBruv Avatar</strong> above to speak, or type using these keyword rules:
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--spacing-3);">
+        <div class="voice-rule-row" data-prefix="Hey Bruv, what's my schedule?" style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">1. Check Schedule</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, what's my schedule?"</code></span>
+        </div>
+
+        <div class="voice-rule-row" data-prefix="Hey Bruv, add " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">2. Schedule a Task</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, add [Task Name] at [Time] for [Duration]"</code></span>
+        </div>
+
+        <div class="voice-rule-row" data-prefix="Hey Bruv, done with " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">3. Complete a Task (+25 XP)</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, done with [Task Name]"</code></span>
+        </div>
+
+        <div class="voice-rule-row" data-prefix="Hey Bruv, note " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">4. Save a Brain-Dump Note</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, note [Your Thought]"</code></span>
+        </div>
+
+        <div class="voice-rule-row" data-prefix="Hey Bruv, open " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
+          <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">5. Switch View Tab</strong>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, open [orbit | tasks | graph | cloud]"</code></span>
+        </div>
+      </div>
+
+      <!-- Voice Clarity Selector -->
+      <div style="border-top: 1px solid var(--border-subtle); padding-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+        <label for="bruv-voice-select" style="font-size: 0.68rem; font-weight: 700; color: var(--color-black-soft); text-transform: uppercase;">
+          CereBruv Talk-Back Voice:
+        </label>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <select id="bruv-voice-select" style="flex: 1; padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-medium); background: var(--bg-surface-elevated); font-size: 0.72rem; color: var(--color-black-dominant); font-family: inherit;"></select>
+          <button id="bruv-voice-test" class="pill-badge" style="cursor: pointer; font-size: 0.68rem; padding: 5px 10px; border: 1px solid var(--color-black-dominant); background: var(--color-black-dominant); color: #FAF7F2;">
+            Test Voice
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Extracted Tasks Confirmation Drawer/Panel -->
-    <div id="ai-task-proposals" style="display: none; margin-top: var(--spacing-2); background: var(--bg-surface); border: 1px solid var(--border-medium); border-radius: var(--radius-md); padding: var(--spacing-3); box-shadow: var(--shadow-card);">
+    <div id="ai-task-proposals" style="display: none; margin-top: var(--spacing-2); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--spacing-3);">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-2);">
         <div style="display: flex; align-items: center; gap: 6px;">
           <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-red-primary);"></span>
@@ -52,9 +111,14 @@ export function renderQuickCapture(): HTMLElement {
   `;
 
   const inputEl = container.querySelector<HTMLInputElement>('#quick-capture-input')!;
-  const voiceBtn = container.querySelector<HTMLButtonElement>('#voice-memo-btn')!;
+  const guideBtn = container.querySelector<HTMLButtonElement>('#voice-guide-btn')!;
   const photoBtn = container.querySelector<HTMLButtonElement>('#photo-upload-btn')!;
   const fileInput = container.querySelector<HTMLInputElement>('#photo-file-input')!;
+
+  const guideDrawer = container.querySelector<HTMLDivElement>('#voice-guide-drawer')!;
+  const guideClose = container.querySelector<HTMLButtonElement>('#voice-guide-close')!;
+  const voiceSelect = container.querySelector<HTMLSelectElement>('#bruv-voice-select')!;
+  const voiceTestBtn = container.querySelector<HTMLButtonElement>('#bruv-voice-test')!;
 
   const proposalsBox = container.querySelector<HTMLDivElement>('#ai-task-proposals')!;
   const proposalTitle = container.querySelector<HTMLElement>('#ai-proposal-title')!;
@@ -67,67 +131,89 @@ export function renderQuickCapture(): HTMLElement {
     proposalList.innerHTML = '';
   });
 
-  // Handle Quick Note Submission
+  function populateVoiceDropdown() {
+    const voices = voiceService.getEnglishVoices();
+    const preferred = voiceService.getPreferredVoice();
+    voiceSelect.innerHTML = '';
+
+    if (voices.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Default Browser Voice';
+      voiceSelect.appendChild(opt);
+      return;
+    }
+
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = `${v.name} (${v.lang})`;
+      if (preferred && v.voiceURI === preferred.voiceURI) {
+        opt.selected = true;
+      }
+      voiceSelect.appendChild(opt);
+    });
+  }
+
+  guideBtn.addEventListener('click', () => {
+    const isHidden = guideDrawer.style.display === 'none';
+    guideDrawer.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      populateVoiceDropdown();
+    }
+  });
+
+  guideClose.addEventListener('click', () => {
+    guideDrawer.style.display = 'none';
+  });
+
+  eventBus.on(AppEvents.VOICE_STATE_CHANGED, () => {
+    if (guideDrawer.style.display !== 'none' && voiceSelect.options.length <= 1) {
+      populateVoiceDropdown();
+    }
+  });
+
+  voiceSelect.addEventListener('change', () => {
+    if (voiceSelect.value) {
+      voiceService.setPreferredVoiceURI(voiceSelect.value);
+      voiceService.speak('I got you, Bruv. Voice updated and ready.', true);
+    }
+  });
+
+  voiceTestBtn.addEventListener('click', () => {
+    voiceService.speak("I got you, Bruv. Think it through, CereBruv's got you.", true);
+  });
+
+  // Clicking a rule row only pre-fills the command prefix into the input box (never creates fake data)
+  container.querySelectorAll<HTMLDivElement>('.voice-rule-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const prefix = row.getAttribute('data-prefix') || '';
+      inputEl.value = prefix;
+      inputEl.focus();
+    });
+  });
+
+  // Handle Typed Input Submission
   inputEl.addEventListener('keydown', async (e) => {
     if (e.key === 'Enter' && inputEl.value.trim()) {
       const text = inputEl.value.trim();
       inputEl.value = '';
       inputEl.disabled = true;
 
-      await noteRepository.createNote({ content: text });
-      eventBus.emit(AppEvents.NOTE_CREATED);
-      inputEl.disabled = false;
-      inputEl.placeholder = 'Saved to second brain! Type another...';
+      if (voiceService.isCommandPhrase(text)) {
+        const outcome = await voiceService.executeVoiceCommand(text, resolveActiveDate());
+        inputEl.disabled = false;
+        inputEl.placeholder = outcome.headline;
+      } else {
+        await noteRepository.createNote({ content: text });
+        eventBus.emit(AppEvents.NOTE_CREATED);
+        inputEl.disabled = false;
+        inputEl.placeholder = 'Saved to second brain! Type another...';
+      }
+
       setTimeout(() => {
-        inputEl.placeholder = 'Brain-dump a thought, task, or note...';
-      }, 2500);
-    }
-  });
-
-  // Handle Speech Recognition
-  let isRecording = false;
-  let recognition: any = null;
-
-  const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (SpeechRec) {
-    recognition = new SpeechRec();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      isRecording = true;
-      voiceBtn.classList.add('recording');
-      inputEl.placeholder = 'Listening... Speak your thought';
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      inputEl.value = (inputEl.value ? inputEl.value + ' ' : '') + transcript;
-    };
-
-    recognition.onerror = () => {
-      isRecording = false;
-      voiceBtn.classList.remove('recording');
-      inputEl.placeholder = 'Brain-dump a thought, task, or note...';
-    };
-
-    recognition.onend = () => {
-      isRecording = false;
-      voiceBtn.classList.remove('recording');
-      inputEl.placeholder = 'Brain-dump a thought, task, or note...';
-    };
-  }
-
-  voiceBtn.addEventListener('click', () => {
-    if (!recognition) {
-      alert('Speech recognition not supported in this browser. Type manually or use Chrome/Edge.');
-      return;
-    }
-    if (isRecording) {
-      recognition.stop();
-    } else {
-      recognition.start();
+        inputEl.placeholder = "Tap CereBruv above to speak, or type 'Hey Bruv...' / note";
+      }, 3000);
     }
   });
 
@@ -139,15 +225,13 @@ export function renderQuickCapture(): HTMLElement {
   fileInput.addEventListener('change', async () => {
     if (!fileInput.files || !fileInput.files[0]) return;
     const file = fileInput.files[0];
-    fileInput.value = ''; // Reset input to allow re-uploading same file
+    fileInput.value = '';
 
-    // 1. Save extracted note text only (do NOT store base64/data URLs in Firestore)
     await noteRepository.createNote({
       content: `Photo Note: "${file.name}" scanned with Gemini Vision`
     });
     eventBus.emit(AppEvents.NOTE_CREATED);
 
-    // Show loading state in proposals drawer
     proposalsBox.style.display = 'block';
     proposalTitle.textContent = 'Scanning image with Gemini...';
     proposalSub.textContent = `Analyzing "${file.name}" for tasks and to-do items...`;
@@ -178,7 +262,7 @@ export function renderQuickCapture(): HTMLElement {
       proposalSub.textContent = 'Tap any item to add it directly to today\'s schedule:';
       proposalList.innerHTML = '';
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = resolveActiveDate();
 
       extractedTasks.forEach((item, index) => {
         const itemRow = document.createElement('div');
@@ -216,7 +300,6 @@ export function renderQuickCapture(): HTMLElement {
           itemRow.style.opacity = '0.5';
           itemRow.style.pointerEvents = 'none';
 
-          // Assign default start time (next whole hour)
           const now = new Date();
           const nextHour = (now.getHours() + 1 + index) % 24;
           const startTime = `${String(nextHour).padStart(2, '0')}:00`;
@@ -235,12 +318,11 @@ export function renderQuickCapture(): HTMLElement {
 
           itemRow.innerHTML = `
             <div style="font-size: var(--font-size-xs); color: var(--color-black-muted); font-weight: 600;">
-              Added to today's Focus Orbit at ${startTime}
+              Added to Focus Orbit at ${startTime}
             </div>
             <span style="font-size: 0.75rem; color: var(--color-red-primary); font-weight: 800;">ADDED</span>
           `;
 
-          // Auto-hide panel if all proposed tasks have been added
           setTimeout(() => {
             const remaining = proposalList.querySelectorAll('[style*="pointer-events: none"]').length;
             if (remaining === extractedTasks.length) {
