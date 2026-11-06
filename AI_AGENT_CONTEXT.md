@@ -376,6 +376,25 @@ CereBruv/
   4. Upgraded `src/components/FocusOrbit/FocusOrbit.ts` to render all 24 hour numbers (`0` through `23`) around the clock dial and added a 15-second live clock timer for real-time needle and midnight rollover.
   5. Replaced all UTC `toISOString().split('T')[0]` calls with local timezone date formatting across `FocusOrbit.ts`, `main.ts`, `TaskList.ts`, `TaskForm.ts`, `QuickCapture.ts`, `VoiceService.ts`, `FirestoreAdapter.ts`, and `LocalStorageAdapter.ts`.
   6. Added node deletion and `Clear All` controls to `src/components/DotGraph/DotGraph.ts` with strictly zero demo data.
+* **Next Action:** Proceed to Phase 16 (Thoughts Tab, Interactive Orbit Arc Popover, and Conversational Voice Task Clarification).
+
+---
+
+### Entry #19: 2026-11-07 (Antigravity Agent)
+* **Phase:** Phase 16 Complete - Dedicated Thoughts Tab, Interactive Orbit Arc Popover & Conversational Voice Task Clarification.
+* **Action:**
+  1. Created `src/components/Thoughts/ThoughtsView.ts` and added a 5th **Thoughts** tab (`Orbit | Tasks | Thoughts | Graph | Cloud`) in `src/main.ts`:
+     - Displays all saved voice (`"Hey Bruv, note ..."`) and typed brain-dump thoughts.
+     - Includes category filter chips (`Study`, `Work`, `Personal`, `Event`, `Rest`), 1-tap category tag switcher on each thought card that dynamically re-links the thought to its Category Hub in the Mind Graph, a `+ To Orbit Task` converter button, and delete controls.
+     - Added `updateNote()` to `INoteRepository`, `LocalStorageAdapter`, and `FirestoreAdapter`.
+  2. Added **Interactive Arc Popover Card** in `src/components/FocusOrbit/FocusOrbit.ts`:
+     - Clicking any colored task block (e.g., green/teal Work arc) or the Sleep block on the 24-hour Focus Orbit ring opens a floating popover card displaying Task Title, Time Range, Category badge, Urgency badge, Notes, and `Complete (+25 XP)`, `Edit`, and `Delete` buttons.
+     - Clicking empty track area still opens the New Task modal.
+     - Upgraded `src/components/Tasks/TaskForm.ts` and `src/components/Tasks/TaskList.ts` to support full task editing (`open(date, editTask)`).
+  3. Added **Conversational + Interactive Task Clarification & Continuous Listening with Live Syntax Guidance** in `src/services/voice/VoiceService.ts` and `src/components/QuickCapture/QuickCapture.ts`:
+     - Upgraded Web Speech API to `continuous = true` with a 6.5-second pause retention window (or tap avatar again to finish) so CereBruv never cuts off after a single word like `"Add"`.
+     - Added a **Live Syntax Guide Bar** (`getLiveSyntaxTemplate()`) directly under the input field and in the banner that updates dynamically as the user speaks or types (e.g., saying `"Add"` shows `Add [Task Name] at [Time] for [Duration] under [Study | Work | Personal | Event | Rest]`).
+     - Only after the user finishes speaking (by tapping the avatar again or after the 6.5s pause) does CereBruv ask for any missing Category, Duration, or Priority details via the interactive 1-tap pill drawer.
 * **Next Action:** Ready for live deployment.
 
 ---

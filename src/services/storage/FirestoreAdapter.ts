@@ -202,6 +202,22 @@ export class FirestoreNoteRepository implements INoteRepository {
     return newNote;
   }
 
+  async updateNote(id: string, updates: Partial<Omit<QuickNote, 'id' | 'createdAt'>>): Promise<QuickNote> {
+    const uid = getRequiredUid();
+    const noteRef = doc(db, 'users', uid, 'notes', id);
+    const snap = await getDoc(noteRef);
+    if (!snap.exists()) {
+      throw new Error(`Note with id ${id} not found`);
+    }
+    const current = snap.data() as QuickNote;
+    await updateDoc(noteRef, { ...updates });
+    return {
+      ...current,
+      ...updates,
+      id,
+    };
+  }
+
   async deleteNote(id: string): Promise<boolean> {
     const uid = getRequiredUid();
     const noteRef = doc(db, 'users', uid, 'notes', id);

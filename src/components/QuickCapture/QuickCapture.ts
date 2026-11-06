@@ -1,7 +1,8 @@
 import { noteRepository, taskRepository } from '../../services/storage';
 import { geminiService } from '../../services/ai/GeminiService';
-import { voiceService } from '../../services/voice/VoiceService';
+import { voiceService, type PendingTaskDraft } from '../../services/voice/VoiceService';
 import { eventBus, AppEvents } from '../../services/events';
+import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
 import type { TaskCategory, UrgencyLevel } from '../../types/task';
 
 export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement {
@@ -42,6 +43,15 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       <input type="file" id="photo-file-input" accept="image/*" style="display: none;" />
     </div>
 
+    <!-- Live Syntax Guidance Bar (Displays dynamically as user speaks or types "Add...", "Done...", "Note...") -->
+    <div id="live-syntax-guide-bar" style="display: none; margin-top: 6px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(229, 46, 46, 0.08); border: 1px dashed rgba(229, 46, 46, 0.4); font-size: 0.7rem; color: var(--color-black-dominant); align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+        <span style="font-weight: 800; color: var(--color-red-primary); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em;">GUIDE:</span>
+        <code id="live-syntax-template" style="font-weight: 700; color: var(--color-black-dominant); font-family: inherit;">Add [Task Name] at [Time]</code>
+      </div>
+      <span id="live-syntax-next" style="font-size: 0.65rem; font-weight: 700; color: var(--color-red-primary);"></span>
+    </div>
+
     <!-- In-App Voice Command Rules & Voice Settings Guide (Strictly No Fake/Demo Data) -->
     <div id="voice-guide-drawer" style="display: none; margin-top: var(--spacing-2); background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--spacing-3);">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
@@ -80,7 +90,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
 
         <div class="voice-rule-row" data-prefix="Hey Bruv, open " style="display: flex; flex-direction: column; background: var(--bg-surface-elevated); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); cursor: pointer;">
           <strong style="font-size: 0.72rem; color: var(--color-black-dominant);">5. Switch View Tab</strong>
-          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, open [orbit | tasks | graph | cloud]"</code></span>
+          <span style="font-size: 0.68rem; color: var(--color-black-muted);">Say: <code>"Hey Bruv, open [orbit | tasks | thoughts | graph | cloud]"</code></span>
         </div>
       </div>
 
@@ -95,6 +105,68 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
             Test Voice
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Interactive Voice Task Clarification Drawer (Category, Duration, Priority) -->
+    <div id="voice-clarify-drawer" style="display: none; margin-top: var(--spacing-2); background: var(--bg-primary); border: 1.5px solid rgba(229, 46, 46, 0.35); border-radius: var(--radius-md); padding: var(--spacing-3); box-shadow: var(--shadow-card);">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-red-primary);"></span>
+          <strong id="clarify-task-heading" style="font-size: var(--font-size-xs); color: var(--color-black-dominant); text-transform: uppercase; letter-spacing: 0.04em;">
+            Confirm Task Details
+          </strong>
+        </div>
+        <button id="clarify-cancel-btn" class="icon-btn" style="width: 22px; height: 22px; font-size: 1rem; border: none; background: transparent; cursor: pointer;" title="Cancel">&times;</button>
+      </div>
+
+      <!-- Category Chips (Links directly to Mind Graph & Orbit Arc Color) -->
+      <div style="margin-bottom: 8px;">
+        <div style="font-size: 0.65rem; font-weight: 700; color: var(--color-black-muted); text-transform: uppercase; margin-bottom: 4px;">
+          1. Category (Orbit Color & Mind Graph Node)
+        </div>
+        <div id="clarify-category-row" style="display: flex; gap: 5px; flex-wrap: wrap;">
+          <button type="button" class="pill-badge clarify-cat-chip" data-cat="study" style="cursor: pointer; font-size: 0.68rem;">Study</button>
+          <button type="button" class="pill-badge clarify-cat-chip" data-cat="work" style="cursor: pointer; font-size: 0.68rem;">Work</button>
+          <button type="button" class="pill-badge clarify-cat-chip" data-cat="personal" style="cursor: pointer; font-size: 0.68rem;">Personal</button>
+          <button type="button" class="pill-badge clarify-cat-chip" data-cat="event" style="cursor: pointer; font-size: 0.68rem;">Event</button>
+          <button type="button" class="pill-badge clarify-cat-chip" data-cat="rest" style="cursor: pointer; font-size: 0.68rem;">Rest</button>
+        </div>
+      </div>
+
+      <!-- Duration Chips -->
+      <div style="margin-bottom: 8px;">
+        <div style="font-size: 0.65rem; font-weight: 700; color: var(--color-black-muted); text-transform: uppercase; margin-bottom: 4px;">
+          2. Duration
+        </div>
+        <div id="clarify-duration-row" style="display: flex; gap: 5px; flex-wrap: wrap;">
+          <button type="button" class="pill-badge clarify-dur-chip" data-dur="30" style="cursor: pointer; font-size: 0.68rem;">30m</button>
+          <button type="button" class="pill-badge clarify-dur-chip" data-dur="45" style="cursor: pointer; font-size: 0.68rem;">45m</button>
+          <button type="button" class="pill-badge clarify-dur-chip" data-dur="60" style="cursor: pointer; font-size: 0.68rem;">1h (60m)</button>
+          <button type="button" class="pill-badge clarify-dur-chip" data-dur="90" style="cursor: pointer; font-size: 0.68rem;">1.5h (90m)</button>
+          <button type="button" class="pill-badge clarify-dur-chip" data-dur="120" style="cursor: pointer; font-size: 0.68rem;">2h (120m)</button>
+        </div>
+      </div>
+
+      <!-- Priority / Urgency Chips -->
+      <div style="margin-bottom: 10px;">
+        <div style="font-size: 0.65rem; font-weight: 700; color: var(--color-black-muted); text-transform: uppercase; margin-bottom: 4px;">
+          3. Urgency / Priority
+        </div>
+        <div id="clarify-urgency-row" style="display: flex; gap: 5px; flex-wrap: wrap;">
+          <button type="button" class="pill-badge clarify-urg-chip" data-urg="low" style="cursor: pointer; font-size: 0.68rem;">Low</button>
+          <button type="button" class="pill-badge clarify-urg-chip" data-urg="medium" style="cursor: pointer; font-size: 0.68rem;">Medium</button>
+          <button type="button" class="pill-badge clarify-urg-chip" data-urg="high" style="cursor: pointer; font-size: 0.68rem;">High (Priority)</button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+        <span style="font-size: 0.65rem; color: var(--color-black-muted);">
+          Tip: Tap chips or say <code>"Work, 30 mins, high"</code>
+        </span>
+        <button type="button" id="clarify-confirm-btn" class="btn btn-primary" style="padding: 6px 14px; font-size: var(--font-size-xs);">
+          Schedule to Orbit & Graph
+        </button>
       </div>
     </div>
 
@@ -121,10 +193,109 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
   const photoBtn = container.querySelector<HTMLButtonElement>('#photo-upload-btn')!;
   const fileInput = container.querySelector<HTMLInputElement>('#photo-file-input')!;
 
+  const liveSyntaxBar = container.querySelector<HTMLDivElement>('#live-syntax-guide-bar')!;
+  const liveSyntaxTemplate = container.querySelector<HTMLElement>('#live-syntax-template')!;
+  const liveSyntaxNext = container.querySelector<HTMLElement>('#live-syntax-next')!;
+
+  function updateSyntaxBar(hint: { template: string; nextPart: string } | null) {
+    if (!hint) {
+      liveSyntaxBar.style.display = 'none';
+      return;
+    }
+    liveSyntaxBar.style.display = 'flex';
+    liveSyntaxTemplate.textContent = hint.template;
+    liveSyntaxNext.textContent = hint.nextPart;
+  }
+
+  eventBus.on(AppEvents.VOICE_SYNTAX_HINT, (hint: { template: string; nextPart: string } | null) => {
+    updateSyntaxBar(hint);
+  });
+
   const guideDrawer = container.querySelector<HTMLDivElement>('#voice-guide-drawer')!;
   const guideClose = container.querySelector<HTMLButtonElement>('#voice-guide-close')!;
   const voiceSelect = container.querySelector<HTMLSelectElement>('#bruv-voice-select')!;
   const voiceTestBtn = container.querySelector<HTMLButtonElement>('#bruv-voice-test')!;
+
+  const clarifyDrawer = container.querySelector<HTMLDivElement>('#voice-clarify-drawer')!;
+  const clarifyHeading = container.querySelector<HTMLElement>('#clarify-task-heading')!;
+  const clarifyCancelBtn = container.querySelector<HTMLButtonElement>('#clarify-cancel-btn')!;
+  const clarifyConfirmBtn = container.querySelector<HTMLButtonElement>('#clarify-confirm-btn')!;
+
+  function renderClarifyDrawer(draft: PendingTaskDraft | null) {
+    if (!draft) {
+      clarifyDrawer.style.display = 'none';
+      return;
+    }
+
+    clarifyDrawer.style.display = 'block';
+    clarifyHeading.textContent = `"${draft.title}" at ${draft.startTime}`;
+
+    container.querySelectorAll<HTMLButtonElement>('.clarify-cat-chip').forEach(btn => {
+      const cat = btn.getAttribute('data-cat') as TaskCategory;
+      const isSel = cat === draft.category;
+      const col = CATEGORY_COLORS[cat] || '#E52E2E';
+      btn.style.background = isSel ? col : 'var(--bg-surface-elevated)';
+      btn.style.color = isSel ? '#FFFFFF' : 'var(--color-black-soft)';
+      btn.style.borderColor = isSel ? col : 'var(--border-medium)';
+    });
+
+    container.querySelectorAll<HTMLButtonElement>('.clarify-dur-chip').forEach(btn => {
+      const dur = parseInt(btn.getAttribute('data-dur') || '60', 10);
+      const isSel = dur === draft.durationMinutes;
+      btn.style.background = isSel ? 'var(--color-black-dominant)' : 'var(--bg-surface-elevated)';
+      btn.style.color = isSel ? '#FAF7F2' : 'var(--color-black-soft)';
+      btn.style.borderColor = isSel ? 'var(--color-black-dominant)' : 'var(--border-medium)';
+    });
+
+    container.querySelectorAll<HTMLButtonElement>('.clarify-urg-chip').forEach(btn => {
+      const urg = btn.getAttribute('data-urg') as UrgencyLevel;
+      const isSel = urg === draft.urgency;
+      btn.style.background = isSel
+        ? urg === 'high'
+          ? 'var(--color-red-primary)'
+          : 'var(--color-black-dominant)'
+        : 'var(--bg-surface-elevated)';
+      btn.style.color = isSel ? '#FFFFFF' : 'var(--color-black-soft)';
+      btn.style.borderColor = isSel
+        ? urg === 'high'
+          ? 'var(--color-red-primary)'
+          : 'var(--color-black-dominant)'
+        : 'var(--border-medium)';
+    });
+  }
+
+  eventBus.on(AppEvents.VOICE_CLARIFY_TASK, (draft: PendingTaskDraft | null) => {
+    renderClarifyDrawer(draft);
+  });
+
+  container.querySelectorAll<HTMLButtonElement>('.clarify-cat-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = btn.getAttribute('data-cat') as TaskCategory;
+      voiceService.updatePendingTaskDraft({ category: cat, categorySpecified: true });
+    });
+  });
+
+  container.querySelectorAll<HTMLButtonElement>('.clarify-dur-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dur = parseInt(btn.getAttribute('data-dur') || '60', 10);
+      voiceService.updatePendingTaskDraft({ durationMinutes: dur, durationSpecified: true });
+    });
+  });
+
+  container.querySelectorAll<HTMLButtonElement>('.clarify-urg-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const urg = btn.getAttribute('data-urg') as UrgencyLevel;
+      voiceService.updatePendingTaskDraft({ urgency: urg, urgencySpecified: true });
+    });
+  });
+
+  clarifyCancelBtn.addEventListener('click', () => {
+    voiceService.cancelPendingTaskDraft();
+  });
+
+  clarifyConfirmBtn.addEventListener('click', async () => {
+    await voiceService.confirmPendingTaskDraft(resolveActiveDate());
+  });
 
   const proposalsBox = container.querySelector<HTMLDivElement>('#ai-task-proposals')!;
   const proposalTitle = container.querySelector<HTMLElement>('#ai-proposal-title')!;
@@ -199,11 +370,33 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     });
   });
 
+  // Live syntax guide while typing in the input field
+  inputEl.addEventListener('input', () => {
+    const val = inputEl.value;
+    if (val.trim()) {
+      const hint = voiceService.getLiveSyntaxTemplate(val);
+      updateSyntaxBar(hint);
+    } else if (!voiceService.isListening()) {
+      updateSyntaxBar(null);
+    }
+  });
+
+  inputEl.addEventListener('blur', () => {
+    if (!voiceService.isListening() && !inputEl.value.trim()) {
+      updateSyntaxBar(null);
+    }
+  });
+
   // Handle Typed Input Submission
   inputEl.addEventListener('keydown', async (e) => {
     if (e.key === 'Enter' && inputEl.value.trim()) {
+      if (voiceService.isListening()) {
+        voiceService.stopListening();
+        return;
+      }
       const text = inputEl.value.trim();
       inputEl.value = '';
+      updateSyntaxBar(null);
       inputEl.disabled = true;
 
       if (voiceService.isCommandPhrase(text)) {
@@ -211,10 +404,14 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
         inputEl.disabled = false;
         inputEl.placeholder = outcome.headline;
       } else {
-        await noteRepository.createNote({ content: text });
+        await noteRepository.createNote({ content: text, tags: ['personal'] });
         eventBus.emit(AppEvents.NOTE_CREATED);
+        eventBus.emit(AppEvents.MASCOT_SPEAK, {
+          headline: 'Saved to Thoughts, Bruv!',
+          subspeech: `Saved "${text}" to your Thoughts tab and Mind Graph.`,
+        });
         inputEl.disabled = false;
-        inputEl.placeholder = 'Saved to second brain! Type another...';
+        inputEl.placeholder = 'Saved to Thoughts tab! Type another...';
       }
 
       setTimeout(() => {

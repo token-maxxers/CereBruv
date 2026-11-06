@@ -1,12 +1,14 @@
-import { taskRepository } from '../../services/storage';
+import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import {
   calculateOrbitSegments,
   analyzeDayWorkload,
+  fractionalHourToString,
+  CATEGORY_COLORS,
 } from './orbitCalculator';
 import type { OrbitArcSegment, Task } from '../../types/task';
 
-export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLElement {
+export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task) => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'card-section';
   container.style.padding = 'var(--spacing-3)';
@@ -55,6 +57,33 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
           <div style="font-size: var(--font-size-xl); font-weight: 800; color: var(--color-black-dominant); line-height: 1.1;" id="center-busy-hours">0h</div>
           <div style="font-size: 0.7rem; color: var(--color-black-muted); font-weight: 600;" id="center-free-time">Free: 16h</div>
         </div>
+
+        <!-- Interactive Arc Popover Card -->
+        <div id="orbit-arc-popover" style="display: none; position: absolute; inset: 18px; background: rgba(250, 247, 242, 0.98); backdrop-filter: blur(8px); border: 1.5px solid var(--border-medium); border-radius: var(--radius-lg); box-shadow: var(--shadow-float); padding: var(--spacing-3); z-index: 15; flex-direction: column; justify-content: space-between; text-align: left;">
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span id="popover-category-badge" style="font-size: 0.65rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; color: #FFFFFF; text-transform: uppercase; letter-spacing: 0.04em;"></span>
+                <span id="popover-urgency-badge" style="font-size: 0.62rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;"></span>
+              </div>
+              <button id="popover-close-btn" class="icon-btn" style="width: 24px; height: 24px; font-size: 1rem; border: none; background: var(--bg-surface-elevated);">&times;</button>
+            </div>
+            <h4 id="popover-task-title" style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); margin: 4px 0 2px; line-height: 1.25;"></h4>
+            <div id="popover-task-time" style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-soft);"></div>
+            <p id="popover-task-notes" style="font-size: 0.72rem; color: var(--color-black-muted); margin-top: 6px; line-height: 1.35; max-height: 56px; overflow-y: auto;"></p>
+          </div>
+          <div id="popover-actions-row" style="display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+            <button id="popover-complete-btn" class="pill-badge" style="flex: 1; cursor: pointer; justify-content: center; background: var(--color-black-dominant); color: #FAF7F2; border-color: var(--color-black-dominant); font-size: 0.68rem; padding: 6px 8px;">
+              Complete
+            </button>
+            <button id="popover-edit-btn" class="pill-badge" style="cursor: pointer; font-size: 0.68rem; padding: 6px 10px;">
+              Edit
+            </button>
+            <button id="popover-delete-btn" class="pill-badge" style="cursor: pointer; font-size: 0.68rem; padding: 6px 10px; color: var(--color-red-primary); border-color: rgba(229,46,46,0.35); background: var(--color-red-subtle);">
+              Delete
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -89,6 +118,61 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
   const nextTaskTimePill = container.querySelector<HTMLElement>('#next-task-time-pill')!;
   const nextTaskRationale = container.querySelector<HTMLElement>('#next-task-rationale')!;
   const weeklyStrip = container.querySelector<HTMLElement>('#weekly-strip')!;
+
+  const arcPopover = container.querySelector<HTMLDivElement>('#orbit-arc-popover')!;
+  const popoverCategoryBadge = container.querySelector<HTMLElement>('#popover-category-badge')!;
+  const popoverUrgencyBadge = container.querySelector<HTMLElement>('#popover-urgency-badge')!;
+  const popoverCloseBtn = container.querySelector<HTMLButtonElement>('#popover-close-btn')!;
+  const popoverTaskTitle = container.querySelector<HTMLElement>('#popover-task-title')!;
+  const popoverTaskTime = container.querySelector<HTMLElement>('#popover-task-time')!;
+  const popoverTaskNotes = container.querySelector<HTMLElement>('#popover-task-notes')!;
+  const popoverActionsRow = container.querySelector<HTMLDivElement>('#popover-actions-row')!;
+  const popoverCompleteBtn = container.querySelector<HTMLButtonElement>('#popover-complete-btn')!;
+  const popoverEditBtn = container.querySelector<HTMLButtonElement>('#popover-edit-btn')!;
+  const popoverDeleteBtn = container.querySelector<HTMLButtonElement>('#popover-delete-btn')!;
+
+  let currentSegments: OrbitArcSegment[] = [];
+  let currentDayTasks: Task[] = [];
+  let activePopoverTask: Task | null = null;
+
+  popoverCloseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    arcPopover.style.display = 'none';
+    activePopoverTask = null;
+  });
+
+  popoverCompleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!activePopoverTask) return;
+    const updated = await taskRepository.toggleTaskCompletion(activePopoverTask.id);
+    if (updated.completed) {
+      const stats = await userStatsRepository.incrementTaskCount();
+      eventBus.emit(AppEvents.STATS_UPDATED, stats);
+    }
+    eventBus.emit(AppEvents.TASK_COMPLETED, updated);
+    arcPopover.style.display = 'none';
+    activePopoverTask = null;
+    drawOrbit();
+  });
+
+  popoverEditBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!activePopoverTask) return;
+    const taskToEdit = activePopoverTask;
+    arcPopover.style.display = 'none';
+    activePopoverTask = null;
+    onOpenTaskForm(selectedDate, taskToEdit);
+  });
+
+  popoverDeleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!activePopoverTask) return;
+    await taskRepository.deleteTask(activePopoverTask.id);
+    eventBus.emit(AppEvents.TASK_DELETED, activePopoverTask.id);
+    arcPopover.style.display = 'none';
+    activePopoverTask = null;
+    drawOrbit();
+  });
 
   function getTodayString(): string {
     return formatLocalDate();
@@ -134,6 +218,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
     // Calculate workload and segments for this day
     const analysis = analyzeDayWorkload(dayTasks, currentFraction);
     const segments = calculateOrbitSegments(dayTasks);
+    currentSegments = segments;
+    currentDayTasks = dayTasks;
 
     // Update workload badges
     const busyHours = (analysis.totalBusyMinutes / 60).toFixed(1);
@@ -345,11 +431,97 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
     }
   }
 
-  canvas.addEventListener('click', () => {
+  function isHourWithinSegment(hour: number, seg: OrbitArcSegment): boolean {
+    if (seg.endHour > 24) {
+      return (hour >= seg.startHour && hour <= 24) || (hour >= 0 && hour <= seg.endHour - 24);
+    }
+    return hour >= seg.startHour && hour <= seg.endHour;
+  }
+
+  function showSegmentPopover(seg: OrbitArcSegment) {
+    const startStr = fractionalHourToString(seg.startHour);
+    const endStr = fractionalHourToString(seg.endHour);
+
+    if (seg.taskId === 'sleep_block') {
+      activePopoverTask = null;
+      popoverCategoryBadge.textContent = 'Rest & Sleep';
+      popoverCategoryBadge.style.background = '#7C3AED';
+      popoverUrgencyBadge.textContent = '8h Recovery';
+      popoverUrgencyBadge.style.background = '#EDE9FE';
+      popoverUrgencyBadge.style.color = '#5B21B6';
+      popoverTaskTitle.textContent = 'Rest & Sleep Window';
+      popoverTaskTime.textContent = `${startStr} – ${endStr} (23:00 to 07:00)`;
+      popoverTaskNotes.textContent = 'Protected 8-hour downtime block so your Focus Orbit calculates realistic 16h waking capacity.';
+      popoverActionsRow.style.display = 'none';
+      arcPopover.style.display = 'flex';
+      return;
+    }
+
+    const matchedTask = currentDayTasks.find(t => t.id === seg.taskId) || null;
+    activePopoverTask = matchedTask;
+
+    const catColor = CATEGORY_COLORS[seg.category] || '#E52E2E';
+    popoverCategoryBadge.textContent = seg.category;
+    popoverCategoryBadge.style.background = catColor;
+
+    popoverUrgencyBadge.textContent = `${seg.urgency} priority`;
+    if (seg.urgency === 'high') {
+      popoverUrgencyBadge.style.background = 'var(--color-red-subtle)';
+      popoverUrgencyBadge.style.color = 'var(--color-red-primary)';
+    } else if (seg.urgency === 'medium') {
+      popoverUrgencyBadge.style.background = '#FEF3C7';
+      popoverUrgencyBadge.style.color = '#B45309';
+    } else {
+      popoverUrgencyBadge.style.background = 'var(--bg-surface-elevated)';
+      popoverUrgencyBadge.style.color = 'var(--color-black-muted)';
+    }
+
+    popoverTaskTitle.textContent = seg.title;
+    const durationMins = matchedTask ? matchedTask.durationMinutes : Math.round((seg.endHour - seg.startHour) * 60);
+    popoverTaskTime.textContent = `${startStr} – ${endStr} (${durationMins} mins)${seg.completed ? ' • Completed' : ''}`;
+    popoverTaskNotes.textContent = matchedTask?.notes || 'Scheduled on your Focus Orbit. Tap Edit to adjust category, time, or duration.';
+
+    popoverCompleteBtn.textContent = seg.completed ? 'Reopen Task' : 'Complete (+25 XP)';
+    popoverActionsRow.style.display = matchedTask ? 'flex' : 'none';
+    arcPopover.style.display = 'flex';
+  }
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const dx = x - cx;
+    const dy = y - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Check if user clicked on the circular dial track (radius 108 ± 22px)
+    if (dist >= 84 && dist <= 130) {
+      let angle = Math.atan2(dy, dx) + Math.PI / 2;
+      if (angle < 0) angle += Math.PI * 2;
+      const clickedHour = (angle / (Math.PI * 2)) * 24;
+
+      // Prioritize user task arcs first, then sleep_block
+      const taskSegs = currentSegments.filter(s => s.taskId !== 'sleep_block');
+      const hitTaskSeg = taskSegs.find(s => isHourWithinSegment(clickedHour, s));
+      if (hitTaskSeg) {
+        showSegmentPopover(hitTaskSeg);
+        return;
+      }
+
+      const sleepSeg = currentSegments.find(s => s.taskId === 'sleep_block');
+      if (sleepSeg && isHourWithinSegment(clickedHour, sleepSeg)) {
+        showSegmentPopover(sleepSeg);
+        return;
+      }
+    }
+
     onOpenTaskForm(selectedDate);
   });
 
   eventBus.on(AppEvents.TASK_CREATED, () => drawOrbit());
+  eventBus.on(AppEvents.TASK_UPDATED, () => drawOrbit());
   eventBus.on(AppEvents.TASK_COMPLETED, () => drawOrbit());
   eventBus.on(AppEvents.TASK_DELETED, () => drawOrbit());
   eventBus.on(AppEvents.DATE_SELECTED, (newDate: string) => {

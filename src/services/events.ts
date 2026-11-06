@@ -37,9 +37,13 @@ export const AppEvents = {
   TASK_DELETED: 'task:deleted',
   TASK_COMPLETED: 'task:completed',
   NOTE_CREATED: 'note:created',
+  NOTE_UPDATED: 'note:updated',
+  NOTE_DELETED: 'note:deleted',
   STATS_UPDATED: 'stats:updated',
   DATE_SELECTED: 'date:selected',
   MASCOT_SPEAK: 'mascot:speak',
   VOICE_STATE_CHANGED: 'voice:state_changed',
+  VOICE_SYNTAX_HINT: 'voice:syntax_hint',
+  VOICE_CLARIFY_TASK: 'voice:clarify_task',
   NAVIGATE_TAB: 'nav:tab',
 } as const;

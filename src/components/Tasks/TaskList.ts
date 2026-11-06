@@ -2,7 +2,7 @@ import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import type { Task } from '../../types/task';
 
-export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement {
+export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'card-section';
 
@@ -87,12 +87,20 @@ export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement
         </div>
       </div>
 
-      <button class="task-delete-btn" data-delete-id="${task.id}" title="Delete Task">
-        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button class="task-delete-btn task-edit-btn" data-edit-id="${task.id}" title="Edit Task" style="color: var(--color-black-muted);">
+          <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </button>
+        <button class="task-delete-btn" data-delete-id="${task.id}" title="Delete Task">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
     `;
 
     // Checkbox toggle handler
@@ -105,6 +113,12 @@ export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement
       }
       eventBus.emit(AppEvents.TASK_COMPLETED, updated);
       loadTasks();
+    });
+
+    // Edit handler
+    const editBtn = el.querySelector('.task-edit-btn')!;
+    editBtn.addEventListener('click', () => {
+      onOpenForm(task.date, task);
     });
 
     // Delete handler
@@ -128,6 +142,8 @@ export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement
 
   // Subscribe to changes and day selections
   eventBus.on(AppEvents.TASK_CREATED, () => loadTasks());
+  eventBus.on(AppEvents.TASK_UPDATED, () => loadTasks());
+  eventBus.on(AppEvents.TASK_COMPLETED, () => loadTasks());
   eventBus.on(AppEvents.TASK_DELETED, () => loadTasks());
   eventBus.on(AppEvents.DATE_SELECTED, (newDate: string) => {
     activeDate = newDate;

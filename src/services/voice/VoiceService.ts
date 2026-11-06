@@ -19,9 +19,24 @@ export interface ParsedVoiceCommand {
   durationMinutes: number;
   durationSpecified?: boolean;
   category: TaskCategory;
+  categorySpecified?: boolean;
   urgency: UrgencyLevel;
-  targetTab?: 'orbit' | 'tasks' | 'graph' | 'cloud';
+  urgencySpecified?: boolean;
+  targetTab?: 'orbit' | 'tasks' | 'thoughts' | 'graph' | 'cloud';
   rawText: string;
+}
+
+export interface PendingTaskDraft {
+  title: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  durationSpecified: boolean;
+  category: TaskCategory;
+  categorySpecified: boolean;
+  urgency: UrgencyLevel;
+  urgencySpecified: boolean;
+  rawTranscript: string;
 }
 
 export interface VoiceExecutionOutcome {
@@ -95,8 +110,11 @@ export class VoiceService {
   private activeStream: MediaStream | null = null;
   private activeAudioCtx: AudioContext | null = null;
   private silenceTimer: ReturnType<typeof setInterval> | null = null;
+  private speechInactivityTimer: ReturnType<typeof setTimeout> | null = null;
   private maxRecordTimeout: ReturnType<typeof setTimeout> | null = null;
+  private manualStopRequested: boolean = false;
   private useMediaRecorderFallback: boolean = false;
+  private pendingTaskDraft: PendingTaskDraft | null = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -133,6 +151,156 @@ export class VoiceService {
 
   public isListening(): boolean {
     return this.listening;
+  }
+
+  /**
+   * Computes a live syntax guide template based on what the user has spoken or typed so far.
+   */
+  public getLiveSyntaxTemplate(rawInput: string): { template: string; nextPart: string } | null {
+    const trimmed = rawInput.trim();
+    if (!trimmed) {
+      return {
+        template: 'Say: "Add [Task] at [Time]" • "Done with [Task]" • "Note [Thought]" • "What\'s my schedule?"',
+        nextPart: '[Command]',
+      };
+    }
+
+    const normalized = this.normalizeTranscript(trimmed);
+    const body = normalized.replace(/^hey bruv[,.:!\s]*/i, '').trim();
+    const lower = body.toLowerCase();
+
+    if (/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(lower)) {
+      const afterVerb = body.replace(/^(?:please\s+)?(?:add|schedule|plan|book|set|create)\s*/i, '').trim();
+      const hasTime = /\b(at|by|around|from|noon|midnight|morning|afternoon|evening|tonight|\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?|:))\b/i.test(afterVerb);
+      const hasDuration = /\b(for\s+\d+|\d+\s*(?:hours?|hrs?|hr|minutes?|mins?|min))\b/i.test(afterVerb);
+      const hasCategory = /\b(study|work|personal|event|rest)\b/i.test(afterVerb);
+
+      if (!afterVerb) {
+        return {
+          template: 'Add [Task Name] at [Time] for [Duration] under [Study | Work | Personal | Event | Rest]',
+          nextPart: 'Say [Task Name] next...',
+        };
+      }
+      if (!hasTime) {
+        return {
+          template: `Add "${afterVerb}" at [Time] for [Duration] under [Category]`,
+          nextPart: 'Say "at [Time]" next (e.g. "at 8 AM")...',
+        };
+      }
+      if (!hasDuration) {
+        return {
+          template: `${trimmed} for [Duration] under [Study | Work | Personal | Event | Rest]`,
+          nextPart: 'Optional: Say "for [Duration]" or tap avatar to finish',
+        };
+      }
+      if (!hasCategory) {
+        return {
+          template: `${trimmed} under [Study | Work | Personal | Event | Rest]`,
+          nextPart: 'Optional: Say "under [Category]" or tap avatar to finish',
+        };
+      }
+      return {
+        template: `Ready: "${trimmed}"`,
+        nextPart: 'Tap CereBruv avatar (or pause) to schedule!',
+      };
+    }
+
+    if (/^(?:done|done with|complete|finish|check off|mark)\b/i.test(lower)) {
+      const afterVerb = body.replace(/^(?:done with|done|complete|finish|check off|mark)\s*/i, '').trim();
+      if (!afterVerb) {
+        return {
+          template: 'Done with [Task Name]',
+          nextPart: 'Say the [Task Name] you completed...',
+        };
+      }
+      return {
+        template: `Done with "${afterVerb}" (+25 XP)`,
+        nextPart: 'Tap CereBruv avatar (or pause) to mark complete!',
+      };
+    }
+
+    if (/^(?:note|take a note|save note|brain dump|remember to|remember)\b/i.test(lower)) {
+      const afterVerb = body.replace(/^(?:note|take a note|save note|brain dump|remember to|remember)\s*[:,-]?\s*/i, '').trim();
+      if (!afterVerb) {
+        return {
+          template: 'Note [Your Thought or Idea] under [Study | Work | Personal]',
+          nextPart: 'Speak your thought or idea next...',
+        };
+      }
+      return {
+        template: `Note: "${afterVerb}" → Thoughts & Mind Graph`,
+        nextPart: 'Tap CereBruv avatar (or pause) to save thought!',
+      };
+    }
+
+    if (/^(?:open|show|go to|switch to)\b/i.test(lower)) {
+      return {
+        template: 'Open [orbit | tasks | thoughts | graph | cloud]',
+        nextPart: 'Say which tab to open...',
+      };
+    }
+
+    if (/^(?:what|read|check|tell|how|schedule|status)\b/i.test(lower)) {
+      return {
+        template: "What's my schedule [today | tomorrow]?",
+        nextPart: 'Tap CereBruv avatar (or pause) to hear schedule!',
+      };
+    }
+
+    return {
+      template: `"${trimmed}" — Add "at [Time]" to schedule as Task, or tap avatar to save as Thought`,
+      nextPart: 'Keep speaking or tap CereBruv avatar when finished',
+    };
+  }
+
+  public getPendingTaskDraft(): PendingTaskDraft | null {
+    return this.pendingTaskDraft;
+  }
+
+  public updatePendingTaskDraft(updates: Partial<PendingTaskDraft>): PendingTaskDraft | null {
+    if (!this.pendingTaskDraft) return null;
+    this.pendingTaskDraft = {
+      ...this.pendingTaskDraft,
+      ...updates,
+    };
+    eventBus.emit(AppEvents.VOICE_CLARIFY_TASK, this.pendingTaskDraft);
+    return this.pendingTaskDraft;
+  }
+
+  public cancelPendingTaskDraft(): void {
+    this.pendingTaskDraft = null;
+    eventBus.emit(AppEvents.VOICE_CLARIFY_TASK, null);
+  }
+
+  public async confirmPendingTaskDraft(currentSelectedDate: string): Promise<VoiceExecutionOutcome | null> {
+    const draft = this.pendingTaskDraft;
+    if (!draft) return null;
+    this.pendingTaskDraft = null;
+    eventBus.emit(AppEvents.VOICE_CLARIFY_TASK, null);
+
+    await taskRepository.createTask({
+      title: draft.title,
+      category: draft.category,
+      date: draft.date,
+      startTime: draft.startTime,
+      durationMinutes: draft.durationMinutes,
+      urgency: draft.urgency,
+      notes: `Voice Command: "${draft.rawTranscript}"`,
+    });
+
+    if (draft.date !== currentSelectedDate) {
+      eventBus.emit(AppEvents.DATE_SELECTED, draft.date);
+    }
+    eventBus.emit(AppEvents.TASK_CREATED);
+
+    const dateLabel = this.formatSpokenDateLabel(draft.date);
+    const timeLabel = this.formatSpokenTime(draft.startTime);
+    const headline = `I got you, Bruv — Added "${draft.title}"`;
+    const spokenReply = `I got you, Bruv. Scheduled ${draft.title} under ${draft.category} (${draft.urgency} priority) for ${dateLabel} at ${timeLabel}, for ${draft.durationMinutes} minutes.`;
+
+    eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
+    this.speak(spokenReply);
+    return { intent: 'create_task', headline, spokenReply };
   }
 
   public getEnglishVoices(): SpeechSynthesisVoice[] {
@@ -198,7 +366,15 @@ export class VoiceService {
 
     this.stopSpeaking();
     this.listening = true;
-    this.emitState('Listening, Bruv... Speak your command');
+    this.manualStopRequested = false;
+    this.emitState('Listening, Bruv... Tap avatar again when finished');
+
+    const initialHint = this.getLiveSyntaxTemplate('');
+    eventBus.emit(AppEvents.VOICE_SYNTAX_HINT, initialHint);
+    eventBus.emit(AppEvents.MASCOT_SPEAK, {
+      headline: 'Listening, Bruv... (Tap avatar when done)',
+      subspeech: initialHint ? initialHint.template : 'Speak at your own pace — I am listening.',
+    });
 
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -211,37 +387,52 @@ export class VoiceService {
     try {
       const recognition = new SpeechRec();
       this.activeRecognition = recognition;
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
-      let finalTranscript = '';
+      let accumulatedTranscript = '';
       let currentInterim = '';
       let switchedToFallback = false;
 
-      recognition.onresult = (event: any) => {
-        let interim = '';
-        let finalChunk = '';
+      const resetInactivityTimer = () => {
+        if (this.speechInactivityTimer) {
+          clearTimeout(this.speechInactivityTimer);
+        }
+        // Hold mic open for 6.5 seconds after the last spoken word so user can think & follow syntax template
+        this.speechInactivityTimer = setTimeout(() => {
+          if (this.listening) {
+            this.stopListening();
+          }
+        }, 6500);
+      };
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+      resetInactivityTimer();
+
+      recognition.onresult = (event: any) => {
+        resetInactivityTimer();
+        let sessionFinal = '';
+        let interim = '';
+
+        for (let i = 0; i < event.results.length; i++) {
           const piece = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalChunk += piece;
+            sessionFinal += ' ' + piece;
           } else {
-            interim += piece;
+            interim += ' ' + piece;
           }
         }
 
-        if (finalChunk) {
-          finalTranscript = (finalTranscript + ' ' + finalChunk).trim();
-        }
-        currentInterim = interim;
-        const combined = (finalTranscript + ' ' + currentInterim).trim();
+        const combined = (accumulatedTranscript + ' ' + sessionFinal + ' ' + interim).replace(/\s{2,}/g, ' ').trim();
+        currentInterim = combined;
+
         if (combined) {
           onTranscriptUpdate?.(combined);
+          const hint = this.getLiveSyntaxTemplate(combined);
+          eventBus.emit(AppEvents.VOICE_SYNTAX_HINT, hint);
           eventBus.emit(AppEvents.MASCOT_SPEAK, {
-            headline: 'Listening, Bruv...',
-            subspeech: `"${combined}"`,
+            headline: `Listening: "${combined}"`,
+            subspeech: hint ? `${hint.template} — (${hint.nextPart})` : 'Keep speaking, or tap avatar to finish.',
           });
         }
       };
@@ -256,8 +447,18 @@ export class VoiceService {
           return;
         }
 
+        // Ignore 'no-speech' while user is still thinking before manual stop / inactivity timeout
+        if (event.error === 'no-speech' && !this.manualStopRequested) {
+          return;
+        }
+
+        if (this.speechInactivityTimer) {
+          clearTimeout(this.speechInactivityTimer);
+          this.speechInactivityTimer = null;
+        }
         this.listening = false;
         this.activeRecognition = null;
+        eventBus.emit(AppEvents.VOICE_SYNTAX_HINT, null);
         const msg =
           event.error === 'not-allowed'
             ? 'Microphone permission blocked. Allow mic access in browser bar, Bruv.'
@@ -271,11 +472,30 @@ export class VoiceService {
 
       recognition.onend = async () => {
         if (switchedToFallback) return;
+
+        // If browser auto-ended recognition early during a brief pause and user hasn't stopped or timed out, seamlessly restart
+        if (this.listening && !this.manualStopRequested && this.speechInactivityTimer) {
+          if (currentInterim) {
+            accumulatedTranscript = currentInterim;
+          }
+          try {
+            recognition.start();
+            return;
+          } catch {
+            // Fall through to finalize if restart fails
+          }
+        }
+
+        if (this.speechInactivityTimer) {
+          clearTimeout(this.speechInactivityTimer);
+          this.speechInactivityTimer = null;
+        }
         this.listening = false;
         this.activeRecognition = null;
+        eventBus.emit(AppEvents.VOICE_SYNTAX_HINT, null);
         this.emitState();
 
-        const spoken = (finalTranscript || currentInterim).trim();
+        const spoken = (currentInterim || accumulatedTranscript).trim();
         if (spoken) {
           onTranscriptUpdate?.('');
           await this.executeVoiceCommand(spoken, getSelectedDate());
@@ -295,6 +515,11 @@ export class VoiceService {
   }
 
   public stopListening(): void {
+    this.manualStopRequested = true;
+    if (this.speechInactivityTimer) {
+      clearTimeout(this.speechInactivityTimer);
+      this.speechInactivityTimer = null;
+    }
     if (this.activeRecognition) {
       try {
         this.activeRecognition.stop();
@@ -440,19 +665,19 @@ export class VoiceService {
           } else if (hasSpoken) {
             if (!silenceStart) {
               silenceStart = Date.now();
-            } else if (Date.now() - silenceStart > 1400) {
+            } else if (Date.now() - silenceStart > 4500) {
               this.stopListening();
             }
           }
         }, 120);
       } catch {}
 
-      // Safety max recording duration (7 seconds)
+      // Safety max recording duration (18 seconds)
       this.maxRecordTimeout = setTimeout(() => {
         if (this.listening) {
           this.stopListening();
         }
-      }, 7000);
+      }, 18000);
     } catch {
       this.listening = false;
       this.emitState();
@@ -523,13 +748,15 @@ export class VoiceService {
   }
 
   public isCommandPhrase(input: string): boolean {
+    if (this.pendingTaskDraft) return true;
     const normalized = this.normalizeTranscript(input).toLowerCase();
     if (
       normalized.startsWith('hey bruv') ||
-      /^(schedule|add|plan|book)\s+.+\b(at|tomorrow|today|morning|afternoon|evening|tonight|noon)\b/i.test(normalized) ||
-      /^(done with|complete|finish)\s+/i.test(normalized) ||
+      /^(schedule|add|plan|book|create)\b/i.test(normalized) ||
+      /^(done|done with|complete|finish)\b/i.test(normalized) ||
+      /^(note|take a note|save note|remember)\b/i.test(normalized) ||
       /^(what('s| is) my schedule|read my schedule|what('s| is) next)/i.test(normalized) ||
-      /^open\s+(orbit|tasks|graph|cloud)\b/i.test(normalized)
+      /^open\s*(orbit|tasks|thoughts|notes|graph|cloud)?\b/i.test(normalized)
     ) {
       return true;
     }
@@ -545,16 +772,20 @@ export class VoiceService {
     const lowerBody = body.toLowerCase();
 
     // RULE 1: Navigation
-    const navMatch = lowerBody.match(/^(?:open|show|go to|switch to)\s+(?:the\s+|my\s+)?(orbit|tasks?|graph|cloud)\b/i);
+    const navMatch = lowerBody.match(/^(?:open|show|go to|switch to)\s+(?:the\s+|my\s+)?(orbit|tasks?|thoughts?|notes?|graph|cloud)\b/i);
     if (navMatch) {
       const rawTab = navMatch[1].toLowerCase();
-      const targetTab = rawTab.startsWith('task') ? 'tasks' : (rawTab as 'orbit' | 'graph' | 'cloud');
+      const targetTab = rawTab.startsWith('task')
+        ? 'tasks'
+        : rawTab.startsWith('thought') || rawTab.startsWith('note')
+          ? 'thoughts'
+          : (rawTab as 'orbit' | 'graph' | 'cloud');
       return {
         intent: 'navigate_tab',
         title: targetTab,
         date: referenceDateStr,
         startTime: '09:00',
-        durationMinutes: 30,
+        durationMinutes: 60,
         category: 'personal',
         urgency: 'medium',
         targetTab,
@@ -628,16 +859,22 @@ export class VoiceService {
     const urgencyExtraction = this.extractUrgency(working);
     working = urgencyExtraction.remainingText;
 
+    const categoryExtraction = this.extractExplicitCategory(working);
+    working = categoryExtraction.remainingText;
+
     const startsWithTaskVerb = /^(?:please\s+)?(?:add|schedule|plan|book|set|create)\b/i.test(working);
 
     if (!startsWithTaskVerb && !dateExtraction.matched && !timeExtraction.matched && !durationExtraction.matched) {
+      const inferredNoteCat = categoryExtraction.matched
+        ? categoryExtraction.category
+        : this.inferCategory(body || rawTranscript);
       return {
         intent: 'create_note',
         title: body || rawTranscript,
         date: referenceDateStr,
         startTime: timeExtraction.startTime,
         durationMinutes: durationExtraction.durationMinutes,
-        category: 'personal',
+        category: inferredNoteCat,
         urgency: 'medium',
         rawText: body || rawTranscript,
       };
@@ -656,7 +893,9 @@ export class VoiceService {
     }
 
     const titleCased = cleanedTitle.charAt(0).toUpperCase() + cleanedTitle.slice(1);
-    const category = this.inferCategory(titleCased + ' ' + rawTranscript);
+    const category = categoryExtraction.matched
+      ? categoryExtraction.category
+      : this.inferCategory(titleCased + ' ' + rawTranscript);
 
     return {
       intent: 'create_task',
@@ -666,7 +905,9 @@ export class VoiceService {
       durationMinutes: durationExtraction.durationMinutes,
       durationSpecified: durationExtraction.matched,
       category,
+      categorySpecified: categoryExtraction.matched,
       urgency: urgencyExtraction.urgency,
+      urgencySpecified: urgencyExtraction.matched,
       rawText: rawTranscript,
     };
   }
@@ -675,6 +916,56 @@ export class VoiceService {
     rawTranscript: string,
     currentSelectedDate: string
   ): Promise<VoiceExecutionOutcome> {
+    // 0. If awaiting clarification for a pending task draft, check if user is answering details via voice/text
+    if (this.pendingTaskDraft) {
+      const normalized = this.normalizeTranscript(rawTranscript).toLowerCase();
+      if (/\b(cancel|nevermind|never mind|stop|discard)\b/i.test(normalized)) {
+        this.cancelPendingTaskDraft();
+        const headline = 'Task draft cancelled, Bruv.';
+        const spokenReply = 'Got it, Bruv. Cancelled that task draft.';
+        eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
+        this.speak(spokenReply);
+        return { intent: 'create_task', headline, spokenReply };
+      }
+
+      const catCheck = this.extractExplicitCategory(normalized, true);
+      const durCheck = this.extractDuration(normalized);
+      const urgCheck = this.extractUrgency(normalized, true);
+      const isConfirmWord = /\b(confirm|yes|yeah|yep|save|schedule it|add it|looks good|done|ok|okay)\b/i.test(normalized);
+
+      if (catCheck.matched || durCheck.matched || urgCheck.matched || isConfirmWord) {
+        if (catCheck.matched) {
+          this.pendingTaskDraft.category = catCheck.category;
+          this.pendingTaskDraft.categorySpecified = true;
+        }
+        if (durCheck.matched) {
+          this.pendingTaskDraft.durationMinutes = durCheck.durationMinutes;
+          this.pendingTaskDraft.durationSpecified = true;
+        }
+        if (urgCheck.matched) {
+          this.pendingTaskDraft.urgency = urgCheck.urgency;
+          this.pendingTaskDraft.urgencySpecified = true;
+        }
+
+        const confirmed = await this.confirmPendingTaskDraft(currentSelectedDate);
+        if (confirmed) return confirmed;
+      }
+      // If user said a completely new command, clear draft and process new command
+      this.cancelPendingTaskDraft();
+    }
+
+    // 0.5. If user only said a bare command starter word (e.g. "add", "done with", "note") without a task/thought name yet, show syntax guide instead of creating a placeholder
+    const bareBody = this.normalizeTranscript(rawTranscript).replace(/^hey bruv[,.:!\s]*/i, '').trim().toLowerCase();
+    if (/^(?:please\s+)?(?:add|schedule|plan|book|set|create|done|done with|complete|finish|note|take a note|save note|open)$/i.test(bareBody)) {
+      const hint = this.getLiveSyntaxTemplate(rawTranscript);
+      eventBus.emit(AppEvents.VOICE_SYNTAX_HINT, hint);
+      const headline = hint ? `Syntax: ${hint.template}` : 'Tell me the task name, Bruv.';
+      const spokenReply = `I'm ready, Bruv. Follow the template below: ${hint ? hint.template : 'Add task name at time'}.`;
+      eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
+      this.speak(spokenReply);
+      return { intent: 'query_schedule', headline, spokenReply };
+    }
+
     const parsed = this.parseCommandLocally(rawTranscript, currentSelectedDate);
 
     // 1. Navigate Tab
@@ -757,8 +1048,38 @@ export class VoiceService {
       }
     }
 
-    // 4. Create Task
+    // 4. Create Task (with interactive Category / Duration / Priority clarification if not all specified)
     if (parsed.intent === 'create_task') {
+      const allDetailsSpecified =
+        Boolean(parsed.categorySpecified) &&
+        Boolean(parsed.durationSpecified) &&
+        Boolean(parsed.urgencySpecified);
+
+      if (!allDetailsSpecified) {
+        this.pendingTaskDraft = {
+          title: parsed.title,
+          date: parsed.date,
+          startTime: parsed.startTime,
+          durationMinutes: parsed.durationMinutes,
+          durationSpecified: Boolean(parsed.durationSpecified),
+          category: parsed.category,
+          categorySpecified: Boolean(parsed.categorySpecified),
+          urgency: parsed.urgency,
+          urgencySpecified: Boolean(parsed.urgencySpecified),
+          rawTranscript,
+        };
+
+        const dateLabel = this.formatSpokenDateLabel(parsed.date);
+        const timeLabel = this.formatSpokenTime(parsed.startTime);
+        const headline = `Got "${parsed.title}" (${dateLabel} at ${timeLabel}) — Confirm details, Bruv:`;
+        const spokenReply = `I got "${parsed.title}" for ${dateLabel} at ${timeLabel}. What category, duration, and priority should I set, Bruv? You can say it or tap below.`;
+
+        eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
+        eventBus.emit(AppEvents.VOICE_CLARIFY_TASK, this.pendingTaskDraft);
+        this.speak(spokenReply);
+        return { intent: 'create_task', headline, spokenReply };
+      }
+
       await taskRepository.createTask({
         title: parsed.title,
         category: parsed.category,
@@ -777,21 +1098,23 @@ export class VoiceService {
       const dateLabel = this.formatSpokenDateLabel(parsed.date);
       const timeLabel = this.formatSpokenTime(parsed.startTime);
       const headline = `I got you, Bruv — Added "${parsed.title}"`;
-      const spokenReply = parsed.durationSpecified
-        ? `I got you, Bruv. Added ${parsed.title} for ${dateLabel} at ${timeLabel}, for ${parsed.durationMinutes} minutes.`
-        : `I got you, Bruv. Added ${parsed.title} for ${dateLabel} at ${timeLabel}.`;
+      const spokenReply = `I got you, Bruv. Scheduled ${parsed.title} under ${parsed.category} (${parsed.urgency} priority) for ${dateLabel} at ${timeLabel}, for ${parsed.durationMinutes} minutes.`;
 
       eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
       this.speak(spokenReply);
       return { intent: 'create_task', headline, spokenReply };
     }
 
-    // 5. Create Note
-    await noteRepository.createNote({ content: parsed.rawText });
+    // 5. Create Note (Saved to Thoughts Tab & linked to Mind Graph Category Hub)
+    const noteCategory = this.inferCategory(parsed.rawText);
+    await noteRepository.createNote({
+      content: parsed.rawText,
+      tags: [noteCategory],
+    });
     eventBus.emit(AppEvents.NOTE_CREATED);
 
-    const headline = 'I got you, Bruv — Note saved.';
-    const spokenReply = `I got you, Bruv. Saved "${parsed.rawText}" to your second brain.`;
+    const headline = `I got you, Bruv — Saved to Thoughts (${noteCategory}).`;
+    const spokenReply = `I got you, Bruv. Saved "${parsed.rawText}" to your Thoughts tab and linked it to ${noteCategory} in your Mind Graph.`;
     eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
     this.speak(spokenReply);
     return { intent: 'create_note', headline, spokenReply };
@@ -915,17 +1238,39 @@ export class VoiceService {
     return { durationMinutes: 60, remainingText: remaining, matched: false };
   }
 
-  private extractUrgency(text: string): { urgency: UrgencyLevel; remainingText: string } {
+  private extractUrgency(text: string, allowBareWords = false): { urgency: UrgencyLevel; remainingText: string; matched: boolean } {
     let remaining = text;
-    if (/\b(urgent|high priority|critical|important|asap)\b/i.test(remaining)) {
-      remaining = remaining.replace(/\b(urgent|high priority|critical|important|asap)\b/gi, ' ');
-      return { urgency: 'high', remainingText: remaining };
+    if (/\b(urgent|high priority|critical|important|asap)\b/i.test(remaining) || (allowBareWords && /\bhigh\b/i.test(remaining))) {
+      remaining = remaining.replace(/\b(urgent|high priority|critical|important|asap|high)\b/gi, ' ');
+      return { urgency: 'high', remainingText: remaining, matched: true };
     }
-    if (/\b(low priority|optional|whenever)\b/i.test(remaining)) {
-      remaining = remaining.replace(/\b(low priority|optional|whenever)\b/gi, ' ');
-      return { urgency: 'low', remainingText: remaining };
+    if (/\b(low priority|optional|whenever)\b/i.test(remaining) || (allowBareWords && /\blow\b/i.test(remaining))) {
+      remaining = remaining.replace(/\b(low priority|optional|whenever|low)\b/gi, ' ');
+      return { urgency: 'low', remainingText: remaining, matched: true };
     }
-    return { urgency: 'medium', remainingText: remaining };
+    if (/\b(medium priority|normal priority)\b/i.test(remaining) || (allowBareWords && /\bmedium\b/i.test(remaining))) {
+      remaining = remaining.replace(/\b(medium priority|normal priority|medium)\b/gi, ' ');
+      return { urgency: 'medium', remainingText: remaining, matched: true };
+    }
+    return { urgency: 'medium', remainingText: remaining, matched: false };
+  }
+
+  private extractExplicitCategory(
+    text: string,
+    allowBareCategory = false
+  ): { category: TaskCategory; remainingText: string; matched: boolean } {
+    let remaining = text;
+    const explicitRegex = allowBareCategory
+      ? /\b(?:(?:under|in|for|category)\s+)?(study|work|personal|event|rest)\b(?:\s+category)?/i
+      : /\b(?:(?:under|in|category)\s+(study|work|personal|event|rest)|(study|work|personal|event|rest)\s+category)\b/i;
+
+    const match = remaining.match(explicitRegex);
+    if (match) {
+      const cat = (match[1] || match[2]).toLowerCase() as TaskCategory;
+      remaining = remaining.replace(explicitRegex, ' ');
+      return { category: cat, remainingText: remaining, matched: true };
+    }
+    return { category: 'personal', remainingText: remaining, matched: false };
   }
 
   private inferCategory(text: string): TaskCategory {

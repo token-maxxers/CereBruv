@@ -18,6 +18,7 @@ import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
 import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
 import { renderDotGraph } from './components/DotGraph/DotGraph';
+import { renderThoughtsView } from './components/Thoughts/ThoughtsView';
 import type { UserStats } from './types/user';
 
 // Mascot AI request debouncer & race-condition cancellation ID
@@ -122,6 +123,15 @@ async function mountApp(user: AuthUser) {
         <span>Tasks</span>
       </button>
 
+      <button class="nav-item" data-tab="thoughts">
+        <svg class="nav-icon" viewBox="0 0 24 24">
+          <path d="M9 18h6" />
+          <path d="M10 22h4" />
+          <path d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2z" />
+        </svg>
+        <span>Thoughts</span>
+      </button>
+
       <button class="nav-item" data-tab="graph">
         <svg class="nav-icon" viewBox="0 0 24 24">
           <circle cx="6" cy="6" r="3" />
@@ -197,7 +207,14 @@ async function mountApp(user: AuthUser) {
     if (tab === 'orbit') {
       renderOrbitView();
     } else if (tab === 'tasks') {
-      viewContainer.appendChild(renderTaskList((date) => taskFormModal.open(date)));
+      viewContainer.appendChild(renderTaskList((date, editTask) => taskFormModal.open(date, editTask)));
+    } else if (tab === 'thoughts') {
+      viewContainer.appendChild(
+        renderThoughtsView(
+          (date, draftTask) => taskFormModal.open(date, draftTask),
+          () => currentSelectedDate
+        )
+      );
     } else if (tab === 'graph') {
       viewContainer.appendChild(renderDotGraph());
     } else if (tab === 'cloud') {
@@ -215,8 +232,8 @@ async function mountApp(user: AuthUser) {
   }
 
   function renderOrbitView() {
-    viewContainer.appendChild(renderFocusOrbit((date) => taskFormModal.open(date)));
-    viewContainer.appendChild(renderTaskList((date) => taskFormModal.open(date)));
+    viewContainer.appendChild(renderFocusOrbit((date, editTask) => taskFormModal.open(date, editTask)));
+    viewContainer.appendChild(renderTaskList((date, editTask) => taskFormModal.open(date, editTask)));
   }
 
   // Attach Bottom Nav Listeners
@@ -404,8 +421,13 @@ async function mountApp(user: AuthUser) {
 
   eventBus.on(AppEvents.VOICE_STATE_CHANGED, () => {
     renderVoiceButtonState();
-    // Once speaking/listening completes after a command (e.g., "Added ..."), reset banner back to default schedule status
-    if (!voiceService.isSpeaking() && !voiceService.isListening() && hasTemporaryVoiceBanner) {
+    // Once speaking/listening completes after a command (and no clarification drawer is awaiting answer), reset banner back to default schedule status
+    if (
+      !voiceService.isSpeaking() &&
+      !voiceService.isListening() &&
+      !voiceService.getPendingTaskDraft() &&
+      hasTemporaryVoiceBanner
+    ) {
       hasTemporaryVoiceBanner = false;
       voiceSubtitleHoldUntil = 0;
       if (bannerResetTimer) {
@@ -426,7 +448,7 @@ async function mountApp(user: AuthUser) {
 
     if (bannerResetTimer) clearTimeout(bannerResetTimer);
     bannerResetTimer = setTimeout(() => {
-      if (!voiceService.isSpeaking() && !voiceService.isListening()) {
+      if (!voiceService.isSpeaking() && !voiceService.isListening() && !voiceService.getPendingTaskDraft()) {
         hasTemporaryVoiceBanner = false;
         voiceSubtitleHoldUntil = 0;
         updateMascotStatus();
@@ -435,7 +457,7 @@ async function mountApp(user: AuthUser) {
   });
 
   eventBus.on(AppEvents.NAVIGATE_TAB, (tab: string) => {
-    if (['orbit', 'tasks', 'graph', 'cloud'].includes(tab)) {
+    if (['orbit', 'tasks', 'thoughts', 'graph', 'cloud'].includes(tab)) {
       switchTab(tab);
     }
   });
@@ -509,8 +531,24 @@ async function mountApp(user: AuthUser) {
   // Event Listeners for Live Updates
   eventBus.on(AppEvents.STATS_UPDATED, (newStats) => updateStatsUI(newStats as UserStats));
   eventBus.on(AppEvents.TASK_CREATED, () => updateMascotStatus());
+  eventBus.on(AppEvents.TASK_UPDATED, () => updateMascotStatus());
   eventBus.on(AppEvents.TASK_COMPLETED, () => updateMascotStatus());
   eventBus.on(AppEvents.TASK_DELETED, () => updateMascotStatus());
+  eventBus.on(AppEvents.VOICE_CLARIFY_TASK, (draft) => {
+    if (!draft) {
+      hasTemporaryVoiceBanner = false;
+      voiceSubtitleHoldUntil = Date.now() + 2500;
+      setTimeout(() => {
+        if (!voiceService.isSpeaking() && !voiceService.isListening() && !voiceService.getPendingTaskDraft()) {
+          voiceSubtitleHoldUntil = 0;
+          updateMascotStatus();
+        }
+      }, 2600);
+    } else {
+      isCardExpanded = true;
+      renderVoiceButtonState();
+    }
+  });
 
   // Register PWA Service Worker
   if ('serviceWorker' in navigator) {
@@ -526,7 +564,7 @@ async function mountApp(user: AuthUser) {
 
   await initUserStats();
 
-  if (tabParam && ['orbit', 'tasks', 'graph', 'cloud'].includes(tabParam)) {
+  if (tabParam && ['orbit', 'tasks', 'thoughts', 'graph', 'cloud'].includes(tabParam)) {
     switchTab(tabParam);
   } else {
     switchTab('orbit');

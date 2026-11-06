@@ -147,6 +147,21 @@ export class LocalNoteRepository implements INoteRepository {
     return newNote;
   }
 
+  async updateNote(id: string, updates: Partial<Omit<QuickNote, 'id' | 'createdAt'>>): Promise<QuickNote> {
+    const notes = this.read();
+    const index = notes.findIndex(n => n.id === id);
+    if (index === -1) {
+      throw new Error(`Note with id ${id} not found`);
+    }
+    const updated: QuickNote = {
+      ...notes[index],
+      ...updates,
+    };
+    notes[index] = updated;
+    this.write(notes);
+    return updated;
+  }
+
   async deleteNote(id: string): Promise<boolean> {
     const notes = this.read();
     const filtered = notes.filter(n => n.id !== id);

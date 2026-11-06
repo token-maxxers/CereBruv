@@ -10,5 +10,6 @@ export interface CreateNoteDTO {
 export interface INoteRepository {
   getAllNotes(): Promise<QuickNote[]>;
   createNote(dto: CreateNoteDTO): Promise<QuickNote>;
+  updateNote(id: string, updates: Partial<Omit<QuickNote, 'id' | 'createdAt'>>): Promise<QuickNote>;
   deleteNote(id: string): Promise<boolean>;
 }

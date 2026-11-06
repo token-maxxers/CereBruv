@@ -145,9 +145,13 @@ export function renderDotGraph(): HTMLElement {
     const newNodes: GraphNode[] = [];
     const newLinks: GraphLink[] = [];
 
-    // ONLY create category topic nodes that actually exist in the user's tasks
+    // ONLY create category topic nodes that actually exist in the user's tasks or tagged thoughts
     const usedCategories = new Set<string>();
     tasks.forEach(t => usedCategories.add(t.category));
+    notes.forEach(n => {
+      const cat = (n.tags && n.tags[0]) || 'personal';
+      usedCategories.add(cat);
+    });
 
     usedCategories.forEach(cat => {
       const cfg = categoryConfig[cat] || { label: cat.toUpperCase(), color: '#0D9488' };
@@ -180,9 +184,10 @@ export function renderDotGraph(): HTMLElement {
       });
     });
 
-    // Map user's real Quick Notes / Brain-dumps
-    notes.forEach((note, idx) => {
+    // Map user's real Quick Notes / Brain-dumps and connect each to its Category Hub (and same-category tasks)
+    notes.forEach((note) => {
       const noteNodeId = `node_note_${note.id}`;
+      const noteCategory = (note.tags && note.tags[0]) || 'personal';
       newNodes.push({
         id: noteNodeId,
         label: note.content.length > 25 ? note.content.substring(0, 22) + '...' : note.content,
@@ -191,12 +196,19 @@ export function renderDotGraph(): HTMLElement {
         color: '#38BDF8', // Cyan
       });
 
-      // If user has tasks, connect note to the most recent task
-      if (tasks.length > 0) {
-        const targetTaskId = `node_task_${tasks[idx % tasks.length].id}`;
+      // Connect note directly to its Category Topic Hub
+      newLinks.push({
+        sourceId: noteNodeId,
+        targetId: `topic_${noteCategory}`,
+        weight: 2,
+      });
+
+      // Also connect to the latest task in the same category if one exists
+      const relatedTask = tasks.find(t => t.category === noteCategory);
+      if (relatedTask) {
         newLinks.push({
           sourceId: noteNodeId,
-          targetId: targetTaskId,
+          targetId: `node_task_${relatedTask.id}`,
           weight: 1,
         });
       }
@@ -462,7 +474,10 @@ export function renderDotGraph(): HTMLElement {
   });
 
   eventBus.on(AppEvents.TASK_CREATED, () => buildGraphData());
+  eventBus.on(AppEvents.TASK_UPDATED, () => buildGraphData());
   eventBus.on(AppEvents.NOTE_CREATED, () => buildGraphData());
+  eventBus.on(AppEvents.NOTE_UPDATED, () => buildGraphData());
+  eventBus.on(AppEvents.NOTE_DELETED, () => buildGraphData());
   eventBus.on(AppEvents.TASK_DELETED, () => buildGraphData());
 
   setTimeout(() => {
