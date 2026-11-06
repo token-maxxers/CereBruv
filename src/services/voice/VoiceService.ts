@@ -17,6 +17,7 @@ export interface ParsedVoiceCommand {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm (24h)
   durationMinutes: number;
+  durationSpecified?: boolean;
   category: TaskCategory;
   urgency: UrgencyLevel;
   targetTab?: 'orbit' | 'tasks' | 'graph' | 'cloud';
@@ -663,6 +664,7 @@ export class VoiceService {
       date: dateExtraction.dateStr,
       startTime: timeExtraction.startTime,
       durationMinutes: durationExtraction.durationMinutes,
+      durationSpecified: durationExtraction.matched,
       category,
       urgency: urgencyExtraction.urgency,
       rawText: rawTranscript,
@@ -775,7 +777,9 @@ export class VoiceService {
       const dateLabel = this.formatSpokenDateLabel(parsed.date);
       const timeLabel = this.formatSpokenTime(parsed.startTime);
       const headline = `I got you, Bruv — Added "${parsed.title}"`;
-      const spokenReply = `I got you, Bruv. Added ${parsed.title} for ${dateLabel} at ${timeLabel}, for ${parsed.durationMinutes} minutes.`;
+      const spokenReply = parsed.durationSpecified
+        ? `I got you, Bruv. Added ${parsed.title} for ${dateLabel} at ${timeLabel}, for ${parsed.durationMinutes} minutes.`
+        : `I got you, Bruv. Added ${parsed.title} for ${dateLabel} at ${timeLabel}.`;
 
       eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
       this.speak(spokenReply);
@@ -797,7 +801,7 @@ export class VoiceService {
     let remaining = text;
     const baseDate = new Date(refDateStr + 'T00:00:00');
     if (isNaN(baseDate.getTime())) {
-      return { dateStr: new Date().toISOString().split('T')[0], remainingText: text, matched: false };
+      return { dateStr: this.toISODate(new Date()), remainingText: text, matched: false };
     }
 
     if (/\b(the\s+)?day after tomorrow\b/i.test(remaining)) {
@@ -908,7 +912,7 @@ export class VoiceService {
       return { durationMinutes: clamped, remainingText: remaining, matched: true };
     }
 
-    return { durationMinutes: 45, remainingText: remaining, matched: false };
+    return { durationMinutes: 60, remainingText: remaining, matched: false };
   }
 
   private extractUrgency(text: string): { urgency: UrgencyLevel; remainingText: string } {

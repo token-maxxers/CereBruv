@@ -145,8 +145,15 @@ async function mountApp(user: AuthUser) {
   </div>
 `;
 
+  function getLocalDateString(d: Date = new Date()): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   // Active Calendar Date tracker
-  let currentSelectedDate = new Date().toISOString().split('T')[0];
+  let currentSelectedDate = getLocalDateString();
   eventBus.on(AppEvents.DATE_SELECTED, (date: string) => {
     currentSelectedDate = date;
   });
@@ -222,6 +229,8 @@ async function mountApp(user: AuthUser) {
 
   // Mascot Talk-Back Controls, Expandable Card & Sprite Animation Loop
   let voiceSubtitleHoldUntil = 0;
+  let hasTemporaryVoiceBanner = false;
+  let bannerResetTimer: ReturnType<typeof setTimeout> | null = null;
   let isCardExpanded = false;
   let isUserTyping = false;
   let talkAnimationTimer: ReturnType<typeof setInterval> | null = null;
@@ -395,14 +404,34 @@ async function mountApp(user: AuthUser) {
 
   eventBus.on(AppEvents.VOICE_STATE_CHANGED, () => {
     renderVoiceButtonState();
+    // Once speaking/listening completes after a command (e.g., "Added ..."), reset banner back to default schedule status
+    if (!voiceService.isSpeaking() && !voiceService.isListening() && hasTemporaryVoiceBanner) {
+      hasTemporaryVoiceBanner = false;
+      voiceSubtitleHoldUntil = 0;
+      if (bannerResetTimer) {
+        clearTimeout(bannerResetTimer);
+        bannerResetTimer = null;
+      }
+      updateMascotStatus();
+    }
   });
 
   eventBus.on(AppEvents.MASCOT_SPEAK, (payload: { headline: string; subspeech: string }) => {
+    hasTemporaryVoiceBanner = true;
     voiceSubtitleHoldUntil = Date.now() + 7000;
     const statusTitle = document.querySelector('#mascot-status-title');
     const subspeech = document.querySelector('#mascot-subspeech');
     if (statusTitle && payload.headline) statusTitle.textContent = payload.headline;
     if (subspeech && payload.subspeech) subspeech.textContent = payload.subspeech;
+
+    if (bannerResetTimer) clearTimeout(bannerResetTimer);
+    bannerResetTimer = setTimeout(() => {
+      if (!voiceService.isSpeaking() && !voiceService.isListening()) {
+        hasTemporaryVoiceBanner = false;
+        voiceSubtitleHoldUntil = 0;
+        updateMascotStatus();
+      }
+    }, 3500);
   });
 
   eventBus.on(AppEvents.NAVIGATE_TAB, (tab: string) => {
@@ -414,7 +443,7 @@ async function mountApp(user: AuthUser) {
   // Update Mascot Status dynamically with rule-based fallback and debounced AI analysis
   async function updateMascotStatus() {
     const tasks = await taskRepository.getAllTasks();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
     const todayTasks = tasks.filter(t => (t.date || todayStr) === todayStr);
     const pending = todayTasks.filter(t => !t.completed);
     const statusTitle = document.querySelector('#mascot-status-title');

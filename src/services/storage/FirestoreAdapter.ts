@@ -38,7 +38,11 @@ function getRequiredUid(): string {
 
 export class FirestoreTaskRepository implements ITaskRepository {
   private getTodayString(): string {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   private tasksCol(uid: string) {
@@ -210,7 +214,11 @@ export class FirestoreNoteRepository implements INoteRepository {
 
 export class FirestoreUserStatsRepository implements IUserStatsRepository {
   private getTodayString(): string {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   private statsDoc(uid: string) {
@@ -281,8 +289,8 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
 
       let newStreak = current.streakDays;
       if (current.lastActiveDate) {
-        const lastDate = new Date(current.lastActiveDate);
-        const currentDate = new Date(today);
+        const lastDate = new Date(current.lastActiveDate + 'T00:00:00');
+        const currentDate = new Date(today + 'T00:00:00');
         const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
 
         if (diffDays === 1) {

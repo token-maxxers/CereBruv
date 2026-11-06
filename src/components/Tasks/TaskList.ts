@@ -6,11 +6,19 @@ export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement
   const container = document.createElement('div');
   container.className = 'card-section';
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  let activeDate = todayStr;
+  function getTodayString(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  let activeDate = getTodayString();
 
   async function loadTasks() {
     const allTasks = await taskRepository.getAllTasks();
+    const todayStr = getTodayString();
 
     // Filter by activeDate
     const tasks = allTasks.filter(t => (t.date || todayStr) === activeDate);
@@ -19,7 +27,7 @@ export function renderTaskList(onOpenForm: (date?: string) => void): HTMLElement
     tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
     const isToday = activeDate === todayStr;
-    const dateFormatted = new Date(activeDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const dateFormatted = new Date(activeDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     const headerTitle = isToday ? `Today's Schedule (${tasks.length})` : `${dateFormatted} Schedule (${tasks.length})`;
 
     if (tasks.length === 0) {

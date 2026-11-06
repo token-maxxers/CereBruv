@@ -77,7 +77,7 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
               min="10" 
               max="480" 
               step="5" 
-              value="45" 
+              value="60" 
               required 
             />
           </div>
@@ -107,7 +107,10 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
 
   const open = (prefillDate?: string) => {
     const now = new Date();
-    const todayString = now.toISOString().split('T')[0];
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayString = `${y}-${m}-${day}`;
     dateInput.value = prefillDate || todayString;
 
     const hours = String(now.getHours()).padStart(2, '0');

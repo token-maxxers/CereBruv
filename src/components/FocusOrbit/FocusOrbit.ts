@@ -11,9 +11,15 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
   container.className = 'card-section';
   container.style.padding = 'var(--spacing-3)';
 
-  // Default to today in YYYY-MM-DD
-  const todayObj = new Date();
-  let selectedDate = todayObj.toISOString().split('T')[0];
+  function formatLocalDate(d: Date = new Date()): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // Default to today in local YYYY-MM-DD
+  let selectedDate = formatLocalDate();
 
   container.innerHTML = `
     <!-- Top Date & Navigation Strip (Matching Image 1) -->
@@ -85,13 +91,13 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
   const weeklyStrip = container.querySelector<HTMLElement>('#weekly-strip')!;
 
   function getTodayString(): string {
-    return new Date().toISOString().split('T')[0];
+    return formatLocalDate();
   }
 
   function changeDay(deltaDays: number) {
-    const current = new Date(selectedDate);
+    const current = new Date(selectedDate + 'T00:00:00');
     current.setDate(current.getDate() + deltaDays);
-    selectedDate = current.toISOString().split('T')[0];
+    selectedDate = formatLocalDate(current);
     eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
     drawOrbit();
   }
@@ -114,7 +120,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
     // Filter tasks for the selected date
     const dayTasks = allTasks.filter(t => (t.date || todayStr) === selectedDate);
 
-    const targetDate = new Date(selectedDate);
+    const targetDate = new Date(selectedDate + 'T00:00:00');
     const now = new Date();
     const currentFraction = isToday ? now.getHours() + now.getMinutes() / 60 : 0;
 
@@ -287,7 +293,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
   }
 
   function renderWeeklyStrip(el: HTMLElement, allTasks: Task[], activeDateStr: string) {
-    const activeDate = new Date(activeDateStr);
+    const activeDate = new Date(activeDateStr + 'T00:00:00');
     const dayOfWeek = activeDate.getDay(); // 0 = Sun
     const sunday = new Date(activeDate);
     sunday.setDate(activeDate.getDate() - dayOfWeek);
@@ -298,7 +304,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
     for (let i = 0; i < 7; i++) {
       const d = new Date(sunday);
       d.setDate(sunday.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = formatLocalDate(d);
       const isSelected = dateStr === activeDateStr;
       const isRealToday = dateStr === getTodayString();
 
@@ -346,6 +352,30 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string) => void): HTMLE
   eventBus.on(AppEvents.TASK_CREATED, () => drawOrbit());
   eventBus.on(AppEvents.TASK_COMPLETED, () => drawOrbit());
   eventBus.on(AppEvents.TASK_DELETED, () => drawOrbit());
+  eventBus.on(AppEvents.DATE_SELECTED, (newDate: string) => {
+    if (newDate && newDate !== selectedDate) {
+      selectedDate = newDate;
+      drawOrbit();
+    }
+  });
+
+  // Real-time live clock tick (updates needle every 15s and rolls over date at midnight)
+  let lastKnownToday = getTodayString();
+  const liveClockTimer = setInterval(() => {
+    if (!container.isConnected) {
+      clearInterval(liveClockTimer);
+      return;
+    }
+    const currentToday = getTodayString();
+    if (currentToday !== lastKnownToday) {
+      if (selectedDate === lastKnownToday) {
+        selectedDate = currentToday;
+        eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
+      }
+      lastKnownToday = currentToday;
+    }
+    drawOrbit();
+  }, 15000);
 
   drawOrbit();
   return container;

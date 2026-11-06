@@ -9,8 +9,14 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
   container.className = 'quick-capture-wrapper';
   container.style.position = 'relative';
 
-  const resolveActiveDate = () =>
-    getSelectedDate ? getSelectedDate() : new Date().toISOString().split('T')[0];
+  const resolveActiveDate = () => {
+    if (getSelectedDate) return getSelectedDate();
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   container.innerHTML = `
     <div class="quick-capture-container">

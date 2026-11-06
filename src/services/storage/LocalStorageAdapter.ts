@@ -11,7 +11,11 @@ const STATS_KEY = 'cerebruv_stats_v1';
 
 export class LocalTaskRepository implements ITaskRepository {
   private getTodayString(): string {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   private read(): Task[] {
@@ -154,7 +158,11 @@ export class LocalNoteRepository implements INoteRepository {
 
 export class LocalUserStatsRepository implements IUserStatsRepository {
   private getTodayString(): string {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   private read(): UserStats {
@@ -201,8 +209,8 @@ export class LocalUserStatsRepository implements IUserStatsRepository {
 
     // Check if consecutive day
     if (stats.lastActiveDate) {
-      const lastDate = new Date(stats.lastActiveDate);
-      const currentDate = new Date(today);
+      const lastDate = new Date(stats.lastActiveDate + 'T00:00:00');
+      const currentDate = new Date(today + 'T00:00:00');
       const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
 
       if (diffDays === 1) {
