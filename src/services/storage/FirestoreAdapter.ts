@@ -16,9 +16,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  writeBatch,
-  increment,
-  runTransaction
+  writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import type { Task } from '../../types/task';
@@ -27,13 +25,37 @@ import type { UserStats } from '../../types/user';
 import type { ITaskRepository, CreateTaskDTO } from './ITaskRepository';
 import type { INoteRepository, CreateNoteDTO } from './INoteRepository';
 import type { IUserStatsRepository } from './IUserStatsRepository';
+import {
+  LocalTaskRepository,
+  LocalNoteRepository,
+  LocalUserStatsRepository
+} from './LocalStorageAdapter';
 
-function getRequiredUid(): string {
-  const uid = auth.currentUser?.uid;
-  if (!uid) {
-    throw new Error('User is not authenticated with Firebase Auth.');
-  }
-  return uid;
+const localTaskFallback = new LocalTaskRepository();
+const localNoteFallback = new LocalNoteRepository();
+const localStatsFallback = new LocalUserStatsRepository();
+
+function getOptionalUid(): string | null {
+  return auth.currentUser?.uid || null;
+}
+
+/**
+ * In Firebase Firestore JS SDK, `setDoc` / `updateDoc` / `deleteDoc` immediately
+ * write to the local IndexedDB `persistentLocalCache`, but their returned Promise
+ * only resolves after the remote cloud server acknowledges the write.
+ * When offline (or on flaky Buildathon Wi-Fi), awaiting the remote ack directly
+ * would hang the UI. This helper lets the local cache mutation enqueue immediately
+ * and resolves fast when offline or slow.
+ */
+async function commitFirestoreWrite(writePromise: Promise<unknown>): Promise<void> {
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+  const timeoutMs = isOffline ? 120 : 1200;
+  await Promise.race([
+    writePromise.catch((err) => {
+      console.warn('Firestore background sync warning (cached locally):', err);
+    }),
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))
+  ]);
 }
 
 /**
@@ -64,34 +86,46 @@ export class FirestoreTaskRepository implements ITaskRepository {
   }
 
   async getAllTasks(): Promise<Task[]> {
-    const uid = getRequiredUid();
-    const snapshot = await getDocs(this.tasksCol(uid));
-    const today = this.getTodayString();
-    return snapshot.docs.map(d => {
-      const data = d.data() as Task;
-      return {
-        ...data,
-        id: d.id,
-        date: data.date || today
-      };
-    });
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.getAllTasks();
+    try {
+      const snapshot = await getDocs(this.tasksCol(uid));
+      const today = this.getTodayString();
+      return snapshot.docs.map(d => {
+        const data = d.data() as Task;
+        return {
+          ...data,
+          id: d.id,
+          date: data.date || today
+        };
+      });
+    } catch {
+      return localTaskFallback.getAllTasks();
+    }
   }
 
   async getTaskById(id: string): Promise<Task | null> {
-    const uid = getRequiredUid();
-    const taskRef = doc(db, 'users', uid, 'tasks', id);
-    const snap = await getDoc(taskRef);
-    if (!snap.exists()) return null;
-    const data = snap.data() as Task;
-    return {
-      ...data,
-      id: snap.id,
-      date: data.date || this.getTodayString()
-    };
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.getTaskById(id);
+    try {
+      const taskRef = doc(db, 'users', uid, 'tasks', id);
+      const snap = await getDoc(taskRef);
+      if (!snap.exists()) return null;
+      const data = snap.data() as Task;
+      return {
+        ...data,
+        id: snap.id,
+        date: data.date || this.getTodayString()
+      };
+    } catch {
+      return localTaskFallback.getTaskById(id);
+    }
   }
 
   async createTask(dto: CreateTaskDTO): Promise<Task> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.createTask(dto);
+
     const taskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const taskRef = doc(db, 'users', uid, 'tasks', taskId);
     const now = Date.now();
@@ -106,16 +140,19 @@ export class FirestoreTaskRepository implements ITaskRepository {
       urgency: dto.urgency,
       completed: false,
       ...(dto.notes && dto.notes.trim() ? { notes: dto.notes.trim() } : {}),
+      ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
       createdAt: now,
       updatedAt: now
     };
 
-    await setDoc(taskRef, stripUndefined(newTask));
+    await commitFirestoreWrite(setDoc(taskRef, stripUndefined(newTask)));
     return newTask;
   }
 
   async updateTask(id: string, updates: Partial<Omit<Task, 'id' | 'createdAt'>>): Promise<Task> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.updateTask(id, updates);
+
     const taskRef = doc(db, 'users', uid, 'tasks', id);
     const snap = await getDoc(taskRef);
     if (!snap.exists()) {
@@ -135,13 +172,14 @@ export class FirestoreTaskRepository implements ITaskRepository {
       updatedAt: now
     };
 
-    await updateDoc(taskRef, cleanedUpdates);
-
+    await commitFirestoreWrite(updateDoc(taskRef, cleanedUpdates));
     return updated;
   }
 
   async toggleTaskCompletion(id: string): Promise<Task> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.toggleTaskCompletion(id);
+
     const taskRef = doc(db, 'users', uid, 'tasks', id);
     const snap = await getDoc(taskRef);
     if (!snap.exists()) {
@@ -152,10 +190,12 @@ export class FirestoreTaskRepository implements ITaskRepository {
     const completed = !current.completed;
     const now = Date.now();
 
-    await updateDoc(taskRef, {
-      completed,
-      updatedAt: now
-    });
+    await commitFirestoreWrite(
+      updateDoc(taskRef, {
+        completed,
+        updatedAt: now
+      })
+    );
 
     return {
       ...current,
@@ -166,22 +206,26 @@ export class FirestoreTaskRepository implements ITaskRepository {
   }
 
   async deleteTask(id: string): Promise<boolean> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.deleteTask(id);
+
     const taskRef = doc(db, 'users', uid, 'tasks', id);
     const snap = await getDoc(taskRef);
     if (!snap.exists()) return false;
-    await deleteDoc(taskRef);
+    await commitFirestoreWrite(deleteDoc(taskRef));
     return true;
   }
 
   async clearAllTasks(): Promise<void> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localTaskFallback.clearAllTasks();
+
     const snapshot = await getDocs(this.tasksCol(uid));
     const batch = writeBatch(db);
     snapshot.docs.forEach(docSnap => {
       batch.delete(docSnap.ref);
     });
-    await batch.commit();
+    await commitFirestoreWrite(batch.commit());
   }
 }
 
@@ -191,18 +235,25 @@ export class FirestoreNoteRepository implements INoteRepository {
   }
 
   async getAllNotes(): Promise<QuickNote[]> {
-    const uid = getRequiredUid();
-    const snap = await getDocs(this.notesCol(uid));
-    return snap.docs
-      .map(d => ({
-        ...(d.data() as QuickNote),
-        id: d.id
-      }))
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const uid = getOptionalUid();
+    if (!uid) return localNoteFallback.getAllNotes();
+    try {
+      const snap = await getDocs(this.notesCol(uid));
+      return snap.docs
+        .map(d => ({
+          ...(d.data() as QuickNote),
+          id: d.id
+        }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    } catch {
+      return localNoteFallback.getAllNotes();
+    }
   }
 
   async createNote(dto: CreateNoteDTO): Promise<QuickNote> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localNoteFallback.createNote(dto);
+
     const noteId = 'note_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const noteRef = doc(db, 'users', uid, 'notes', noteId);
     const category = dto.category || ((dto.tags && dto.tags[0]) as any) || 'personal';
@@ -219,12 +270,14 @@ export class FirestoreNoteRepository implements INoteRepository {
       createdAt: Date.now()
     };
 
-    await setDoc(noteRef, stripUndefined(newNote));
+    await commitFirestoreWrite(setDoc(noteRef, stripUndefined(newNote)));
     return newNote;
   }
 
   async updateNote(id: string, updates: Partial<Omit<QuickNote, 'id' | 'createdAt'>>): Promise<QuickNote> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localNoteFallback.updateNote(id, updates);
+
     const noteRef = doc(db, 'users', uid, 'notes', id);
     const snap = await getDoc(noteRef);
     if (!snap.exists()) {
@@ -232,7 +285,7 @@ export class FirestoreNoteRepository implements INoteRepository {
     }
     const current = snap.data() as QuickNote;
     const cleanedUpdates = stripUndefined({ ...updates });
-    await updateDoc(noteRef, cleanedUpdates);
+    await commitFirestoreWrite(updateDoc(noteRef, cleanedUpdates));
     return {
       ...current,
       ...cleanedUpdates,
@@ -241,11 +294,13 @@ export class FirestoreNoteRepository implements INoteRepository {
   }
 
   async deleteNote(id: string): Promise<boolean> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localNoteFallback.deleteNote(id);
+
     const noteRef = doc(db, 'users', uid, 'notes', id);
     const snap = await getDoc(noteRef);
     if (!snap.exists()) return false;
-    await deleteDoc(noteRef);
+    await commitFirestoreWrite(deleteDoc(noteRef));
     return true;
   }
 }
@@ -274,111 +329,100 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
   }
 
   async getStats(): Promise<UserStats> {
-    const uid = getRequiredUid();
-    const ref = this.statsDoc(uid);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      const initial = this.defaultStats();
-      await setDoc(ref, initial);
-      return initial;
+    const uid = getOptionalUid();
+    if (!uid) return localStatsFallback.getStats();
+    try {
+      const ref = this.statsDoc(uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        const initial = this.defaultStats();
+        await commitFirestoreWrite(setDoc(ref, initial));
+        return initial;
+      }
+      return snap.data() as UserStats;
+    } catch {
+      return localStatsFallback.getStats();
     }
-    return snap.data() as UserStats;
   }
 
   async addExperience(amount: number): Promise<UserStats> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localStatsFallback.addExperience(amount);
+
     const ref = this.statsDoc(uid);
+    const snap = await getDoc(ref).catch(() => null);
+    const current = snap && snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+    const newXP = Math.max(0, current.experiencePoints + amount);
+    const newLevel = Math.floor(newXP / 100) + 1;
 
-    return await runTransaction(db, async (txn) => {
-      const snap = await txn.get(ref);
-      const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
-      const newXP = Math.max(0, current.experiencePoints + amount);
-      const newLevel = Math.floor(newXP / 100) + 1;
+    const updated: UserStats = {
+      ...current,
+      experiencePoints: newXP,
+      level: newLevel
+    };
 
-      txn.set(
-        ref,
-        {
-          experiencePoints: newXP,
-          level: newLevel
-        },
-        { merge: true }
-      );
-
-      return {
-        ...current,
-        experiencePoints: newXP,
-        level: newLevel
-      };
-    });
+    await commitFirestoreWrite(setDoc(ref, updated, { merge: true }));
+    return updated;
   }
 
   async recordDailyActivity(): Promise<UserStats> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localStatsFallback.recordDailyActivity();
+
     const ref = this.statsDoc(uid);
     const today = this.getTodayString();
+    const snap = await getDoc(ref).catch(() => null);
+    const current = snap && snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
 
-    return await runTransaction(db, async (txn) => {
-      const snap = await txn.get(ref);
-      const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+    if (current.lastActiveDate === today) {
+      return current;
+    }
 
-      if (current.lastActiveDate === today) {
-        return current;
-      }
+    let newStreak = current.streakDays;
+    if (current.lastActiveDate) {
+      const lastDate = new Date(current.lastActiveDate + 'T00:00:00');
+      const currentDate = new Date(today + 'T00:00:00');
+      const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
 
-      let newStreak = current.streakDays;
-      if (current.lastActiveDate) {
-        const lastDate = new Date(current.lastActiveDate + 'T00:00:00');
-        const currentDate = new Date(today + 'T00:00:00');
-        const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
-
-        if (diffDays === 1) {
-          newStreak += 1;
-        } else if (diffDays > 1) {
-          newStreak = 1;
-        }
-      } else {
+      if (diffDays === 1) {
+        newStreak += 1;
+      } else if (diffDays > 1) {
         newStreak = 1;
       }
+    } else {
+      newStreak = 1;
+    }
 
-      const updated: UserStats = {
-        ...current,
-        streakDays: newStreak,
-        lastActiveDate: today
-      };
+    const updated: UserStats = {
+      ...current,
+      streakDays: newStreak,
+      lastActiveDate: today
+    };
 
-      txn.set(ref, updated, { merge: true });
-      return updated;
-    });
+    await commitFirestoreWrite(setDoc(ref, updated, { merge: true }));
+    return updated;
   }
 
   async incrementTaskCount(): Promise<UserStats> {
-    const uid = getRequiredUid();
+    const uid = getOptionalUid();
+    if (!uid) return localStatsFallback.incrementTaskCount();
+
     const ref = this.statsDoc(uid);
+    const snap = await getDoc(ref).catch(() => null);
+    const current = snap && snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
 
-    return await runTransaction(db, async (txn) => {
-      const snap = await txn.get(ref);
-      const current = snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+    const newXP = current.experiencePoints + 25;
+    const newTasks = current.tasksCompletedTotal + 1;
+    const newLevel = Math.floor(newXP / 100) + 1;
 
-      const newXP = current.experiencePoints + 25;
-      const newTasks = current.tasksCompletedTotal + 1;
-      const newLevel = Math.floor(newXP / 100) + 1;
+    const updated: UserStats = {
+      ...current,
+      tasksCompletedTotal: newTasks,
+      experiencePoints: newXP,
+      level: newLevel
+    };
 
-      txn.set(
-        ref,
-        {
-          tasksCompletedTotal: increment(1),
-          experiencePoints: increment(25),
-          level: newLevel
-        },
-        { merge: true }
-      );
-
-      return {
-        ...current,
-        tasksCompletedTotal: newTasks,
-        experiencePoints: newXP,
-        level: newLevel
-      };
-    });
+    await commitFirestoreWrite(setDoc(ref, updated, { merge: true }));
+    return updated;
   }
 }

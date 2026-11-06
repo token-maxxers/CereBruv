@@ -124,6 +124,9 @@ CereBruv/
 | **Phase 13** | Firebase Cloud Messaging (FCM Web Push) & SW Receiver | **DONE** | Antigravity Agent |
 | **Phase 14** | Complete Auth System (Google, Email/Password, Guest Linking) | **DONE** | Antigravity Agent |
 | **Phase 15** | Siri-Style Voice Command & Talk-Back Engine, Sprite Loop & 24h Clock Dial | **DONE** | Antigravity Agent |
+| **Phase 16** | Thoughts Second-Brain Tab, Predictive Syntax Guide & Live Orbit Clock | **DONE** | Antigravity Agent |
+| **Phase 17** | Talkative Assistant, Multi-Stage Alarms (1h/30m/Start/Missed XP) & Settings | **DONE** | Antigravity Agent |
+| **Phase 18** | Offline-Ready Screenshot Rescue (On-Device OCR + Gemini Vision + Photo Attachments) | **DONE** | Antigravity Agent |
 | **Teammate Integrations** | Firebase Auth/Firestore, Gemini API, Cloud Messaging | **READY** | Teammates B, C, D |
 
 ---
@@ -375,7 +378,27 @@ CereBruv/
      - Clicking the top navbar bell button opens the **CereBruv Assistant Settings** popover with toggles for **Talkative Voice Mode (Speak / Muted)**, **Alarm & Action Chimes**, **Vibrate & Haptic Pulse**, **Notification Popups**, plus a **Test Alarm & Voice** button.
   5. **Talkative CereBruv Across All Actions (`TaskForm.ts`, `TaskList.ts`, `FocusOrbit.ts`, `ThoughtsView.ts`, `QuickCapture.ts`)**:
      - Speaks aloud when saving/updating tasks, saving thoughts, completing tasks (congratulating the user + `+25 XP`), and answering schedule queries whenever voice mode is unmuted.
-* **Next Action:** Ready for live deployment.
+* **Next Action:** Proceed to Phase 18 (Offline-Ready Screenshot Rescue).
+
+---
+
+### Entry #21: 2026-11-07 (Antigravity Agent)
+* **Phase:** Phase 18 Complete - Offline-Ready Screenshot Graveyard Rescue, Hybrid On-Device OCR + Gemini Vision Scanner, Attached Screenshot Lightbox & Full PWA Offline Resilience.
+* **Action:**
+  1. **Image Compression, Dark-Mode OCR Preprocessing & Lightbox (`src/utils/imageUtils.ts`)**:
+     - Added `compressImageToDataUrl()` (~35-55 KB JPEG Data URLs safe for `localStorage` and Firestore documents), `preprocessImageForOcr()` (auto-detects dark-mode group chat screenshots and stretches contrast for accurate OCR), and `openImageLightbox()` for full-screen screenshot zoom.
+  2. **Hybrid Cloud + Client-Side Offline Screenshot Scanner (`src/services/ai/ScreenshotScannerService.ts`)**:
+     - Uses Gemini Vision when online in production and automatically runs on-device OCR (`tesseract.js` WebAssembly + browser `TextDetector`) + Smart Announcement/Deadline Parser when offline or on `localhost`.
+     - Extracts task titles, dates (`today`, `tomorrow`, weekdays, month/day), times, durations, categories, and urgency (`high` for scholarships, deadlines, exams, submissions), with a zero-fail editable rescue fallback.
+  3. **Interactive Screenshot Rescue UI (`src/components/QuickCapture/QuickCapture.ts`)**:
+     - Supports both file upload (Camera button) and direct clipboard screenshot paste (`Ctrl+V`).
+     - Displays the uploaded screenshot preview thumbnail, editable OCR caption with `Re-Scan Text`, 1-click `Save Screenshot to Thoughts` (with Category & Importance dropdowns), and editable `Approve to Orbit` AI Task suggestion cards (`Approve All` supported).
+  4. **Screenshot Thumbnails Across All Views (`ThoughtsView.ts`, `FocusOrbit.ts`, `TaskList.ts`, `DotGraph.ts`, `task.ts`, `note.ts`)**:
+     - Added `photoUrl` support to `Task`, `CreateTaskDTO`, and `GraphNode`, rendering clickable zoomable screenshot previews in Thoughts cards, the Focus Orbit arc popover, Task List rows, and Mind Graph node inspector, plus direct photo attachment in the Thoughts composer.
+  5. **True Offline-First PWA & Non-Blocking Firestore Writes (`public/sw.js`, `FirestoreAdapter.ts`, `AuthService.ts`)**:
+     - Guarded `importScripts` in `public/sw.js` and added runtime caching for all app JS/CSS/PNG and OCR WASM/traineddata assets.
+     - Replaced online-only `runTransaction` calls and wrapped Firestore mutations in `commitFirestoreWrite()` with local guest fallback so the app opens, scans screenshots, schedules tasks, and awards XP seamlessly with Wi-Fi turned off.
+* **Next Action:** Ready for Buildathon live demo and Firebase Hosting deployment.
 
 ---
 
@@ -435,7 +458,27 @@ CereBruv/
      - Clicking the top navbar bell button opens the **CereBruv Assistant Settings** popover with toggles for **Talkative Voice Mode (Speak / Muted)**, **Alarm & Action Chimes**, **Vibrate & Haptic Pulse**, **Notification Popups**, plus a **Test Alarm & Voice** button.
   5. **Talkative CereBruv Across All Actions (`TaskForm.ts`, `TaskList.ts`, `FocusOrbit.ts`, `ThoughtsView.ts`, `QuickCapture.ts`)**:
      - Speaks aloud when saving/updating tasks, saving thoughts, completing tasks (congratulating the user + `+25 XP`), and answering schedule queries whenever voice mode is unmuted.
-* **Next Action:** Ready for live deployment.
+* **Next Action:** Proceed to Phase 18 (Offline-Ready Screenshot Rescue).
+
+---
+
+### Entry #21: 2026-11-07 (Antigravity Agent)
+* **Phase:** Phase 18 Complete - Offline-Ready Screenshot Graveyard Rescue, Hybrid On-Device OCR + Gemini Vision Scanner, Attached Screenshot Lightbox & Full PWA Offline Resilience.
+* **Action:**
+  1. **Image Compression, Dark-Mode OCR Preprocessing & Lightbox (`src/utils/imageUtils.ts`)**:
+     - Added `compressImageToDataUrl()` (~35-55 KB JPEG Data URLs safe for `localStorage` and Firestore documents), `preprocessImageForOcr()` (auto-detects dark-mode group chat screenshots and stretches contrast for accurate OCR), and `openImageLightbox()` for full-screen screenshot zoom.
+  2. **Hybrid Cloud + Client-Side Offline Screenshot Scanner (`src/services/ai/ScreenshotScannerService.ts`)**:
+     - Uses Gemini Vision when online in production and automatically runs on-device OCR (`tesseract.js` WebAssembly + browser `TextDetector`) + Smart Announcement/Deadline Parser when offline or on `localhost`.
+     - Extracts task titles, dates (`today`, `tomorrow`, weekdays, month/day), times, durations, categories, and urgency (`high` for scholarships, deadlines, exams, submissions), with a zero-fail editable rescue fallback.
+  3. **Interactive Screenshot Rescue UI (`src/components/QuickCapture/QuickCapture.ts`)**:
+     - Supports both file upload (Camera button) and direct clipboard screenshot paste (`Ctrl+V`).
+     - Displays the uploaded screenshot preview thumbnail, editable OCR caption with `Re-Scan Text`, 1-click `Save Screenshot to Thoughts` (with Category & Importance dropdowns), and editable `Approve to Orbit` AI Task suggestion cards (`Approve All` supported).
+  4. **Screenshot Thumbnails Across All Views (`ThoughtsView.ts`, `FocusOrbit.ts`, `TaskList.ts`, `DotGraph.ts`, `task.ts`, `note.ts`)**:
+     - Added `photoUrl` support to `Task`, `CreateTaskDTO`, and `GraphNode`, rendering clickable zoomable screenshot previews in Thoughts cards, the Focus Orbit arc popover, Task List rows, and Mind Graph node inspector, plus direct photo attachment in the Thoughts composer.
+  5. **True Offline-First PWA & Non-Blocking Firestore Writes (`public/sw.js`, `FirestoreAdapter.ts`, `AuthService.ts`)**:
+     - Guarded `importScripts` in `public/sw.js` and added runtime caching for all app JS/CSS/PNG and OCR WASM/traineddata assets.
+     - Replaced online-only `runTransaction` calls and wrapped Firestore mutations in `commitFirestoreWrite()` with local guest fallback so the app opens, scans screenshots, schedules tasks, and awards XP seamlessly with Wi-Fi turned off.
+* **Next Action:** Ready for Buildathon live demo and Firebase Hosting deployment.
 
 ---
 

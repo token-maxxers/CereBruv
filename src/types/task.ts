@@ -12,6 +12,7 @@ export interface Task {
   urgency: UrgencyLevel;
   completed: boolean;
   notes?: string;
+  photoUrl?: string;
   createdAt: number; // Unix timestamp
   updatedAt: number;
 }

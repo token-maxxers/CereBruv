@@ -2,6 +2,7 @@ import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
+import { openImageLightbox } from '../../utils/imageUtils';
 import { sortTasksSmartly } from '../FocusOrbit/orbitCalculator';
 import type { Task } from '../../types/task';
 
@@ -89,8 +90,19 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
           <span class="tag-badge tag-${task.category}">${task.category}</span>
           <span>${task.startTime} (${task.durationMinutes}m)</span>
           ${task.urgency === 'high' ? '<span class="urgency-high">PRIORITY</span>' : ''}
+          ${
+            task.photoUrl
+              ? '<button type="button" class="pill-badge view-task-photo-btn" style="cursor: pointer; font-size: 0.6rem; padding: 1px 6px;">Screenshot</button>'
+              : ''
+          }
         </div>
       </div>
+
+      ${
+        task.photoUrl
+          ? `<img src="${task.photoUrl}" alt="Attached Screenshot" class="task-mini-thumb" title="Tap to zoom screenshot" style="width: 36px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-medium); cursor: pointer; flex-shrink: 0;" />`
+          : ''
+      }
 
       <div style="display: flex; align-items: center; gap: 4px;">
         <button class="task-delete-btn task-edit-btn" data-edit-id="${task.id}" title="Edit Task" style="color: var(--color-black-muted);">
@@ -134,6 +146,15 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       e.stopPropagation();
       onOpenForm(task.date, task);
     });
+
+    if (task.photoUrl) {
+      const openPhoto = (e: Event) => {
+        e.stopPropagation();
+        openImageLightbox(task.photoUrl!, task.title);
+      };
+      el.querySelector('.view-task-photo-btn')?.addEventListener('click', openPhoto);
+      el.querySelector('.task-mini-thumb')?.addEventListener('click', openPhoto);
+    }
 
     // Delete handler
     const deleteBtn = el.querySelector('.task-remove-btn')!;

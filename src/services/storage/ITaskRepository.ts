@@ -8,6 +8,7 @@ export interface CreateTaskDTO {
   durationMinutes: number;
   urgency: Task['urgency'];
   notes?: string;
+  photoUrl?: string;
 }
 
 export interface ITaskRepository {

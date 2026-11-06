@@ -2,6 +2,7 @@ import { noteRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
+import { compressImageToDataUrl, openImageLightbox } from '../../utils/imageUtils';
 import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
 import type { QuickNote } from '../../types/note';
 import type { Task, TaskCategory, UrgencyLevel } from '../../types/task';
@@ -41,14 +42,22 @@ export function renderThoughtsView(
       <span class="pill-badge" id="thoughts-count-badge" style="font-size: 0.68rem;">0 notes</span>
     </div>
 
-    <!-- Quick Add Idea / Note Composer with Category & Priority Dropdowns -->
+    <!-- Quick Add Idea / Note Composer with Category & Priority Dropdowns + Optional Photo -->
     <div style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary); border: 1.5px solid var(--border-medium); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-3);">
       <textarea
         id="new-thought-textarea"
         rows="2"
-        placeholder="Jot down an idea, thought, or brain-dump..."
+        placeholder="Jot down an idea, thought, or attach a screenshot..."
         style="width: 100%; border: none; background: transparent; resize: none; font-family: inherit; font-size: var(--font-size-sm); color: var(--color-black-dominant); outline: none;"
       ></textarea>
+
+      <!-- Attached Photo Draft Preview (Hidden until image chosen) -->
+      <div id="new-thought-photo-preview" style="display: none; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle);">
+        <img id="new-thought-photo-img" src="" alt="Attached Screenshot" style="width: 44px; height: 44px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-medium);" />
+        <span style="font-size: 0.7rem; font-weight: 700; color: var(--color-black-dominant); flex: 1;">Screenshot attached to note</span>
+        <button type="button" id="remove-thought-photo-btn" class="pill-badge" style="cursor: pointer; font-size: 0.62rem;">Remove</button>
+      </div>
+
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1;">
           <label style="display: flex; align-items: center; gap: 4px; font-size: 0.65rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
@@ -70,9 +79,16 @@ export function renderThoughtsView(
           </label>
         </div>
 
-        <button id="save-thought-btn" class="btn btn-primary" style="padding: 6px 14px; font-size: var(--font-size-xs);">
-          Save Note
-        </button>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input type="file" id="new-thought-photo-input" accept="image/*" style="display: none;" />
+          <button type="button" id="attach-thought-photo-btn" class="pill-badge" title="Attach Screenshot or Photo" style="cursor: pointer; font-size: 0.68rem; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Photo
+          </button>
+          <button id="save-thought-btn" class="btn btn-primary" style="padding: 6px 14px; font-size: var(--font-size-xs);">
+            Save Note
+          </button>
+        </div>
       </div>
     </div>
 
@@ -97,19 +113,55 @@ export function renderThoughtsView(
   const newCatSelect = container.querySelector<HTMLSelectElement>('#new-thought-category')!;
   const newPrioSelect = container.querySelector<HTMLSelectElement>('#new-thought-priority')!;
   const saveBtn = container.querySelector<HTMLButtonElement>('#save-thought-btn')!;
+  const attachPhotoBtn = container.querySelector<HTMLButtonElement>('#attach-thought-photo-btn')!;
+  const photoInput = container.querySelector<HTMLInputElement>('#new-thought-photo-input')!;
+  const photoPreviewWrap = container.querySelector<HTMLDivElement>('#new-thought-photo-preview')!;
+  const photoPreviewImg = container.querySelector<HTMLImageElement>('#new-thought-photo-img')!;
+  const removePhotoBtn = container.querySelector<HTMLButtonElement>('#remove-thought-photo-btn')!;
   const listContainer = container.querySelector<HTMLDivElement>('#thoughts-list-container')!;
 
+  let pendingPhotoDataUrl: string | undefined = undefined;
+
+  attachPhotoBtn.addEventListener('click', () => {
+    photoInput.click();
+  });
+
+  photoInput.addEventListener('change', async () => {
+    if (!photoInput.files || !photoInput.files[0]) return;
+    const file = photoInput.files[0];
+    photoInput.value = '';
+    try {
+      pendingPhotoDataUrl = await compressImageToDataUrl(file, 720, 0.72);
+      photoPreviewImg.src = pendingPhotoDataUrl;
+      photoPreviewWrap.style.display = 'flex';
+    } catch (err) {
+      console.warn('Could not compress attached note photo:', err);
+    }
+  });
+
+  removePhotoBtn.addEventListener('click', () => {
+    pendingPhotoDataUrl = undefined;
+    photoPreviewImg.src = '';
+    photoPreviewWrap.style.display = 'none';
+  });
+
   saveBtn.addEventListener('click', async () => {
-    const content = textarea.value.trim();
+    const content = textarea.value.trim() || (pendingPhotoDataUrl ? 'Visual Screenshot Note' : '');
     if (!content) return;
     const cat = (newCatSelect.value as TaskCategory) || 'personal';
     const prio = (newPrioSelect.value as UrgencyLevel) || 'medium';
+    const photoUrlToSave = pendingPhotoDataUrl;
     textarea.value = '';
+    pendingPhotoDataUrl = undefined;
+    photoPreviewImg.src = '';
+    photoPreviewWrap.style.display = 'none';
+
     await noteRepository.createNote({
       content,
       tags: [cat],
       category: cat,
       priority: prio,
+      ...(photoUrlToSave ? { photoUrl: photoUrlToSave } : {}),
     });
     eventBus.emit(AppEvents.NOTE_CREATED);
     const spoken = `Saved your ${prio}-priority ${cat} note, Bruv.`;
@@ -208,9 +260,27 @@ export function renderThoughtsView(
           <span style="font-size: 0.6rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: ${prioMeta.badgeBg}; color: ${prioMeta.badgeColor}; text-transform: uppercase; letter-spacing: 0.04em;">
             ${prioMeta.label}
           </span>
+          ${
+            note.photoUrl
+              ? `<span style="font-size: 0.6rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: rgba(18,18,22,0.08); color: var(--color-black-dominant);">SCREENSHOT</span>`
+              : ''
+          }
         </div>
         <span style="font-size: 0.65rem; color: var(--color-black-muted); font-weight: 600;">Captured ${createdDate}</span>
       </div>
+
+      ${
+        note.photoUrl
+          ? `
+        <div class="note-photo-banner" title="Tap to view full-screen screenshot" style="position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-medium); max-height: 175px; background: #121216; cursor: pointer;">
+          <img src="${note.photoUrl}" alt="Note Screenshot" style="width: 100%; max-height: 175px; object-fit: cover; display: block;" />
+          <span style="position: absolute; bottom: 6px; right: 6px; background: rgba(18,18,22,0.78); color: #FFFFFF; font-size: 0.6rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;">
+            Tap to Zoom
+          </span>
+        </div>
+      `
+          : ''
+      }
 
       <!-- Idea Content (or Inline Editor) -->
       <div class="note-content-view" style="font-size: var(--font-size-sm); font-weight: 600; color: var(--color-black-dominant); line-height: 1.45; word-break: break-word;">
@@ -269,6 +339,12 @@ export function renderThoughtsView(
     const contentView = card.querySelector<HTMLDivElement>('.note-content-view')!;
     const editView = card.querySelector<HTMLDivElement>('.note-edit-view')!;
     const editTextarea = card.querySelector<HTMLTextAreaElement>('.note-edit-textarea')!;
+
+    if (note.photoUrl) {
+      card.querySelector('.note-photo-banner')?.addEventListener('click', () => {
+        openImageLightbox(note.photoUrl!, note.content);
+      });
+    }
 
     catSelect.addEventListener('change', async () => {
       const newCat = (catSelect.value as TaskCategory) || 'personal';

@@ -197,14 +197,25 @@ export class AuthService {
       };
     }
 
-    const result = await signInAnonymously(auth);
-    return {
-      uid: result.user.uid,
-      email: result.user.email,
-      displayName: result.user.displayName,
-      photoURL: result.user.photoURL,
-      isAnonymous: result.user.isAnonymous
-    };
+    try {
+      const result = await signInAnonymously(auth);
+      return {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+        isAnonymous: result.user.isAnonymous
+      };
+    } catch {
+      // Offline guest fallback for zero-Wi-Fi PWA launch
+      return {
+        uid: 'offline_guest_user',
+        email: null,
+        displayName: 'Offline Guest',
+        photoURL: null,
+        isAnonymous: true
+      };
+    }
   }
 
   async signOut(): Promise<void> {

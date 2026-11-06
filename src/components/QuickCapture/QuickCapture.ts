@@ -1,10 +1,15 @@
 import { noteRepository, taskRepository } from '../../services/storage';
-import { geminiService } from '../../services/ai/GeminiService';
+import {
+  screenshotScannerService,
+  type ExtractedScreenshotTask,
+} from '../../services/ai/ScreenshotScannerService';
 import {
   voiceService,
   type PendingTaskDraft,
   type VoicePredictionGuide,
 } from '../../services/voice/VoiceService';
+import { notificationService } from '../../services/notifications/NotificationService';
+import { openImageLightbox } from '../../utils/imageUtils';
 import { eventBus, AppEvents } from '../../services/events';
 import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
 import type { TaskCategory, UrgencyLevel } from '../../types/task';
@@ -45,7 +50,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       </button>
-      <button class="icon-btn" id="photo-upload-btn" title="Scan to-do list / notes with Gemini Vision">
+      <button class="icon-btn" id="photo-upload-btn" title="Upload Screenshot or Photo (Offline OCR + AI Task Rescue)">
         <svg viewBox="0 0 24 24">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
           <circle cx="12" cy="13" r="4" />
@@ -626,7 +631,359 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     }
   });
 
-  // Handle Photo Picker & Gemini Task Extraction
+  // Handle Screenshot / Photo Upload & Clipboard Paste -> Offline-Ready AI Task & Idea Suggestions
+  function formatTime12(time24: string): string {
+    const [hStr, mStr] = (time24 || '09:00').split(':');
+    const h = parseInt(hStr || '9', 10);
+    const m = parseInt(mStr || '0', 10);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  function escapeAttr(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  async function processUploadedScreenshot(file: File) {
+    proposalsBox.style.display = 'block';
+    proposalTitle.textContent = 'Scanning Screenshot...';
+    proposalSub.textContent = `Analyzing "${file.name}" for announcements, deadlines & tasks...`;
+    proposalList.innerHTML = `
+      <div id="scan-live-status" style="font-size: var(--font-size-xs); color: var(--color-black-muted); padding: 12px 0; text-align: center; font-weight: 600;">
+        Preparing image & reading announcement text...
+      </div>
+    `;
+
+    try {
+      const activeDate = resolveActiveDate();
+      const scanResult = await screenshotScannerService.scanScreenshot(file, activeDate, (statusText) => {
+        const statusEl = proposalList.querySelector<HTMLElement>('#scan-live-status');
+        if (statusEl) statusEl.textContent = statusText;
+      });
+
+      let currentTasks: ExtractedScreenshotTask[] = [...scanResult.tasks];
+      const engineBadgeLabel =
+        scanResult.engine === 'gemini-vision'
+          ? 'Gemini Vision AI'
+          : scanResult.engine === 'offline-ocr'
+            ? 'Offline OCR + Smart Parser'
+            : 'Smart Screenshot Rescue';
+
+      const renderScreenshotRescueUI = () => {
+        proposalTitle.textContent = `Screenshot Rescue • ${currentTasks.length} AI Task Suggestion${currentTasks.length === 1 ? '' : 's'}`;
+        proposalSub.textContent = `Engine: ${engineBadgeLabel} — Review & approve tasks to your 24h Focus Orbit, or save this screenshot to Thoughts.`;
+        proposalList.innerHTML = '';
+
+        // 1. Screenshot Preview + Save as Visual Idea Card
+        const defaultIdeaCat = currentTasks[0]?.category || 'study';
+        const defaultIdeaPrio = currentTasks[0]?.urgency || 'high';
+        const previewCard = document.createElement('div');
+        previewCard.style.cssText = `
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          background: #FFFDF9;
+          border: 1.5px dashed var(--border-medium);
+          border-radius: var(--radius-md);
+          padding: 10px;
+          margin-bottom: 6px;
+        `;
+
+        previewCard.innerHTML = `
+          <div style="display: flex; gap: 10px; align-items: flex-start;">
+            <div id="screenshot-thumb-wrap" title="Click to zoom screenshot full-screen" style="position: relative; width: 74px; height: 74px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-medium); cursor: pointer; flex-shrink: 0; background: #121216;">
+              <img src="${scanResult.photoDataUrl}" alt="Uploaded Screenshot" style="width: 100%; height: 100%; object-fit: cover;" />
+              <span style="position: absolute; bottom: 0; inset-inline: 0; background: rgba(18,18,22,0.75); color: #FFFFFF; font-size: 0.55rem; font-weight: 800; text-align: center; padding: 2px 0;">
+                ZOOM
+              </span>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                <span style="font-size: 0.62rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+                  Detected Screenshot Text / Caption (Editable):
+                </span>
+                <button type="button" id="rescan-text-btn" class="pill-badge" style="cursor: pointer; font-size: 0.6rem; padding: 2px 7px;" title="Re-extract tasks from edited text">
+                  Re-Scan Text
+                </button>
+              </div>
+              <textarea id="screenshot-ocr-textarea" rows="2" placeholder="Type or edit announcement text (e.g. 'Submit CHED Scholarship form at 3:00 PM')..." style="width: 100%; padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-medium); background: var(--bg-surface); font-family: inherit; font-size: 0.72rem; color: var(--color-black-dominant); resize: vertical;">${escapeAttr(scanResult.rawText || scanResult.suggestedNoteSummary)}</textarea>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <label style="display: flex; align-items: center; gap: 3px; font-size: 0.6rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+                Idea Cat:
+                <select id="screenshot-note-cat" style="padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
+                  <option value="study" ${defaultIdeaCat === 'study' ? 'selected' : ''}>Study</option>
+                  <option value="work" ${defaultIdeaCat === 'work' ? 'selected' : ''}>Work</option>
+                  <option value="personal" ${defaultIdeaCat === 'personal' ? 'selected' : ''}>Personal</option>
+                  <option value="event" ${defaultIdeaCat === 'event' ? 'selected' : ''}>Event</option>
+                  <option value="rest" ${defaultIdeaCat === 'rest' ? 'selected' : ''}>Rest</option>
+                </select>
+              </label>
+              <label style="display: flex; align-items: center; gap: 3px; font-size: 0.6rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+                Importance:
+                <select id="screenshot-note-prio" style="padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
+                  <option value="high" ${defaultIdeaPrio === 'high' ? 'selected' : ''}>High Priority</option>
+                  <option value="medium" ${defaultIdeaPrio === 'medium' ? 'selected' : ''}>Medium Priority</option>
+                  <option value="low" ${defaultIdeaPrio === 'low' ? 'selected' : ''}>Low Priority</option>
+                </select>
+              </label>
+            </div>
+            <button type="button" id="save-screenshot-note-btn" class="pill-badge" style="cursor: pointer; background: var(--color-black-dominant); color: #FAF7F2; border: none; font-size: 0.65rem; font-weight: 700; padding: 4px 10px;">
+              Save Screenshot to Thoughts
+            </button>
+          </div>
+        `;
+
+        const ocrTextarea = previewCard.querySelector<HTMLTextAreaElement>('#screenshot-ocr-textarea')!;
+        const noteCatSelect = previewCard.querySelector<HTMLSelectElement>('#screenshot-note-cat')!;
+        const notePrioSelect = previewCard.querySelector<HTMLSelectElement>('#screenshot-note-prio')!;
+        const saveNoteBtn = previewCard.querySelector<HTMLButtonElement>('#save-screenshot-note-btn')!;
+        const rescanBtn = previewCard.querySelector<HTMLButtonElement>('#rescan-text-btn')!;
+
+        previewCard.querySelector('#screenshot-thumb-wrap')?.addEventListener('click', () => {
+          openImageLightbox(scanResult.photoDataUrl, ocrTextarea.value || file.name);
+        });
+
+        rescanBtn.addEventListener('click', () => {
+          const editedText = ocrTextarea.value.trim();
+          scanResult.rawText = editedText;
+          currentTasks = screenshotScannerService.parseAnnouncementTextToTasks(
+            editedText,
+            file.name,
+            resolveActiveDate()
+          );
+          renderScreenshotRescueUI();
+        });
+
+        saveNoteBtn.addEventListener('click', async () => {
+          const noteText = ocrTextarea.value.trim() || `Screenshot Note: ${file.name}`;
+          const cat = (noteCatSelect.value as TaskCategory) || 'study';
+          const prio = (notePrioSelect.value as UrgencyLevel) || 'high';
+          saveNoteBtn.disabled = true;
+          saveNoteBtn.textContent = 'Saved to Thoughts';
+          saveNoteBtn.style.background = '#047857';
+
+          await noteRepository.createNote({
+            content: noteText,
+            tags: [cat],
+            category: cat,
+            priority: prio,
+            photoUrl: scanResult.photoDataUrl,
+          });
+          eventBus.emit(AppEvents.NOTE_CREATED);
+          const spoken = `Saved your screenshot and note under ${cat} in your Thoughts tab, Bruv.`;
+          eventBus.emit(AppEvents.MASCOT_SPEAK, {
+            headline: 'Screenshot saved to Thoughts!',
+            subspeech: spoken,
+          });
+          voiceService.speak(spoken);
+          notificationService.playAlarmChime('success');
+        });
+
+        proposalList.appendChild(previewCard);
+
+        // 2. Editable "Approve AI Tasks" Cards (Step 3 of Live Demo)
+        const approveCallbacks: Array<() => Promise<void>> = [];
+
+        currentTasks.forEach((item, index) => {
+          const itemCard = document.createElement('div');
+          const catColor = CATEGORY_COLORS[item.category] || '#E52E2E';
+          itemCard.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: var(--bg-surface-elevated);
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-medium);
+            border-left: 4px solid ${catColor};
+          `;
+
+          itemCard.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 0.6rem; font-weight: 800; padding: 2px 6px; border-radius: 999px; background: rgba(229,46,46,0.12); color: var(--color-red-primary);">
+                AI TASK #${index + 1}
+              </span>
+              <input
+                type="text"
+                class="scan-task-title-input"
+                value="${escapeAttr(item.title)}"
+                placeholder="Task title..."
+                style="flex: 1; padding: 4px 7px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-dominant); font-family: inherit;"
+              />
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+                <input
+                  type="date"
+                  class="scan-task-date-input"
+                  value="${item.date}"
+                  title="Scheduled Date"
+                  style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700; color: var(--color-black-dominant); font-family: inherit;"
+                />
+                <input
+                  type="time"
+                  class="scan-task-time-input"
+                  value="${item.startTime}"
+                  title="Start Time"
+                  style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700; color: var(--color-black-dominant); font-family: inherit;"
+                />
+                <select class="scan-task-dur-select" title="Duration" style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
+                  ${[15, 30, 45, 60, 90, 120]
+                    .map(
+                      d =>
+                        `<option value="${d}" ${d === item.durationMinutes ? 'selected' : ''}>${d}m</option>`
+                    )
+                    .join('')}
+                </select>
+                <select class="scan-task-cat-select" title="Category" style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
+                  <option value="study" ${item.category === 'study' ? 'selected' : ''}>Study</option>
+                  <option value="work" ${item.category === 'work' ? 'selected' : ''}>Work</option>
+                  <option value="personal" ${item.category === 'personal' ? 'selected' : ''}>Personal</option>
+                  <option value="event" ${item.category === 'event' ? 'selected' : ''}>Event</option>
+                  <option value="rest" ${item.category === 'rest' ? 'selected' : ''}>Rest</option>
+                </select>
+                <select class="scan-task-urg-select" title="Priority / Urgency" style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
+                  <option value="high" ${item.urgency === 'high' ? 'selected' : ''}>High Priority</option>
+                  <option value="medium" ${item.urgency === 'medium' ? 'selected' : ''}>Medium</option>
+                  <option value="low" ${item.urgency === 'low' ? 'selected' : ''}>Low</option>
+                </select>
+              </div>
+
+              <button type="button" class="pill-badge approve-scan-task-btn" style="background: var(--color-red-primary); color: #FAF7F2; border: none; font-size: 0.66rem; font-weight: 800; cursor: pointer; padding: 5px 11px; flex-shrink: 0;">
+                Approve to Orbit
+              </button>
+            </div>
+          `;
+
+          const titleInput = itemCard.querySelector<HTMLInputElement>('.scan-task-title-input')!;
+          const dateInput = itemCard.querySelector<HTMLInputElement>('.scan-task-date-input')!;
+          const timeInput = itemCard.querySelector<HTMLInputElement>('.scan-task-time-input')!;
+          const durSelect = itemCard.querySelector<HTMLSelectElement>('.scan-task-dur-select')!;
+          const catSelect = itemCard.querySelector<HTMLSelectElement>('.scan-task-cat-select')!;
+          const urgSelect = itemCard.querySelector<HTMLSelectElement>('.scan-task-urg-select')!;
+          const approveBtn = itemCard.querySelector<HTMLButtonElement>('.approve-scan-task-btn')!;
+
+          let isApproved = false;
+          const approveThisTask = async () => {
+            if (isApproved) return;
+            isApproved = true;
+            const finalTitle = titleInput.value.trim() || item.title || 'Screenshot Task';
+            const finalDate = dateInput.value || resolveActiveDate();
+            const finalTime = timeInput.value || item.startTime || '09:00';
+            const finalDur = parseInt(durSelect.value || '45', 10);
+            const finalCat = (catSelect.value as TaskCategory) || 'study';
+            const finalUrg = (urgSelect.value as UrgencyLevel) || 'high';
+
+            approveBtn.disabled = true;
+            approveBtn.textContent = 'Approved';
+            approveBtn.style.background = '#047857';
+            itemCard.style.opacity = '0.72';
+
+            await taskRepository.createTask({
+              title: finalTitle,
+              category: finalCat,
+              date: finalDate,
+              startTime: finalTime,
+              durationMinutes: finalDur,
+              urgency: finalUrg,
+              notes: ocrTextarea.value.trim()
+                ? `From screenshot "${file.name}": ${ocrTextarea.value.trim().slice(0, 180)}`
+                : `Rescued from screenshot "${file.name}"`,
+              photoUrl: scanResult.photoDataUrl,
+            });
+
+            if (finalDate !== resolveActiveDate()) {
+              eventBus.emit(AppEvents.DATE_SELECTED, finalDate);
+            }
+            eventBus.emit(AppEvents.TASK_CREATED);
+
+            const friendly = formatTime12(finalTime);
+            const spoken = `Approved! Scheduled "${finalTitle}" at ${friendly} under ${finalCat} on your Focus Orbit, Bruv.`;
+            eventBus.emit(AppEvents.MASCOT_SPEAK, {
+              headline: `Approved "${finalTitle}" at ${friendly}`,
+              subspeech: spoken,
+            });
+            voiceService.speak(spoken);
+            notificationService.playAlarmChime('success');
+          };
+
+          approveBtn.addEventListener('click', approveThisTask);
+          approveCallbacks.push(approveThisTask);
+          proposalList.appendChild(itemCard);
+        });
+
+        // 3. Footer row: "+ Add Another Task" & "✓ Approve All to Orbit"
+        const footerRow = document.createElement('div');
+        footerRow.style.cssText = `
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-top: 4px;
+        `;
+
+        footerRow.innerHTML = `
+          <button type="button" id="add-extra-scan-task-btn" class="pill-badge" style="cursor: pointer; font-size: 0.65rem;">
+            + Add Another Task from Screenshot
+          </button>
+          ${
+            currentTasks.length > 1
+              ? `<button type="button" id="approve-all-scan-tasks-btn" class="btn btn-primary" style="padding: 5px 12px; font-size: 0.68rem;">
+                   Approve All (${currentTasks.length}) to Orbit
+                 </button>`
+              : ''
+          }
+        `;
+
+        footerRow.querySelector('#add-extra-scan-task-btn')?.addEventListener('click', () => {
+          const now = new Date();
+          const nextHour = (now.getHours() + 1 + currentTasks.length) % 24;
+          currentTasks.push({
+            id: `scan_task_${Date.now()}_${currentTasks.length}`,
+            title: 'Follow-up from Screenshot',
+            date: resolveActiveDate(),
+            startTime: `${String(nextHour).padStart(2, '0')}:00`,
+            durationMinutes: 45,
+            category: 'study',
+            urgency: 'medium',
+          });
+          renderScreenshotRescueUI();
+        });
+
+        footerRow.querySelector('#approve-all-scan-tasks-btn')?.addEventListener('click', async () => {
+          for (const fn of approveCallbacks) {
+            await fn();
+          }
+        });
+
+        proposalList.appendChild(footerRow);
+      };
+
+      renderScreenshotRescueUI();
+
+      const firstTask = currentTasks[0];
+      const spokenIntro = firstTask
+        ? `Scanned your screenshot, Bruv! I found ${currentTasks.length} task suggestion${currentTasks.length === 1 ? '' : 's'}, starting with "${firstTask.title}" at ${formatTime12(firstTask.startTime)}. Tap Approve to schedule to your Orbit, or save it to Thoughts.`
+        : `Got your screenshot, Bruv! Review the card below to approve to your Focus Orbit or save to Thoughts.`;
+
+      eventBus.emit(AppEvents.MASCOT_SPEAK, {
+        headline: `Screenshot scanned (${currentTasks.length} suggestion${currentTasks.length === 1 ? '' : 's'})`,
+        subspeech: spokenIntro,
+      });
+      voiceService.speak(spokenIntro);
+    } catch (err) {
+      console.warn('Screenshot rescue error:', err);
+      proposalTitle.textContent = 'Could Not Read Image File';
+      proposalSub.textContent = 'Please select a valid PNG, JPG, or WEBP screenshot image.';
+    }
+  }
+
   photoBtn.addEventListener('click', () => {
     fileInput.click();
   });
@@ -635,126 +992,25 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     if (!fileInput.files || !fileInput.files[0]) return;
     const file = fileInput.files[0];
     fileInput.value = '';
+    await processUploadedScreenshot(file);
+  });
 
-    await noteRepository.createNote({
-      content: `Photo Note: "${file.name}" scanned with Gemini Vision`
-    });
-    eventBus.emit(AppEvents.NOTE_CREATED);
-
-    proposalsBox.style.display = 'block';
-    proposalTitle.textContent = 'Scanning image with Gemini...';
-    proposalSub.textContent = `Analyzing "${file.name}" for tasks and to-do items...`;
-    proposalList.innerHTML = `
-      <div style="font-size: var(--font-size-xs); color: var(--color-black-muted); padding: 8px 0; text-align: center;">
-        Reading handwritten / printed text...
-      </div>
-    `;
-
-    try {
-      const extractedTasks = await geminiService.extractTasksFromImage(file);
-
-      if (extractedTasks.length === 0) {
-        proposalTitle.textContent = 'No Actionable Tasks Detected';
-        proposalSub.textContent = 'Gemini could not find clear to-do items in this image.';
-        proposalList.innerHTML = `
-          <button class="pill-badge" id="dismiss-empty-proposals" style="cursor: pointer; align-self: center; margin-top: 4px;">
-            Dismiss
-          </button>
-        `;
-        container.querySelector('#dismiss-empty-proposals')?.addEventListener('click', () => {
-          proposalsBox.style.display = 'none';
-        });
-        return;
-      }
-
-      proposalTitle.textContent = `Gemini Found ${extractedTasks.length} Task${extractedTasks.length > 1 ? 's' : ''}`;
-      proposalSub.textContent = 'Tap any item to add it directly to today\'s schedule:';
-      proposalList.innerHTML = '';
-
-      const todayStr = resolveActiveDate();
-
-      extractedTasks.forEach((item, index) => {
-        const itemRow = document.createElement('div');
-        itemRow.style.cssText = `
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: var(--bg-surface-elevated);
-          padding: 8px 10px;
-          border-radius: var(--radius-sm);
-          border: 1px solid var(--border-subtle);
-          cursor: pointer;
-          transition: transform 0.15s ease, background 0.15s ease;
-        `;
-
-        const categoryTag = (item.category || 'personal').toUpperCase();
-        const durationTag = item.durationMinutes ? `${item.durationMinutes}m` : '30m';
-
-        itemRow.innerHTML = `
-          <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; margin-right: 8px;">
-            <strong style="font-size: var(--font-size-xs); color: var(--color-black-dominant); word-break: break-word;">
-              ${item.title || 'Untitled'}
-            </strong>
-            <span style="font-size: 0.65rem; color: var(--color-black-muted); font-weight: 600;">
-              ${categoryTag} &bull; ${durationTag} &bull; Urgency: ${item.urgency || 'medium'}
-            </span>
-          </div>
-          <button class="pill-badge" style="background: var(--color-red-primary); color: #FAF7F2; border: none; font-size: 0.65rem; font-weight: 700; cursor: pointer; padding: 3px 8px; flex-shrink: 0;">
-            + ADD
-          </button>
-        `;
-
-        const handleAddTask = async (e: Event) => {
-          e.stopPropagation();
-          itemRow.style.opacity = '0.5';
-          itemRow.style.pointerEvents = 'none';
-
-          const now = new Date();
-          const nextHour = (now.getHours() + 1 + index) % 24;
-          const startTime = `${String(nextHour).padStart(2, '0')}:00`;
-
-          await taskRepository.createTask({
-            title: item.title || 'Extracted Task',
-            category: (item.category || 'personal') as TaskCategory,
-            date: todayStr,
-            startTime,
-            durationMinutes: item.durationMinutes || 30,
-            urgency: (item.urgency || 'medium') as UrgencyLevel,
-            notes: `Extracted via Gemini Vision from "${file.name}"`
+  // Also allow pasting a screenshot directly from clipboard (Ctrl+V) into Quick Capture!
+  inputEl.addEventListener('paste', async (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const blob = items[i].getAsFile();
+        if (blob) {
+          e.preventDefault();
+          const pastedFile = new File([blob], `Clipboard_Screenshot_${Date.now()}.png`, {
+            type: blob.type || 'image/png',
           });
-
-          eventBus.emit(AppEvents.TASK_CREATED);
-
-          itemRow.innerHTML = `
-            <div style="font-size: var(--font-size-xs); color: var(--color-black-muted); font-weight: 600;">
-              Added to Focus Orbit at ${startTime}
-            </div>
-            <span style="font-size: 0.75rem; color: var(--color-red-primary); font-weight: 800;">ADDED</span>
-          `;
-
-          setTimeout(() => {
-            const remaining = proposalList.querySelectorAll('[style*="pointer-events: none"]').length;
-            if (remaining === extractedTasks.length) {
-              proposalsBox.style.display = 'none';
-            }
-          }, 1200);
-        };
-
-        itemRow.addEventListener('click', handleAddTask);
-        proposalList.appendChild(itemRow);
-      });
-    } catch (err) {
-      console.warn('Gemini vision extraction failed:', err);
-      proposalTitle.textContent = 'Extraction Unavailable';
-      proposalSub.textContent = 'Could not process the photo with Gemini Vision (check network or try again).';
-      proposalList.innerHTML = `
-        <button class="pill-badge" id="dismiss-err-proposals" style="cursor: pointer; align-self: center; margin-top: 4px;">
-          Dismiss
-        </button>
-      `;
-      container.querySelector('#dismiss-err-proposals')?.addEventListener('click', () => {
-        proposalsBox.style.display = 'none';
-      });
+          await processUploadedScreenshot(pastedFile);
+          return;
+        }
+      }
     }
   });
 

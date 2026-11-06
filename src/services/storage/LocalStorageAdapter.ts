@@ -59,6 +59,7 @@ export class LocalTaskRepository implements ITaskRepository {
       urgency: dto.urgency,
       completed: false,
       notes: dto.notes,
+      ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };

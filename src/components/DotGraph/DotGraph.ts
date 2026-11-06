@@ -1,5 +1,6 @@
 import { taskRepository, noteRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
+import { openImageLightbox } from '../../utils/imageUtils';
 import type { GraphNode, GraphLink } from '../../types/note';
 
 export function renderDotGraph(): HTMLElement {
@@ -48,6 +49,7 @@ export function renderDotGraph(): HTMLElement {
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <span id="inspector-badge" style="font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;"></span>
           <div style="display: flex; align-items: center; gap: 8px;">
+            <button id="inspector-photo-btn" style="display: none; background: #38BDF8; border: none; color: #121216; cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 2px 7px; border-radius: 4px;">SCREENSHOT</button>
             <button id="inspector-delete" style="display: none; background: #E52E2E; border: none; color: #FFFFFF; cursor: pointer; font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px;">DELETE</button>
             <button id="inspector-close" style="background: none; border: none; color: #BDB2A1; cursor: pointer; font-size: 1rem; line-height: 1;">&times;</button>
           </div>
@@ -79,6 +81,7 @@ export function renderDotGraph(): HTMLElement {
   const inspector = container.querySelector<HTMLElement>('#node-inspector')!;
   const inspectorBadge = container.querySelector<HTMLElement>('#inspector-badge')!;
   const inspectorTitle = container.querySelector<HTMLElement>('#inspector-title')!;
+  const inspectorPhotoBtn = container.querySelector<HTMLButtonElement>('#inspector-photo-btn')!;
   const inspectorDelete = container.querySelector<HTMLButtonElement>('#inspector-delete')!;
   const inspectorClose = container.querySelector<HTMLButtonElement>('#inspector-close')!;
   const resetBtn = container.querySelector<HTMLButtonElement>('#graph-reset-btn')!;
@@ -89,6 +92,12 @@ export function renderDotGraph(): HTMLElement {
   inspectorClose.addEventListener('click', () => {
     inspector.style.display = 'none';
     selectedNode = null;
+  });
+
+  inspectorPhotoBtn.addEventListener('click', () => {
+    if (selectedNode?.photoUrl) {
+      openImageLightbox(selectedNode.photoUrl, selectedNode.label);
+    }
   });
 
   inspectorDelete.addEventListener('click', async () => {
@@ -173,6 +182,7 @@ export function renderDotGraph(): HTMLElement {
         type: 'task',
         radius: task.urgency === 'high' ? 8 : 6,
         color: '#E52E2E',
+        photoUrl: task.photoUrl,
       };
       newNodes.push(taskNode);
 
@@ -194,6 +204,7 @@ export function renderDotGraph(): HTMLElement {
         type: 'note',
         radius: 6,
         color: '#38BDF8', // Cyan
+        photoUrl: note.photoUrl,
       });
 
       // Connect note directly to its Category Topic Hub
@@ -425,6 +436,7 @@ export function renderDotGraph(): HTMLElement {
       inspectorBadge.textContent = node.type;
       inspectorBadge.style.background = node.color;
       inspectorBadge.style.color = '#FFFFFF';
+      inspectorPhotoBtn.style.display = node.photoUrl ? 'inline-block' : 'none';
       inspectorDelete.style.display = node.type === 'task' || node.type === 'note' ? 'inline-block' : 'none';
     }
   }

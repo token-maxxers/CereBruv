@@ -2,20 +2,20 @@
  * CereBruv Service Worker (PWA Offline Cache & FCM Push Receiver)
  */
 
-// Import official Firebase Messaging service worker scripts
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBQ_YTHADnFFxRe3D1_zNuFLczHExW4zB4",
-  authDomain: "cere-bruv.firebaseapp.com",
-  projectId: "cere-bruv",
-  storageBucket: "cere-bruv.firebasestorage.app",
-  messagingSenderId: "106248948674",
-  appId: "1:106248948674:web:84468c63706ca95a68e45b"
-};
-
+// Import official Firebase Messaging service worker scripts (guarded so offline SW install never fails)
 try {
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBQ_YTHADnFFxRe3D1_zNuFLczHExW4zB4",
+    authDomain: "cere-bruv.firebaseapp.com",
+    projectId: "cere-bruv",
+    storageBucket: "cere-bruv.firebasestorage.app",
+    messagingSenderId: "106248948674",
+    appId: "1:106248948674:web:84468c63706ca95a68e45b"
+  };
+
   firebase.initializeApp(firebaseConfig);
   const messaging = firebase.messaging();
 
@@ -32,15 +32,17 @@ try {
     return self.registration.showNotification(notificationTitle, notificationOptions);
   });
 } catch (err) {
-  console.warn('Firebase Messaging SW init skipped or failed:', err);
+  console.warn('Firebase Messaging SW init skipped (offline mode ready):', err);
 }
 
-const CACHE_NAME = 'cerebruv-cache-v4';
+const CACHE_NAME = 'cerebruv-cache-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/mascot.png'
+  '/mascot.png',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -64,9 +66,50 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first, fallback to cache
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  const isOcrAsset = url.hostname.includes('jsdelivr.net') || url.pathname.endsWith('.traineddata.gz') || url.pathname.endsWith('.wasm');
+
+  if (!isSameOrigin && !isOcrAsset) {
+    return;
+  }
+
+  // Runtime cache-on-fetch (Network first for app shell, fallback to cache; Cache-first for immutable OCR/WASM)
+  if (isOcrAsset) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return res;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        throw new Error('Offline resource unavailable');
+      })
   );
 });
 

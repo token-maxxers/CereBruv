@@ -2,6 +2,7 @@ import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
+import { openImageLightbox } from '../../utils/imageUtils';
 import {
   calculateOrbitSegments,
   analyzeDayWorkload,
@@ -76,6 +77,10 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
             </div>
             <h4 id="popover-task-title" style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); margin: 4px 0 2px; line-height: 1.25;"></h4>
             <div id="popover-task-time" style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-soft);"></div>
+            <div id="popover-task-photo-wrap" title="Tap to view attached screenshot" style="display: none; margin-top: 6px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-medium); max-height: 76px; background: #121216; cursor: pointer; position: relative;">
+              <img id="popover-task-photo-img" src="" alt="Attached Screenshot" style="width: 100%; max-height: 76px; object-fit: cover; display: block;" />
+              <span style="position: absolute; bottom: 3px; right: 5px; background: rgba(18,18,22,0.78); color: #FFFFFF; font-size: 0.55rem; font-weight: 800; padding: 1px 6px; border-radius: 999px;">Zoom Screenshot</span>
+            </div>
             <p id="popover-task-notes" style="font-size: 0.72rem; color: var(--color-black-muted); margin-top: 6px; line-height: 1.35; max-height: 56px; overflow-y: auto;"></p>
           </div>
           <div id="popover-actions-row" style="display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
@@ -155,6 +160,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const popoverCloseBtn = container.querySelector<HTMLButtonElement>('#popover-close-btn')!;
   const popoverTaskTitle = container.querySelector<HTMLElement>('#popover-task-title')!;
   const popoverTaskTime = container.querySelector<HTMLElement>('#popover-task-time')!;
+  const popoverPhotoWrap = container.querySelector<HTMLDivElement>('#popover-task-photo-wrap')!;
+  const popoverPhotoImg = container.querySelector<HTMLImageElement>('#popover-task-photo-img')!;
   const popoverTaskNotes = container.querySelector<HTMLElement>('#popover-task-notes')!;
   const popoverActionsRow = container.querySelector<HTMLDivElement>('#popover-actions-row')!;
   const popoverCompleteBtn = container.querySelector<HTMLButtonElement>('#popover-complete-btn')!;
@@ -169,6 +176,13 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     e.stopPropagation();
     arcPopover.style.display = 'none';
     activePopoverTask = null;
+  });
+
+  popoverPhotoWrap.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activePopoverTask?.photoUrl) {
+      openImageLightbox(activePopoverTask.photoUrl, activePopoverTask.title);
+    }
   });
 
   popoverCompleteBtn.addEventListener('click', async (e) => {
@@ -502,6 +516,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       popoverUrgencyBadge.style.color = '#5B21B6';
       popoverTaskTitle.textContent = 'Rest & Sleep Window';
       popoverTaskTime.textContent = `${startStr} – ${endStr} (23:00 to 07:00)`;
+      popoverPhotoWrap.style.display = 'none';
       popoverTaskNotes.textContent = 'Protected 8-hour downtime block so your Focus Orbit calculates realistic 16h waking capacity.';
       popoverActionsRow.style.display = 'none';
       arcPopover.style.display = 'flex';
@@ -530,6 +545,13 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     popoverTaskTitle.textContent = seg.title;
     const durationMins = matchedTask ? matchedTask.durationMinutes : Math.round((seg.endHour - seg.startHour) * 60);
     popoverTaskTime.textContent = `${startStr} – ${endStr} (${durationMins} mins)${seg.completed ? ' • Completed' : ''}`;
+    if (matchedTask?.photoUrl) {
+      popoverPhotoImg.src = matchedTask.photoUrl;
+      popoverPhotoWrap.style.display = 'block';
+    } else {
+      popoverPhotoImg.src = '';
+      popoverPhotoWrap.style.display = 'none';
+    }
     popoverTaskNotes.textContent = matchedTask?.notes || 'Scheduled on your Focus Orbit. Tap Edit to adjust category, time, or duration.';
 
     popoverCompleteBtn.textContent = seg.completed ? 'Reopen Task' : 'Complete (+25 XP)';

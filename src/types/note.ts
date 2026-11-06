@@ -19,6 +19,7 @@ export interface GraphNode {
   type: GraphNodeType;
   radius: number;
   color: string;
+  photoUrl?: string;
   x?: number;
   y?: number;
   vx?: number;
