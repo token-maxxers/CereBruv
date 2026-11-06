@@ -35,7 +35,7 @@ try {
   console.warn('Firebase Messaging SW init skipped or failed:', err);
 }
 
-const CACHE_NAME = 'cerebruv-cache-v2';
+const CACHE_NAME = 'cerebruv-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
