@@ -1,5 +1,5 @@
 import type { QuickNote } from '../../types/note';
-import type { TaskCategory, UrgencyLevel } from '../../types/task';
+import type { SavedLink, TaskCategory, UrgencyLevel } from '../../types/task';
 
 export interface CreateNoteDTO {
   content: string;
@@ -8,6 +8,7 @@ export interface CreateNoteDTO {
   priority?: UrgencyLevel;
   audioUrl?: string;
   photoUrl?: string;
+  links?: SavedLink[];
 }
 
 export interface INoteRepository {

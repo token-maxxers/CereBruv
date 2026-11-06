@@ -24,10 +24,10 @@ export class LocalTaskRepository implements ITaskRepository {
       if (!data) return [];
       const tasks: Task[] = JSON.parse(data);
       const today = this.getTodayString();
-      // Backwards compatibility for existing tasks without date
+      // Backwards compatibility for legacy tasks where date was undefined (preserve intentional "" undated tasks)
       return tasks.map(t => ({
         ...t,
-        date: t.date || today,
+        date: typeof t.date === 'string' ? t.date : today,
       }));
     } catch {
       return [];
@@ -53,13 +53,14 @@ export class LocalTaskRepository implements ITaskRepository {
       id: 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       title: dto.title.trim(),
       category: dto.category,
-      date: dto.date || this.getTodayString(),
-      startTime: dto.startTime,
-      durationMinutes: dto.durationMinutes,
+      date: typeof dto.date === 'string' ? dto.date : this.getTodayString(),
+      startTime: dto.startTime ?? '',
+      durationMinutes: typeof dto.durationMinutes === 'number' ? dto.durationMinutes : 0,
       urgency: dto.urgency,
       completed: false,
       notes: dto.notes,
       ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
+      ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -144,6 +145,7 @@ export class LocalNoteRepository implements INoteRepository {
       priority,
       audioUrl: dto.audioUrl,
       photoUrl: dto.photoUrl,
+      ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),
       createdAt: Date.now(),
     };
 

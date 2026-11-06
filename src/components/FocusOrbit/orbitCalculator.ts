@@ -13,6 +13,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
  * Converts "HH:mm" 24h string into fractional hour (e.g. "09:30" -> 9.5).
  */
 export function timeStringToFractionalHour(timeStr: string): number {
+  if (!timeStr || !timeStr.includes(':')) return 0;
   const [hours, minutes] = timeStr.split(':').map(Number);
   return (hours || 0) + (minutes || 0) / 60;
 }
@@ -29,6 +30,7 @@ export function fractionalHourToString(hour: number): string {
 
 /**
  * Transforms real user tasks into 24-hour circular arc segments.
+ * Untimed tasks (startTime === "") do not draw a fake midnight arc on the 24h dial.
  */
 export function calculateOrbitSegments(tasks: Task[]): OrbitArcSegment[] {
   const segments: OrbitArcSegment[] = [];
@@ -46,8 +48,10 @@ export function calculateOrbitSegments(tasks: Task[]): OrbitArcSegment[] {
   });
 
   tasks.forEach(task => {
+    if (!task.startTime) return;
     const start = timeStringToFractionalHour(task.startTime);
-    const durationHours = task.durationMinutes / 60;
+    const effectiveMinutes = task.durationMinutes > 0 ? task.durationMinutes : 20;
+    const durationHours = effectiveMinutes / 60;
     const end = start + durationHours;
 
     segments.push({
@@ -68,41 +72,41 @@ export function calculateOrbitSegments(tasks: Task[]): OrbitArcSegment[] {
 /**
  * Smart Assistant Task Prioritizer:
  * Ranks uncompleted tasks by:
- * 1. Currently in-progress or starting within 30 mins (with urgency tie-breaker)
- * 2. Upcoming tasks today ordered by earliest start time & urgency
- * 3. Overdue uncompleted tasks ordered by urgency & start time
+ * 0. Timed tasks currently in-progress or starting within 45 mins
+ * 1. Timed upcoming tasks today ordered by earliest start time & urgency
+ * 2. Untimed tasks (flexible / deadline-only) ordered by urgency
+ * 3. Timed overdue uncompleted tasks ordered by urgency & start time
  */
 export function sortTasksSmartly(tasks: Task[], currentHourFraction: number): Task[] {
   const urgencyWeight = { high: 3, medium: 2, low: 1 };
   return [...tasks].sort((a, b) => {
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
 
-    const aStart = timeStringToFractionalHour(a.startTime);
-    const aEnd = aStart + a.durationMinutes / 60;
-    const bStart = timeStringToFractionalHour(b.startTime);
-    const bEnd = bStart + b.durationMinutes / 60;
+    const aHasTime = Boolean(a.startTime);
+    const bHasTime = Boolean(b.startTime);
 
-    // Group 0: Active right now or starting within 45 mins
-    // Group 1: Future upcoming today
-    // Group 2: Past window (missed/overdue)
-    const getGroup = (start: number, end: number) => {
+    const aStart = aHasTime ? timeStringToFractionalHour(a.startTime) : 0;
+    const aEnd = aStart + Math.max(15, a.durationMinutes || 0) / 60;
+    const bStart = bHasTime ? timeStringToFractionalHour(b.startTime) : 0;
+    const bEnd = bStart + Math.max(15, b.durationMinutes || 0) / 60;
+
+    const getGroup = (hasTime: boolean, start: number, end: number) => {
+      if (!hasTime) return 2;
       if (end >= currentHourFraction && start <= currentHourFraction + 0.75) return 0;
       if (start > currentHourFraction + 0.75) return 1;
-      return 2;
+      return 3;
     };
 
-    const groupA = getGroup(aStart, aEnd);
-    const groupB = getGroup(bStart, bEnd);
+    const groupA = getGroup(aHasTime, aStart, aEnd);
+    const groupB = getGroup(bHasTime, bStart, bEnd);
     if (groupA !== groupB) return groupA - groupB;
 
-    // Within Group 0 (imminent/active) or Group 2 (overdue), rank High Priority first, then earliest time
-    if (groupA === 0 || groupA === 2) {
+    if (groupA === 0 || groupA === 2 || groupA === 3) {
       const urgDiff = urgencyWeight[b.urgency] - urgencyWeight[a.urgency];
       if (urgDiff !== 0) return urgDiff;
       return aStart - bStart;
     }
 
-    // Within Group 1 (upcoming later today): if within 60 mins of each other, High Priority wins; otherwise earliest time wins
     if (Math.abs(aStart - bStart) <= 1.0) {
       const urgDiff = urgencyWeight[b.urgency] - urgencyWeight[a.urgency];
       if (urgDiff !== 0) return urgDiff;
@@ -119,7 +123,9 @@ export function analyzeDayWorkload(tasks: Task[], currentHourFraction: number): 
   const uncompleted = tasks.filter(t => !t.completed);
 
   tasks.forEach(t => {
-    totalBusyMinutes += t.durationMinutes;
+    if (t.durationMinutes > 0) {
+      totalBusyMinutes += t.durationMinutes;
+    }
   });
 
   // 16 waking hours = 960 minutes
@@ -137,7 +143,8 @@ export function analyzeDayWorkload(tasks: Task[], currentHourFraction: number): 
   } else if (isOverloaded) {
     companionMessage = `Day is overloaded (${Math.round(totalBusyMinutes / 60)}h scheduled). Focus on your top priority task first.`;
   } else if (realisticNextTask) {
-    companionMessage = `Optimal next task: "${realisticNextTask.title}" (${realisticNextTask.durationMinutes}m). Fits your open block.`;
+    const durNote = realisticNextTask.durationMinutes > 0 ? ` (${realisticNextTask.durationMinutes}m)` : '';
+    companionMessage = `Optimal next task: "${realisticNextTask.title}"${durNote}. Fits your open block.`;
   } else {
     companionMessage = 'Workload balanced. Keep up the steady momentum.';
   }

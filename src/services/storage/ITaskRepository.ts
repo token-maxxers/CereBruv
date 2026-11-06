@@ -1,14 +1,15 @@
-import type { Task } from '../../types/task';
+import type { SavedLink, Task } from '../../types/task';
 
 export interface CreateTaskDTO {
   title: string;
   category: Task['category'];
-  date?: string; // YYYY-MM-DD (defaults to today)
-  startTime: string; // HH:mm
-  durationMinutes: number;
+  date?: string; // YYYY-MM-DD or "" when undated
+  startTime: string; // HH:mm or "" when untimed
+  durationMinutes: number; // 0 when no duration specified
   urgency: Task['urgency'];
   notes?: string;
   photoUrl?: string;
+  links?: SavedLink[];
 }
 
 export interface ITaskRepository {

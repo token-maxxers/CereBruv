@@ -2,10 +2,18 @@ import { noteRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
-import { compressImageToDataUrl, openImageLightbox } from '../../utils/imageUtils';
+import {
+  compressImageToDataUrl,
+  decodeQrCodesFromImage,
+  extractLinksFromText,
+  mergeSavedLinks,
+  openImageLightbox,
+  openLiveCameraModal,
+  renderSavedLinksHtml,
+} from '../../utils/imageUtils';
 import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
 import type { QuickNote } from '../../types/note';
-import type { Task, TaskCategory, UrgencyLevel } from '../../types/task';
+import type { SavedLink, Task, TaskCategory, UrgencyLevel } from '../../types/task';
 
 const CATEGORY_OPTIONS: { value: TaskCategory; label: string }[] = [
   { value: 'study', label: 'Study' },
@@ -79,11 +87,15 @@ export function renderThoughtsView(
           </label>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
           <input type="file" id="new-thought-photo-input" accept="image/*" style="display: none;" />
-          <button type="button" id="attach-thought-photo-btn" class="pill-badge" title="Attach Screenshot or Photo" style="cursor: pointer; font-size: 0.68rem; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px;">
+          <button type="button" id="attach-thought-photo-btn" class="pill-badge" title="Upload Screenshot or Image" style="cursor: pointer; font-size: 0.68rem; padding: 5px 9px; display: inline-flex; align-items: center; gap: 4px;">
             <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            Photo
+            Upload
+          </button>
+          <button type="button" id="capture-thought-cam-btn" class="pill-badge" title="Take Live Camera Snapshot" style="cursor: pointer; font-size: 0.68rem; padding: 5px 9px; display: inline-flex; align-items: center; gap: 4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Camera
           </button>
           <button id="save-thought-btn" class="btn btn-primary" style="padding: 6px 14px; font-size: var(--font-size-xs);">
             Save Note
@@ -114,6 +126,7 @@ export function renderThoughtsView(
   const newPrioSelect = container.querySelector<HTMLSelectElement>('#new-thought-priority')!;
   const saveBtn = container.querySelector<HTMLButtonElement>('#save-thought-btn')!;
   const attachPhotoBtn = container.querySelector<HTMLButtonElement>('#attach-thought-photo-btn')!;
+  const captureCamBtn = container.querySelector<HTMLButtonElement>('#capture-thought-cam-btn')!;
   const photoInput = container.querySelector<HTMLInputElement>('#new-thought-photo-input')!;
   const photoPreviewWrap = container.querySelector<HTMLDivElement>('#new-thought-photo-preview')!;
   const photoPreviewImg = container.querySelector<HTMLImageElement>('#new-thought-photo-img')!;
@@ -121,38 +134,62 @@ export function renderThoughtsView(
   const listContainer = container.querySelector<HTMLDivElement>('#thoughts-list-container')!;
 
   let pendingPhotoDataUrl: string | undefined = undefined;
+  let pendingQrLinks: SavedLink[] = [];
+
+  async function handleThoughtImageSelected(file: File) {
+    try {
+      const [compressed, qrLinks] = await Promise.all([
+        compressImageToDataUrl(file, 760, 0.74),
+        decodeQrCodesFromImage(file),
+      ]);
+      pendingPhotoDataUrl = compressed;
+      pendingQrLinks = qrLinks;
+      photoPreviewImg.src = pendingPhotoDataUrl;
+      photoPreviewWrap.style.display = 'flex';
+    } catch (err) {
+      console.warn('Could not process attached note photo:', err);
+    }
+  }
 
   attachPhotoBtn.addEventListener('click', () => {
     photoInput.click();
+  });
+
+  captureCamBtn.addEventListener('click', () => {
+    openLiveCameraModal(
+      (capturedFile) => {
+        handleThoughtImageSelected(capturedFile);
+      },
+      () => {
+        photoInput.click();
+      }
+    );
   });
 
   photoInput.addEventListener('change', async () => {
     if (!photoInput.files || !photoInput.files[0]) return;
     const file = photoInput.files[0];
     photoInput.value = '';
-    try {
-      pendingPhotoDataUrl = await compressImageToDataUrl(file, 720, 0.72);
-      photoPreviewImg.src = pendingPhotoDataUrl;
-      photoPreviewWrap.style.display = 'flex';
-    } catch (err) {
-      console.warn('Could not compress attached note photo:', err);
-    }
+    await handleThoughtImageSelected(file);
   });
 
   removePhotoBtn.addEventListener('click', () => {
     pendingPhotoDataUrl = undefined;
+    pendingQrLinks = [];
     photoPreviewImg.src = '';
     photoPreviewWrap.style.display = 'none';
   });
 
   saveBtn.addEventListener('click', async () => {
-    const content = textarea.value.trim() || (pendingPhotoDataUrl ? 'Visual Screenshot Note' : '');
+    const content = textarea.value.trim() || (pendingPhotoDataUrl ? 'Visual Image Note' : '');
     if (!content) return;
     const cat = (newCatSelect.value as TaskCategory) || 'personal';
     const prio = (newPrioSelect.value as UrgencyLevel) || 'medium';
     const photoUrlToSave = pendingPhotoDataUrl;
+    const linksToSave = mergeSavedLinks(pendingQrLinks, extractLinksFromText(content));
     textarea.value = '';
     pendingPhotoDataUrl = undefined;
+    pendingQrLinks = [];
     photoPreviewImg.src = '';
     photoPreviewWrap.style.display = 'none';
 
@@ -162,6 +199,7 @@ export function renderThoughtsView(
       category: cat,
       priority: prio,
       ...(photoUrlToSave ? { photoUrl: photoUrlToSave } : {}),
+      ...(linksToSave.length > 0 ? { links: linksToSave } : {}),
     });
     eventBus.emit(AppEvents.NOTE_CREATED);
     const spoken = `Saved your ${prio}-priority ${cat} note, Bruv.`;
@@ -286,6 +324,7 @@ export function renderThoughtsView(
       <div class="note-content-view" style="font-size: var(--font-size-sm); font-weight: 600; color: var(--color-black-dominant); line-height: 1.45; word-break: break-word;">
         ${escapeHtml(note.content)}
       </div>
+      ${renderSavedLinksHtml(mergeSavedLinks(note.links, extractLinksFromText(note.content)))}
 
       <div class="note-edit-view" style="display: none; flex-direction: column; gap: 6px;">
         <textarea class="note-edit-textarea" rows="2" style="width: 100%; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--color-red-primary); background: var(--bg-surface); font-family: inherit; font-size: var(--font-size-sm); color: var(--color-black-dominant); resize: vertical;">${escapeHtml(note.content)}</textarea>
@@ -375,7 +414,9 @@ export function renderThoughtsView(
     card.querySelector<HTMLButtonElement>('.save-note-edit-btn')?.addEventListener('click', async () => {
       const newText = editTextarea.value.trim();
       if (!newText) return;
-      await noteRepository.updateNote(note.id, { content: newText });
+      const qrKeep = (note.links || []).filter(l => l.kind === 'qr');
+      const updatedLinks = mergeSavedLinks(qrKeep, note.links, extractLinksFromText(newText));
+      await noteRepository.updateNote(note.id, { content: newText, links: updatedLinks });
       eventBus.emit(AppEvents.NOTE_UPDATED);
       await loadThoughts();
     });

@@ -2,13 +2,23 @@ import { taskRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
-import type { Task, TaskCategory, UrgencyLevel } from '../../types/task';
+import {
+  extractLinksFromText,
+  mergeSavedLinks,
+  normalizeToSavedLink,
+} from '../../utils/imageUtils';
+import type { SavedLink, Task, TaskCategory, UrgencyLevel } from '../../types/task';
 
-export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDate?: string, editTask?: Task) => void; close: () => void } {
+export function renderTaskFormModal(): {
+  backdrop: HTMLElement;
+  open: (prefillDate?: string, editTask?: Task) => void;
+  close: () => void;
+} {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
 
   let editingTaskId: string | null = null;
+  let draftLinks: SavedLink[] = [];
 
   backdrop.innerHTML = `
     <div class="modal-sheet">
@@ -24,7 +34,7 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
             type="text" 
             id="task-title-input" 
             class="form-input" 
-            placeholder="e.g. Capstone manuscript, GDG Workshop, Gym" 
+            placeholder="e.g. Capstone manuscript, Startup Challenge, Gym" 
             required 
           />
         </div>
@@ -52,39 +62,53 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="task-date-input">Scheduled Date *</label>
+          <label class="form-label" for="task-date-input">Scheduled Date / Deadline (Optional)</label>
           <input 
             type="date" 
             id="task-date-input" 
             class="form-input" 
-            required 
           />
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label" for="task-start-input">Start Time *</label>
+            <label class="form-label" for="task-start-input">Start Time (Optional)</label>
             <input 
               type="time" 
               id="task-start-input" 
               class="form-input" 
-              required 
             />
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="task-duration-input">Duration (Mins) *</label>
+            <label class="form-label" for="task-duration-input">Duration Mins (0 = None)</label>
             <input 
               type="number" 
               id="task-duration-input" 
               class="form-input" 
-              min="10" 
+              min="0" 
               max="480" 
               step="5" 
               value="60" 
-              required 
             />
           </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="task-link-input">Saved Website / QR Link (Optional)</label>
+          <div style="display: flex; gap: 6px;">
+            <input
+              type="text"
+              id="task-link-input"
+              class="form-input"
+              placeholder="e.g. bit.ly/PSCXI_ApplicationForm_R6"
+              style="flex: 1;"
+            />
+            <button type="button" id="task-add-link-btn" class="pill-badge" style="cursor: pointer; padding: 0 12px; font-weight: 800;">
+              + Add
+            </button>
+          </div>
+          <div id="task-draft-links-list" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px;"></div>
         </div>
 
         <div class="form-group">
@@ -114,7 +138,65 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
   const dateInput = backdrop.querySelector<HTMLInputElement>('#task-date-input')!;
   const startInput = backdrop.querySelector<HTMLInputElement>('#task-start-input')!;
   const durationInput = backdrop.querySelector<HTMLInputElement>('#task-duration-input')!;
+  const linkInput = backdrop.querySelector<HTMLInputElement>('#task-link-input')!;
+  const addLinkBtn = backdrop.querySelector<HTMLButtonElement>('#task-add-link-btn')!;
+  const draftLinksList = backdrop.querySelector<HTMLDivElement>('#task-draft-links-list')!;
   const notesInput = backdrop.querySelector<HTMLTextAreaElement>('#task-notes-input')!;
+
+  function renderDraftLinks() {
+    draftLinksList.innerHTML = '';
+    draftLinks.forEach((lnk, idx) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(229, 46, 46, 0.09);
+        border: 1px solid rgba(229, 46, 46, 0.32);
+        font-size: 0.66rem;
+        font-weight: 800;
+      `;
+      const a = document.createElement('a');
+      a.href = lnk.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = `${lnk.label} ↗`;
+      a.style.cssText = 'color: #C81E1E; text-decoration: none;';
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.textContent = '×';
+      rm.style.cssText =
+        'border: none; background: transparent; color: var(--color-black-muted); font-size: 0.8rem; cursor: pointer; padding: 0 2px; line-height: 1;';
+      rm.addEventListener('click', () => {
+        draftLinks.splice(idx, 1);
+        renderDraftLinks();
+      });
+      chip.appendChild(a);
+      chip.appendChild(rm);
+      draftLinksList.appendChild(chip);
+    });
+  }
+
+  const commitTypedLink = () => {
+    const raw = linkInput.value.trim();
+    if (!raw) return;
+    const normalized = normalizeToSavedLink(raw);
+    if (normalized) {
+      draftLinks = mergeSavedLinks(draftLinks, [normalized]);
+      linkInput.value = '';
+      renderDraftLinks();
+    }
+  };
+
+  addLinkBtn.addEventListener('click', commitTypedLink);
+  linkInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitTypedLink();
+    }
+  });
 
   const open = (prefillDate?: string, editTask?: Task) => {
     const now = new Date();
@@ -126,14 +208,17 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
     if (editTask) {
       editingTaskId = editTask.id;
       headingEl.textContent = 'Edit Task & Time-Block';
-      submitBtn.textContent = 'Save Changes to Focus Orbit';
+      submitBtn.textContent = 'Save Changes';
       titleInput.value = editTask.title;
       categorySelect.value = editTask.category;
       urgencySelect.value = editTask.urgency;
-      dateInput.value = editTask.date || prefillDate || todayString;
-      startInput.value = editTask.startTime;
-      durationInput.value = String(editTask.durationMinutes);
+      dateInput.value = typeof editTask.date === 'string' ? editTask.date : prefillDate || todayString;
+      startInput.value = editTask.startTime || '';
+      durationInput.value = String(editTask.durationMinutes ?? 0);
       notesInput.value = editTask.notes || '';
+      draftLinks = [...(editTask.links || [])];
+      linkInput.value = '';
+      renderDraftLinks();
     } else {
       editingTaskId = null;
       headingEl.textContent = 'New Task & Time-Block';
@@ -144,6 +229,9 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
       const minutes = String(Math.floor(now.getMinutes() / 5) * 5).padStart(2, '0');
       startInput.value = `${hours}:${minutes}`;
       durationInput.value = '60';
+      draftLinks = [];
+      linkInput.value = '';
+      renderDraftLinks();
     }
 
     backdrop.classList.add('open');
@@ -163,27 +251,36 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const title = titleInput.value;
+    // Auto-include any URL typed into linkInput even if user didn't click "+ Add"
+    if (linkInput.value.trim()) {
+      commitTypedLink();
+    }
+
+    const title = titleInput.value.trim();
     const category = categorySelect.value as TaskCategory;
     const urgency = urgencySelect.value as UrgencyLevel;
-    const date = dateInput.value;
-    const startTime = startInput.value;
-    const durationMinutes = parseInt(durationInput.value, 10);
-    const notes = notesInput.value;
+    const date = dateInput.value.trim();
+    const startTime = startInput.value.trim();
+    const parsedDur = parseInt(durationInput.value, 10);
+    const durationMinutes = isNaN(parsedDur) || parsedDur < 0 ? 0 : parsedDur;
+    const notes = notesInput.value.trim();
+    const finalLinks = mergeSavedLinks(draftLinks, extractLinksFromText(notes));
 
     if (editingTaskId) {
       const updatedTask = await taskRepository.updateTask(editingTaskId, {
-        title: title.trim(),
+        title,
         category,
         urgency,
         date,
         startTime,
         durationMinutes,
-        notes: notes.trim() || undefined,
+        notes: notes || undefined,
+        links: finalLinks,
       });
       eventBus.emit(AppEvents.TASK_UPDATED, updatedTask);
       eventBus.emit(AppEvents.TASK_CREATED, updatedTask);
-      const msg = `I got you, Bruv. Updated "${updatedTask.title}" under ${updatedTask.category} (${updatedTask.urgency} priority) at ${updatedTask.startTime}.`;
+      const timePhrase = updatedTask.startTime ? ` at ${updatedTask.startTime}` : '';
+      const msg = `I got you, Bruv. Updated "${updatedTask.title}" under ${updatedTask.category} (${updatedTask.urgency} priority)${timePhrase}.`;
       eventBus.emit(AppEvents.MASCOT_SPEAK, {
         headline: `Updated "${updatedTask.title}", Bruv!`,
         subspeech: msg,
@@ -198,12 +295,16 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
         date,
         startTime,
         durationMinutes,
-        notes: notes.trim() || undefined,
+        notes: notes || undefined,
+        ...(finalLinks.length > 0 ? { links: finalLinks } : {}),
       });
       eventBus.emit(AppEvents.TASK_CREATED, newTask);
-      const msg = `I got you, Bruv. Scheduled "${newTask.title}" under ${newTask.category} (${newTask.urgency} priority) at ${newTask.startTime} for ${newTask.durationMinutes} minutes.`;
+      const timePhrase = newTask.startTime
+        ? ` at ${newTask.startTime}${newTask.durationMinutes > 0 ? ` for ${newTask.durationMinutes} minutes` : ''}`
+        : '';
+      const msg = `I got you, Bruv. Saved "${newTask.title}" under ${newTask.category} (${newTask.urgency} priority)${timePhrase}.`;
       eventBus.emit(AppEvents.MASCOT_SPEAK, {
-        headline: `Scheduled "${newTask.title}", Bruv!`,
+        headline: `Saved "${newTask.title}", Bruv!`,
         subspeech: msg,
       });
       voiceService.speak(msg);
@@ -211,6 +312,8 @@ export function renderTaskFormModal(): { backdrop: HTMLElement; open: (prefillDa
     }
 
     form.reset();
+    draftLinks = [];
+    renderDraftLinks();
     close();
   });
 

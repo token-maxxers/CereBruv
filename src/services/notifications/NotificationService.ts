@@ -233,7 +233,7 @@ class NotificationService {
     const day = String(now.getDate()).padStart(2, '0');
     const todayStr = `${y}-${m}-${day}`;
 
-    const pending = todayTasks.filter(t => !t.completed && (t.date || todayStr) === todayStr);
+    const pending = todayTasks.filter(t => !t.completed && Boolean(t.startTime) && t.date === todayStr);
     const alarms: Array<{
       id: string;
       taskId: string;
@@ -246,6 +246,7 @@ class NotificationService {
     }> = [];
 
     pending.forEach(task => {
+      if (!task.startTime) return;
       const [hStr, mStr] = task.startTime.split(':');
       const taskStart = new Date(
         now.getFullYear(),
@@ -255,6 +256,7 @@ class NotificationService {
         parseInt(mStr || '0', 10),
         0
       ).getTime();
+      const durText = task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : '';
 
       const stages: Array<{ stage: AlarmStage; offsetMs: number; title: string; body: string }> = [
         {
@@ -273,7 +275,7 @@ class NotificationService {
           stage: 'start',
           offsetMs: 0,
           title: `CereBruv Alarm: Time for "${task.title}"!`,
-          body: `It's ${task.startTime}, Bruv! Start "${task.title}" (${task.durationMinutes}m) now.`,
+          body: `It's ${task.startTime}, Bruv! Start "${task.title}"${durText} now.`,
         },
       ];
 
@@ -317,14 +319,17 @@ class NotificationService {
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
     const triggered: AlarmPopupPayload[] = [];
-    const pending = todayTasks.filter(t => !t.completed && (t.date || todayStr) === todayStr);
+    const pending = todayTasks.filter(t => !t.completed && Boolean(t.startTime) && t.date === todayStr);
 
     pending.forEach(task => {
+      if (!task.startTime) return;
       const startHourFrac = timeStringToFractionalHour(task.startTime);
       const startMins = Math.round(startHourFrac * 60);
-      const endMins = startMins + task.durationMinutes;
+      const effectiveDur = task.durationMinutes > 0 ? task.durationMinutes : 15;
+      const endMins = startMins + effectiveDur;
       const minsUntilStart = startMins - currentMins;
       const minsPastEnd = currentMins - endMins;
+      const durInfo = task.durationMinutes > 0 ? `${task.durationMinutes}m • ` : '';
 
       // 1. 1-Hour Before Reminder (55 to 60 mins before start)
       const key60 = `${task.id}_${todayStr}_60min`;
@@ -335,7 +340,7 @@ class NotificationService {
           task,
           stage: '60min',
           headline: `1 Hour Until "${task.title}", Bruv!`,
-          message: `Scheduled at ${task.startTime} (${task.durationMinutes}m • ${task.urgency} priority).`,
+          message: `Scheduled at ${task.startTime} (${durInfo}${task.urgency} priority).`,
           spokenText: `Heads up, Bruv! You have ${task.title} coming up in 1 hour at ${task.startTime}.`,
         });
       }
@@ -363,7 +368,7 @@ class NotificationService {
           task,
           stage: 'start',
           headline: `Alarm: Time for "${task.title}", Bruv!`,
-          message: `It's ${task.startTime}! Your ${task.urgency} priority ${task.category} block (${task.durationMinutes}m) is starting right now.`,
+          message: `It's ${task.startTime}! Your ${task.urgency} priority ${task.category} task${task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : ''} is starting right now.`,
           spokenText: `Alarm check, Bruv! It is time for your ${task.urgency} priority task: ${task.title}. Let's get after it!`,
         });
       }
@@ -378,7 +383,7 @@ class NotificationService {
           task,
           stage: 'missed',
           headline: `Missed Task: "${task.title}" (${penalty} XP)`,
-          message: `Window ${task.startTime} (${task.durationMinutes}m) passed without completion. Complete it now or reschedule!`,
+          message: `Window ${task.startTime}${task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : ''} passed without completion. Complete it now or reschedule!`,
           spokenText: `Hey Bruv, the scheduled time for ${task.title} at ${task.startTime} has passed. You lost ${Math.abs(penalty)} XP, but you can still complete it or reschedule it now!`,
           xpDelta: penalty,
         });

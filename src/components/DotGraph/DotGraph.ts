@@ -1,6 +1,11 @@
 import { taskRepository, noteRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
-import { openImageLightbox } from '../../utils/imageUtils';
+import {
+  extractLinksFromText,
+  mergeSavedLinks,
+  openImageLightbox,
+  renderSavedLinksHtml,
+} from '../../utils/imageUtils';
 import type { GraphNode, GraphLink } from '../../types/note';
 
 export function renderDotGraph(): HTMLElement {
@@ -55,6 +60,7 @@ export function renderDotGraph(): HTMLElement {
           </div>
         </div>
         <div id="inspector-title" style="font-size: var(--font-size-sm); font-weight: 700; margin-top: 2px;"></div>
+        <div id="inspector-links"></div>
       </div>
     </div>
 
@@ -81,6 +87,7 @@ export function renderDotGraph(): HTMLElement {
   const inspector = container.querySelector<HTMLElement>('#node-inspector')!;
   const inspectorBadge = container.querySelector<HTMLElement>('#inspector-badge')!;
   const inspectorTitle = container.querySelector<HTMLElement>('#inspector-title')!;
+  const inspectorLinks = container.querySelector<HTMLDivElement>('#inspector-links')!;
   const inspectorPhotoBtn = container.querySelector<HTMLButtonElement>('#inspector-photo-btn')!;
   const inspectorDelete = container.querySelector<HTMLButtonElement>('#inspector-delete')!;
   const inspectorClose = container.querySelector<HTMLButtonElement>('#inspector-close')!;
@@ -183,6 +190,7 @@ export function renderDotGraph(): HTMLElement {
         radius: task.urgency === 'high' ? 8 : 6,
         color: '#E52E2E',
         photoUrl: task.photoUrl,
+        links: mergeSavedLinks(task.links, extractLinksFromText(task.notes || '')),
       };
       newNodes.push(taskNode);
 
@@ -205,6 +213,7 @@ export function renderDotGraph(): HTMLElement {
         radius: 6,
         color: '#38BDF8', // Cyan
         photoUrl: note.photoUrl,
+        links: mergeSavedLinks(note.links, extractLinksFromText(note.content)),
       });
 
       // Connect note directly to its Category Topic Hub
@@ -438,6 +447,7 @@ export function renderDotGraph(): HTMLElement {
       inspectorBadge.style.color = '#FFFFFF';
       inspectorPhotoBtn.style.display = node.photoUrl ? 'inline-block' : 'none';
       inspectorDelete.style.display = node.type === 'task' || node.type === 'note' ? 'inline-block' : 'none';
+      inspectorLinks.innerHTML = renderSavedLinksHtml(node.links, true);
     }
   }
 

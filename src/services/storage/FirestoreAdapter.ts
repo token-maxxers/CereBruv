@@ -96,7 +96,7 @@ export class FirestoreTaskRepository implements ITaskRepository {
         return {
           ...data,
           id: d.id,
-          date: data.date || today
+          date: typeof data.date === 'string' ? data.date : today
         };
       });
     } catch {
@@ -115,7 +115,7 @@ export class FirestoreTaskRepository implements ITaskRepository {
       return {
         ...data,
         id: snap.id,
-        date: data.date || this.getTodayString()
+        date: typeof data.date === 'string' ? data.date : this.getTodayString()
       };
     } catch {
       return localTaskFallback.getTaskById(id);
@@ -134,13 +134,14 @@ export class FirestoreTaskRepository implements ITaskRepository {
       id: taskId,
       title: dto.title.trim(),
       category: dto.category,
-      date: dto.date || this.getTodayString(),
-      startTime: dto.startTime,
-      durationMinutes: dto.durationMinutes,
+      date: typeof dto.date === 'string' ? dto.date : this.getTodayString(),
+      startTime: dto.startTime ?? '',
+      durationMinutes: typeof dto.durationMinutes === 'number' ? dto.durationMinutes : 0,
       urgency: dto.urgency,
       completed: false,
       ...(dto.notes && dto.notes.trim() ? { notes: dto.notes.trim() } : {}),
       ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
+      ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),
       createdAt: now,
       updatedAt: now
     };
@@ -267,6 +268,7 @@ export class FirestoreNoteRepository implements INoteRepository {
       priority,
       ...(dto.audioUrl ? { audioUrl: dto.audioUrl } : {}),
       ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
+      ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),
       createdAt: Date.now()
     };
 

@@ -19,6 +19,7 @@ import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
 import { sortTasksSmartly, timeStringToFractionalHour } from './components/FocusOrbit/orbitCalculator';
 import { renderDotGraph } from './components/DotGraph/DotGraph';
 import { renderThoughtsView } from './components/Thoughts/ThoughtsView';
+import { renderSavedLinksHtml } from './utils/imageUtils';
 import type { UserStats } from './types/user';
 
 let realTimeAlarmInterval: ReturnType<typeof setInterval> | null = null;
@@ -338,6 +339,14 @@ async function mountApp(user: AuthUser) {
     };
 
     const cfg = badgeConfig[payload.stage];
+    const metaTime = [
+      payload.task.startTime || 'Flexible time',
+      payload.task.durationMinutes > 0 ? `${payload.task.durationMinutes}m` : '',
+      `${payload.task.urgency} priority`
+    ]
+      .filter(Boolean)
+      .join(' • ');
+    const savedLinksHtml = renderSavedLinksHtml(payload.task.links);
 
     alarmToastContainer.style.display = 'block';
     alarmToastContainer.innerHTML = `
@@ -348,7 +357,7 @@ async function mountApp(user: AuthUser) {
               ${cfg.label}
             </span>
             <span style="font-size: 10px; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
-              ${payload.task.startTime} • ${payload.task.durationMinutes}m • ${payload.task.urgency} priority
+              ${metaTime}
             </span>
           </div>
           <button type="button" id="alarm-toast-dismiss" style="background: none; border: none; font-size: 16px; font-weight: 800; color: var(--color-black-muted); cursor: pointer; line-height: 1;">&times;</button>
@@ -357,9 +366,10 @@ async function mountApp(user: AuthUser) {
         <div style="font-size: 14px; font-weight: 800; color: var(--color-black-dominant); margin-bottom: 3px;">
           ${payload.headline}
         </div>
-        <div style="font-size: 12px; color: var(--color-black-muted); line-height: 1.4; margin-bottom: 10px;">
+        <div style="font-size: 12px; color: var(--color-black-muted); line-height: 1.4; margin-bottom: ${savedLinksHtml ? '6px' : '10px'};">
           ${payload.message}
         </div>
+        ${savedLinksHtml ? `<div style="margin-bottom: 10px;">${savedLinksHtml}</div>` : ''}
 
         <div style="display: flex; gap: 8px;">
           <button type="button" id="alarm-toast-complete" style="flex: 1; padding: 7px 10px; border-radius: 999px; border: none; background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
@@ -711,7 +721,7 @@ async function mountApp(user: AuthUser) {
   async function runRealTimeAlarmCheck() {
     const tasks = await taskRepository.getAllTasks();
     const todayStr = getLocalDateString();
-    const todayTasks = tasks.filter(t => (t.date || todayStr) === todayStr);
+    const todayTasks = tasks.filter(t => t.date === todayStr);
 
     const triggeredAlarms = notificationService.checkRealTimeTaskAlarms(todayTasks);
     for (const alarm of triggeredAlarms) {
@@ -751,6 +761,7 @@ async function mountApp(user: AuthUser) {
   }
 
   function formatFriendlyTime(time24: string): string {
+    if (!time24) return '';
     const [hStr, mStr] = time24.split(':');
     const h = parseInt(hStr || '0', 10);
     const m = parseInt(mStr || '0', 10);
@@ -763,7 +774,7 @@ async function mountApp(user: AuthUser) {
   async function updateMascotStatus() {
     const tasks = await taskRepository.getAllTasks();
     const todayStr = getLocalDateString();
-    const todayTasks = tasks.filter(t => (t.date || todayStr) === todayStr);
+    const todayTasks = tasks.filter(t => t.date === todayStr || (!t.date && !t.completed));
     const now = new Date();
     const currentHourFraction = now.getHours() + now.getMinutes() / 60;
     const pending = sortTasksSmartly(
@@ -782,15 +793,17 @@ async function mountApp(user: AuthUser) {
       return;
     }
 
-    // Separate overdue tasks from active/upcoming tasks for crystal-clear assistant reporting
+    // Separate timed overdue tasks from active/upcoming/untimed tasks
     const overdueTasks = pending.filter(t => {
+      if (!t.startTime) return false;
       const start = timeStringToFractionalHour(t.startTime);
-      const end = start + t.durationMinutes / 60;
+      const end = start + Math.max(15, t.durationMinutes || 0) / 60;
       return end < currentHourFraction;
     });
     const upcomingOrActive = pending.filter(t => {
+      if (!t.startTime) return true;
       const start = timeStringToFractionalHour(t.startTime);
-      const end = start + t.durationMinutes / 60;
+      const end = start + Math.max(15, t.durationMinutes || 0) / 60;
       return end >= currentHourFraction;
     });
 
@@ -806,16 +819,24 @@ async function mountApp(user: AuthUser) {
       } else if (overdueTasks.length > 0 && upcomingOrActive.length > 0) {
         const topOverdue = overdueTasks[0];
         const nextUp = upcomingOrActive[0];
+        const nextWhen = nextUp.startTime ? ` at ${formatFriendlyTime(nextUp.startTime)}` : '';
         statusTitle.textContent = `${pending.length} tasks left today, Bruv.`;
-        subspeech.textContent = `"${topOverdue.title}" (${formatFriendlyTime(topOverdue.startTime)}) is past due • Up next: "${nextUp.title}" at ${formatFriendlyTime(nextUp.startTime)}.`;
+        subspeech.textContent = `"${topOverdue.title}" (${formatFriendlyTime(topOverdue.startTime)}) is past due • Up next: "${nextUp.title}"${nextWhen}.`;
       } else if (overdueTasks.length > 0) {
         const topOverdue = overdueTasks[0];
         statusTitle.textContent = `Heads up, Bruv — ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''}.`;
         subspeech.textContent = `"${topOverdue.title}" was set for ${formatFriendlyTime(topOverdue.startTime)}. Complete it now or reschedule!`;
       } else if (primaryNext) {
-        const prioLabel = primaryNext.urgency === 'high' ? ' • High Priority' : '';
+        const prioLabel = primaryNext.urgency === 'high' ? 'High Priority' : '';
+        const durLabel = primaryNext.durationMinutes > 0 ? `${primaryNext.durationMinutes}m` : '';
+        const metaInside = [durLabel, prioLabel].filter(Boolean).join(' • ');
+        const metaSuffix = metaInside ? ` (${metaInside})` : '';
         statusTitle.textContent = `${pending.length} task${pending.length > 1 ? 's' : ''} on your schedule, Bruv.`;
-        subspeech.textContent = `Up next at ${formatFriendlyTime(primaryNext.startTime)}: "${primaryNext.title}" (${primaryNext.durationMinutes}m${prioLabel}).`;
+        if (primaryNext.startTime) {
+          subspeech.textContent = `Up next at ${formatFriendlyTime(primaryNext.startTime)}: "${primaryNext.title}"${metaSuffix}.`;
+        } else {
+          subspeech.textContent = `Up next: "${primaryNext.title}"${metaSuffix}.`;
+        }
       }
     }
   }

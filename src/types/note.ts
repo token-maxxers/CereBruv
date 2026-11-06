@@ -1,4 +1,4 @@
-import type { TaskCategory, UrgencyLevel } from './task';
+import type { SavedLink, TaskCategory, UrgencyLevel } from './task';
 
 export interface QuickNote {
   id: string;
@@ -8,6 +8,7 @@ export interface QuickNote {
   priority?: UrgencyLevel;
   audioUrl?: string;
   photoUrl?: string;
+  links?: SavedLink[];
   createdAt: number;
 }
 
@@ -20,6 +21,7 @@ export interface GraphNode {
   radius: number;
   color: string;
   photoUrl?: string;
+  links?: SavedLink[];
   x?: number;
   y?: number;
   vx?: number;

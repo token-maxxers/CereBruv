@@ -2,7 +2,12 @@ import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
-import { openImageLightbox } from '../../utils/imageUtils';
+import {
+  extractLinksFromText,
+  mergeSavedLinks,
+  openImageLightbox,
+  renderSavedLinksHtml,
+} from '../../utils/imageUtils';
 import {
   calculateOrbitSegments,
   analyzeDayWorkload,
@@ -82,6 +87,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
               <span style="position: absolute; bottom: 3px; right: 5px; background: rgba(18,18,22,0.78); color: #FFFFFF; font-size: 0.55rem; font-weight: 800; padding: 1px 6px; border-radius: 999px;">Zoom Screenshot</span>
             </div>
             <p id="popover-task-notes" style="font-size: 0.72rem; color: var(--color-black-muted); margin-top: 6px; line-height: 1.35; max-height: 56px; overflow-y: auto;"></p>
+            <div id="popover-task-links"></div>
           </div>
           <div id="popover-actions-row" style="display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
             <button id="popover-complete-btn" class="pill-badge" style="flex: 1; cursor: pointer; justify-content: center; background: var(--color-black-dominant); color: #FAF7F2; border-color: var(--color-black-dominant); font-size: 0.68rem; padding: 6px 8px;">
@@ -112,6 +118,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       <div id="next-task-rationale" style="font-size: var(--font-size-xs); color: var(--color-black-muted); margin-top: 2px;">
         Tap + Add Task to plan realistic workload.
       </div>
+      <div id="next-task-links"></div>
     </div>
   `;
 
@@ -152,6 +159,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const nextTaskBody = container.querySelector<HTMLElement>('#next-task-body')!;
   const nextTaskTimePill = container.querySelector<HTMLElement>('#next-task-time-pill')!;
   const nextTaskRationale = container.querySelector<HTMLElement>('#next-task-rationale')!;
+  const nextTaskLinks = container.querySelector<HTMLDivElement>('#next-task-links')!;
   const weeklyStrip = container.querySelector<HTMLElement>('#weekly-strip')!;
 
   const arcPopover = container.querySelector<HTMLDivElement>('#orbit-arc-popover')!;
@@ -163,6 +171,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const popoverPhotoWrap = container.querySelector<HTMLDivElement>('#popover-task-photo-wrap')!;
   const popoverPhotoImg = container.querySelector<HTMLImageElement>('#popover-task-photo-img')!;
   const popoverTaskNotes = container.querySelector<HTMLElement>('#popover-task-notes')!;
+  const popoverTaskLinks = container.querySelector<HTMLDivElement>('#popover-task-links')!;
   const popoverActionsRow = container.querySelector<HTMLDivElement>('#popover-actions-row')!;
   const popoverCompleteBtn = container.querySelector<HTMLButtonElement>('#popover-complete-btn')!;
   const popoverEditBtn = container.querySelector<HTMLButtonElement>('#popover-edit-btn')!;
@@ -253,8 +262,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
     jumpTodayBtn.style.display = isToday ? 'none' : 'inline-block';
 
-    // Filter tasks for the selected date
-    const dayTasks = allTasks.filter(t => (t.date || todayStr) === selectedDate);
+    // Filter tasks for the selected date (include undated uncompleted tasks when viewing Today)
+    const dayTasks = allTasks.filter(t => t.date === selectedDate || (isToday && !t.date && !t.completed));
 
     const targetDate = new Date(selectedDate + 'T00:00:00');
     const now = new Date();
@@ -296,19 +305,23 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       workloadBadge.style.background = '#E0F2F1';
     }
 
-    // Update Realistic Next Task Section with clean, natural wording
+    // Update Realistic Next Task Section with clean, natural wording (no fake times/durations)
     if (analysis.realisticNextTask) {
       const next = analysis.realisticNextTask;
-      const friendlyTime = formatFriendlyTime12(next.startTime);
       const prioLabel = next.urgency === 'high' ? 'High Priority' : next.urgency === 'medium' ? 'Medium Priority' : 'Low Priority';
       const catLabel = next.category.charAt(0).toUpperCase() + next.category.slice(1);
       nextTaskBody.textContent = next.title;
-      nextTaskTimePill.textContent = `${friendlyTime} (${next.startTime}) • ${next.durationMinutes}m`;
+      const timeLabel = next.startTime ? `${formatFriendlyTime12(next.startTime)} (${next.startTime})` : 'No set time';
+      const durLabel = next.durationMinutes > 0 ? `${next.durationMinutes}m` : '';
+      nextTaskTimePill.textContent = [timeLabel, durLabel].filter(Boolean).join(' • ');
       nextTaskRationale.textContent = `${catLabel} • ${prioLabel}`;
+      const combinedLinks = mergeSavedLinks(next.links, extractLinksFromText(next.notes || ''));
+      nextTaskLinks.innerHTML = renderSavedLinksHtml(combinedLinks);
     } else {
       nextTaskBody.textContent = dayTasks.length === 0 ? 'No tasks scheduled yet.' : 'All tasks completed for today!';
       nextTaskTimePill.textContent = '';
       nextTaskRationale.textContent = dayTasks.length === 0 ? 'Tap + or speak to CereBruv to plan your day.' : 'Great job staying on track, Bruv.';
+      nextTaskLinks.innerHTML = '';
     }
 
     // Canvas Retina Scaling
@@ -460,7 +473,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       const isRealToday = dateStr === getTodayString();
 
       // Check if tasks exist on this day
-      const hasTasks = allTasks.some(t => (t.date || getTodayString()) === dateStr);
+      const hasTasks = allTasks.some(t => t.date === dateStr);
 
       const dayBox = document.createElement('div');
       dayBox.style.cssText = `
@@ -518,6 +531,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       popoverTaskTime.textContent = `${startStr} – ${endStr} (23:00 to 07:00)`;
       popoverPhotoWrap.style.display = 'none';
       popoverTaskNotes.textContent = 'Protected 8-hour downtime block so your Focus Orbit calculates realistic 16h waking capacity.';
+      popoverTaskLinks.innerHTML = '';
       popoverActionsRow.style.display = 'none';
       arcPopover.style.display = 'flex';
       return;
@@ -544,7 +558,10 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
     popoverTaskTitle.textContent = seg.title;
     const durationMins = matchedTask ? matchedTask.durationMinutes : Math.round((seg.endHour - seg.startHour) * 60);
-    popoverTaskTime.textContent = `${startStr} – ${endStr} (${durationMins} mins)${seg.completed ? ' • Completed' : ''}`;
+    popoverTaskTime.textContent =
+      durationMins > 0
+        ? `${startStr} – ${endStr} (${durationMins} mins)${seg.completed ? ' • Completed' : ''}`
+        : `${startStr}${seg.completed ? ' • Completed' : ''}`;
     if (matchedTask?.photoUrl) {
       popoverPhotoImg.src = matchedTask.photoUrl;
       popoverPhotoWrap.style.display = 'block';
@@ -553,6 +570,9 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       popoverPhotoWrap.style.display = 'none';
     }
     popoverTaskNotes.textContent = matchedTask?.notes || 'Scheduled on your Focus Orbit. Tap Edit to adjust category, time, or duration.';
+    const popLinks = mergeSavedLinks(matchedTask?.links, extractLinksFromText(matchedTask?.notes || ''));
+    popoverTaskLinks.innerHTML = renderSavedLinksHtml(popLinks);
+    popoverTaskLinks.querySelectorAll('a').forEach(a => a.addEventListener('click', ev => ev.stopPropagation()));
 
     popoverCompleteBtn.textContent = seg.completed ? 'Reopen Task' : 'Complete (+25 XP)';
     popoverActionsRow.style.display = matchedTask ? 'flex' : 'none';

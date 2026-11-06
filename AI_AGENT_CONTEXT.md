@@ -480,6 +480,23 @@ CereBruv/
      - Replaced online-only `runTransaction` calls and wrapped Firestore mutations in `commitFirestoreWrite()` with local guest fallback so the app opens, scans screenshots, schedules tasks, and awards XP seamlessly with Wi-Fi turned off.
 * **Next Action:** Ready for Buildathon live demo and Firebase Hosting deployment.
 
+### Entry #22 — Live Camera Viewfinder, Offline QR + Website Link Saving & Strict Blank Defaults
+* **Agent:** Antigravity
+* **Status:** Completed, Built & Auto-Committed
+* **Summary of Work:**
+  1. **2-Option Camera Menu + Live Camera Viewfinder Modal (`src/components/QuickCapture/QuickCapture.ts`, `src/utils/imageUtils.ts`, `src/components/Thoughts/ThoughtsView.ts`)**:
+     - Added `#photo-source-menu` popover under the QuickCapture camera icon allowing users to choose between **Upload Screenshot / File** (`Ctrl+V` also supported) and **Take Camera Photo** (`openLiveCameraModal` using `getUserMedia` with Front/Rear camera flip and instant stream cleanup), plus a live **Camera** snapshot button in Thoughts.
+  2. **QR Code Decoding & Clickable Website/Shortlink/Email Saving (`src/utils/imageUtils.ts`, `src/types/task.ts`, `src/types/note.ts`)**:
+     - Added `SavedLink` (`url`, `label`, `kind: 'qr' | 'url' | 'email'`) persisted across `LocalStorageAdapter.ts` and `FirestoreAdapter.ts`.
+     - Added `decodeQrCodesFromImage()` (combining native `BarcodeDetector` + multi-region `jsQR` scanning) and `extractLinksFromText()` (capturing full URLs, bare shortlinks/domains like `bit.ly/...`, `forms.gle/...`, `facebook.com/...`, `*.gov.ph`, and emails).
+     - Rendered 1-click openable link pills in the Image Rescue drawer, `TaskList.ts` (including a *Saved Deadlines & Upcoming Dates* section), `FocusOrbit.ts` (Realistic Next Task + Arc Popover), `main.ts` (Alarm Toast Popups), `TaskForm.ts`, `ThoughtsView.ts`, and `DotGraph.ts` (`#node-inspector`).
+  3. **Higher OCR Accuracy & Optional `VITE_GEMINI_API_KEY` Direct Cloud Vision (`src/utils/imageUtils.ts`, `src/services/ai/GeminiService.ts`, `src/services/ai/ScreenshotScannerService.ts`)**:
+     - Added optional `VITE_GEMINI_API_KEY` support in `GeminiService.ts` and `.env.example` so Google Gemini 2.5 Flash Vision can run directly on `localhost` without Firebase App Check `401` blocks.
+     - Fixed `preprocessImageForOcr()` so colored/red/yellow poster text is preserved without white-clipping, outer screenshot frame bars are whitened, and dark footer ribbons with white contact links/emails are upscaled and inverted onto the OCR canvas in a single pass.
+  4. **Zero Invented Time, Date, or Duration When Absent in Image (`ScreenshotScannerService.ts`, `GeminiService.ts`, `orbitCalculator.ts`, `NotificationService.ts`, `main.ts`, `TaskForm.ts`)**:
+     - Removed all fallback time/date/duration guesses (`nextHour` / `04:00` / `45m`), leaving `startTime` (`""`), `date` (`""`), and `durationMinutes` (`0`) blank whenever not explicitly written on the scanned image, and guarded Orbit rendering, smart sorting, mascot status, and alarms for untimed/undated tasks.
+* **Next Action:** Ready for Buildathon live demo and Firebase Hosting deployment.
+
 ---
 
 ## 7. How to Deploy to Google Firebase Hosting

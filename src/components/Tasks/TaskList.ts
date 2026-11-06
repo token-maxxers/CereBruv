@@ -2,7 +2,12 @@ import { taskRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import { voiceService } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
-import { openImageLightbox } from '../../utils/imageUtils';
+import {
+  extractLinksFromText,
+  mergeSavedLinks,
+  openImageLightbox,
+  renderSavedLinksHtml,
+} from '../../utils/imageUtils';
 import { sortTasksSmartly } from '../FocusOrbit/orbitCalculator';
 import type { Task } from '../../types/task';
 
@@ -20,60 +25,103 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
 
   let activeDate = getTodayString();
 
+  function formatShortDateBadge(dateStr: string): string {
+    if (!dateStr) return 'No date';
+    const parsed = new Date(dateStr + 'T00:00:00');
+    if (isNaN(parsed.getTime())) return dateStr;
+    return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   async function loadTasks() {
     const allTasks = await taskRepository.getAllTasks();
     const todayStr = getTodayString();
+    const isToday = activeDate === todayStr;
 
-    // Filter by activeDate
-    const rawTasks = allTasks.filter(t => (t.date || todayStr) === activeDate);
+    // Tasks for activeDate (include undated uncompleted tasks when viewing Today)
+    const rawTasks = allTasks.filter(
+      t => t.date === activeDate || (isToday && !t.date)
+    );
 
-    // Smart Assistant Sort (Active/Imminent High-Priority first, then upcoming, then overdue)
+    // Also surface uncompleted deadlines saved on other dates so saved links/QR codes are always reachable
+    const otherDateDeadlines = allTasks
+      .filter(t => !t.completed && Boolean(t.date) && t.date !== activeDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     const now = new Date();
-    const currentFraction = activeDate === todayStr ? now.getHours() + now.getMinutes() / 60 : 0;
+    const currentFraction = isToday ? now.getHours() + now.getMinutes() / 60 : 0;
     const tasks = sortTasksSmartly(rawTasks, currentFraction);
 
-    const isToday = activeDate === todayStr;
-    const dateFormatted = new Date(activeDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    const headerTitle = isToday ? `Today's Schedule (${tasks.length})` : `${dateFormatted} Schedule (${tasks.length})`;
-
-    if (tasks.length === 0) {
-      container.innerHTML = `
-        <div class="section-header">
-          <h2 class="section-title">${headerTitle}</h2>
-          <button class="section-action" id="empty-add-btn">+ Add Task</button>
-        </div>
-        <div class="empty-state">
-          <h3 class="empty-state-title">No scheduled tasks for this day</h3>
-          <p class="empty-state-sub">Tap "+ Add Task" to schedule appointments, classes, or focus blocks.</p>
-        </div>
-      `;
-
-      container.querySelector('#empty-add-btn')?.addEventListener('click', () => onOpenForm(activeDate));
-      return;
-    }
+    const dateFormatted = new Date(activeDate + 'T00:00:00').toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+    const headerTitle = isToday
+      ? `Today's Schedule (${tasks.length})`
+      : `${dateFormatted} Schedule (${tasks.length})`;
 
     container.innerHTML = `
       <div class="section-header">
         <h2 class="section-title">${headerTitle}</h2>
         <button class="section-action" id="header-add-task-btn">+ Add Task</button>
       </div>
-      <div class="task-list" id="task-items-container"></div>
+      ${
+        tasks.length === 0
+          ? `<div class="empty-state">
+               <h3 class="empty-state-title">No scheduled tasks for this day</h3>
+               <p class="empty-state-sub">Tap "+ Add Task" or scan a screenshot/QR poster above.</p>
+             </div>`
+          : `<div class="task-list" id="task-items-container"></div>`
+      }
+      ${
+        otherDateDeadlines.length > 0
+          ? `<div style="margin-top: var(--spacing-3); padding-top: var(--spacing-2); border-top: 1px dashed var(--border-medium);">
+               <div style="font-size: 0.68rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">
+                 Saved Deadlines & Upcoming Dates (${otherDateDeadlines.length})
+               </div>
+               <div class="task-list" id="other-deadlines-container"></div>
+             </div>`
+          : ''
+      }
     `;
 
     container.querySelector('#header-add-task-btn')?.addEventListener('click', () => onOpenForm(activeDate));
 
-    const listContainer = container.querySelector('#task-items-container')!;
+    const listContainer = container.querySelector('#task-items-container');
+    if (listContainer) {
+      tasks.forEach(task => {
+        listContainer.appendChild(createTaskItemElement(task, !task.date));
+      });
+    }
 
-    tasks.forEach(task => {
-      const itemEl = createTaskItemElement(task);
-      listContainer.appendChild(itemEl);
-    });
+    const otherContainer = container.querySelector('#other-deadlines-container');
+    if (otherContainer) {
+      otherDateDeadlines.forEach(task => {
+        otherContainer.appendChild(createTaskItemElement(task, true));
+      });
+    }
   }
 
-  function createTaskItemElement(task: Task): HTMLElement {
+  function formatTaskTimeMeta(task: Task): string {
+    if (task.startTime && task.durationMinutes > 0) {
+      return `${task.startTime} (${task.durationMinutes}m)`;
+    }
+    if (task.startTime) {
+      return task.startTime;
+    }
+    if (task.durationMinutes > 0) {
+      return `${task.durationMinutes}m`;
+    }
+    return 'No set time';
+  }
+
+  function createTaskItemElement(task: Task, showDateBadge: boolean = false): HTMLElement {
     const el = document.createElement('div');
     el.className = `task-item ${task.completed ? 'completed' : ''}`;
     el.id = `task-item-${task.id}`;
+
+    const mergedLinks = mergeSavedLinks(task.links, extractLinksFromText(task.notes || ''));
+    const linksHtml = renderSavedLinksHtml(mergedLinks);
 
     el.innerHTML = `
       <div class="task-checkbox ${task.completed ? 'checked' : ''}" data-id="${task.id}" title="Toggle Completion">
@@ -84,23 +132,29 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
         ` : ''}
       </div>
 
-      <div class="task-details">
+      <div class="task-details" style="min-width: 0;">
         <div class="task-title">${escapeHtml(task.title)}</div>
-        <div class="task-meta">
+        <div class="task-meta" style="flex-wrap: wrap;">
           <span class="tag-badge tag-${task.category}">${task.category}</span>
-          <span>${task.startTime} (${task.durationMinutes}m)</span>
+          ${
+            showDateBadge
+              ? `<span style="font-size: 0.64rem; font-weight: 800; color: var(--color-black-dominant); background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); padding: 1px 6px; border-radius: 4px;">${escapeHtml(formatShortDateBadge(task.date))}</span>`
+              : ''
+          }
+          <span>${escapeHtml(formatTaskTimeMeta(task))}</span>
           ${task.urgency === 'high' ? '<span class="urgency-high">PRIORITY</span>' : ''}
           ${
             task.photoUrl
-              ? '<button type="button" class="pill-badge view-task-photo-btn" style="cursor: pointer; font-size: 0.6rem; padding: 1px 6px;">Screenshot</button>'
+              ? '<button type="button" class="pill-badge view-task-photo-btn" style="cursor: pointer; font-size: 0.6rem; padding: 1px 6px;">Image</button>'
               : ''
           }
         </div>
+        ${linksHtml}
       </div>
 
       ${
         task.photoUrl
-          ? `<img src="${task.photoUrl}" alt="Attached Screenshot" class="task-mini-thumb" title="Tap to zoom screenshot" style="width: 36px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-medium); cursor: pointer; flex-shrink: 0;" />`
+          ? `<img src="${task.photoUrl}" alt="Attached Screenshot" class="task-mini-thumb" title="Tap to zoom image" style="width: 36px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border-medium); cursor: pointer; flex-shrink: 0;" />`
           : ''
       }
 
@@ -120,7 +174,10 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       </div>
     `;
 
-    // Checkbox toggle handler
+    el.querySelectorAll<HTMLAnchorElement>('.saved-link-pill').forEach(a => {
+      a.addEventListener('click', ev => ev.stopPropagation());
+    });
+
     const checkbox = el.querySelector('.task-checkbox')!;
     checkbox.addEventListener('click', async () => {
       const updated = await taskRepository.toggleTaskCompletion(task.id);
@@ -140,7 +197,6 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       loadTasks();
     });
 
-    // Edit handler
     const editBtn = el.querySelector('.task-edit-btn')!;
     editBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -156,7 +212,6 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       el.querySelector('.task-mini-thumb')?.addEventListener('click', openPhoto);
     }
 
-    // Delete handler
     const deleteBtn = el.querySelector('.task-remove-btn')!;
     deleteBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -176,14 +231,15 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
     return div.innerHTML;
   }
 
-  // Subscribe to changes and day selections
   eventBus.on(AppEvents.TASK_CREATED, () => loadTasks());
   eventBus.on(AppEvents.TASK_UPDATED, () => loadTasks());
   eventBus.on(AppEvents.TASK_COMPLETED, () => loadTasks());
   eventBus.on(AppEvents.TASK_DELETED, () => loadTasks());
   eventBus.on(AppEvents.DATE_SELECTED, (newDate: string) => {
-    activeDate = newDate;
-    loadTasks();
+    if (newDate) {
+      activeDate = newDate;
+      loadTasks();
+    }
   });
 
   loadTasks();

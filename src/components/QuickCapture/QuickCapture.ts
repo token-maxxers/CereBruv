@@ -9,10 +9,16 @@ import {
   type VoicePredictionGuide,
 } from '../../services/voice/VoiceService';
 import { notificationService } from '../../services/notifications/NotificationService';
-import { openImageLightbox } from '../../utils/imageUtils';
+import {
+  extractLinksFromText,
+  mergeSavedLinks,
+  normalizeToSavedLink,
+  openImageLightbox,
+  openLiveCameraModal,
+} from '../../utils/imageUtils';
 import { eventBus, AppEvents } from '../../services/events';
 import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
-import type { TaskCategory, UrgencyLevel } from '../../types/task';
+import type { SavedLink, TaskCategory, UrgencyLevel } from '../../types/task';
 
 export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement {
   const container = document.createElement('div');
@@ -50,12 +56,40 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       </button>
-      <button class="icon-btn" id="photo-upload-btn" title="Upload Screenshot or Photo (Offline OCR + AI Task Rescue)">
-        <svg viewBox="0 0 24 24">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-          <circle cx="12" cy="13" r="4" />
-        </svg>
-      </button>
+      <div style="position: relative; display: inline-flex;">
+        <button class="icon-btn" id="photo-upload-btn" title="Upload Screenshot or Take Camera Photo (QR + OCR + AI)">
+          <svg viewBox="0 0 24 24">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </button>
+
+        <!-- 2-Option Chooser Menu: Upload Image vs Live Camera Capture -->
+        <div id="photo-source-menu" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; width: 220px; background: #FAF7F2; border: 1.5px solid var(--border-medium); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 6px; z-index: 40; flex-direction: column; gap: 4px;">
+          <button type="button" id="menu-upload-photo-btn" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); color: var(--color-black-dominant); font-family: inherit; font-size: 0.72rem; font-weight: 700; text-align: left; cursor: pointer;">
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="var(--color-red-primary)" fill="none" stroke-width="2.2" style="flex-shrink: 0;">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <div style="display: flex; flex-direction: column; line-height: 1.2;">
+              <span>Upload Screenshot / File</span>
+              <span style="font-size: 0.6rem; font-weight: 600; color: var(--color-black-muted);">Gallery image or Ctrl+V paste</span>
+            </div>
+          </button>
+
+          <button type="button" id="menu-live-camera-btn" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); color: var(--color-black-dominant); font-family: inherit; font-size: 0.72rem; font-weight: 700; text-align: left; cursor: pointer;">
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="var(--color-red-primary)" fill="none" stroke-width="2.2" style="flex-shrink: 0;">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <div style="display: flex; flex-direction: column; line-height: 1.2;">
+              <span>Take Camera Photo</span>
+              <span style="font-size: 0.6rem; font-weight: 600; color: var(--color-black-muted);">Snap poster, board, or QR code</span>
+            </div>
+          </button>
+        </div>
+      </div>
       <input type="file" id="photo-file-input" accept="image/*" style="display: none;" />
     </div>
 
@@ -608,11 +642,13 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
         inputEl.disabled = false;
         inputEl.placeholder = outcome.headline;
       } else {
+        const detectedNoteLinks = extractLinksFromText(text);
         const savedNote = await noteRepository.createNote({
           content: text,
           tags: ['personal'],
           category: 'personal',
           priority: 'medium',
+          ...(detectedNoteLinks.length > 0 ? { links: detectedNoteLinks } : {}),
         });
         eventBus.emit(AppEvents.NOTE_CREATED, savedNote);
         const spoken = `Got it, Bruv. Saved "${text}" to your Thoughts.`;
@@ -631,10 +667,11 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     }
   });
 
-  // Handle Screenshot / Photo Upload & Clipboard Paste -> Offline-Ready AI Task & Idea Suggestions
+  // Handle Screenshot / Photo Upload, Live Camera & Clipboard Paste -> Zero-Hallucination AI Task + QR/Link Rescue
   function formatTime12(time24: string): string {
-    const [hStr, mStr] = (time24 || '09:00').split(':');
-    const h = parseInt(hStr || '9', 10);
+    if (!time24) return '';
+    const [hStr, mStr] = time24.split(':');
+    const h = parseInt(hStr || '0', 10);
     const m = parseInt(mStr || '0', 10);
     const period = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -647,36 +684,38 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
 
   async function processUploadedScreenshot(file: File) {
     proposalsBox.style.display = 'block';
-    proposalTitle.textContent = 'Scanning Screenshot...';
-    proposalSub.textContent = `Analyzing "${file.name}" for announcements, deadlines & tasks...`;
+    proposalTitle.textContent = 'Scanning Image & QR Codes...';
+    proposalSub.textContent = `Reading "${file.name}" for exact text, deadlines, links & QR codes...`;
     proposalList.innerHTML = `
       <div id="scan-live-status" style="font-size: var(--font-size-xs); color: var(--color-black-muted); padding: 12px 0; text-align: center; font-weight: 600;">
-        Preparing image & reading announcement text...
+        Preparing image, decoding QR codes & reading text...
       </div>
     `;
 
     try {
-      const activeDate = resolveActiveDate();
-      const scanResult = await screenshotScannerService.scanScreenshot(file, activeDate, (statusText) => {
+      const scanResult = await screenshotScannerService.scanScreenshot(file, '', (statusText) => {
         const statusEl = proposalList.querySelector<HTMLElement>('#scan-live-status');
         if (statusEl) statusEl.textContent = statusText;
       });
 
       let currentTasks: ExtractedScreenshotTask[] = [...scanResult.tasks];
+      let currentLinks: SavedLink[] = [...(scanResult.links || [])];
+      const qrOnlyLinks: SavedLink[] = currentLinks.filter(l => l.kind === 'qr');
+
       const engineBadgeLabel =
         scanResult.engine === 'gemini-vision'
-          ? 'Gemini Vision AI'
+          ? 'Google Gemini 2.5 Vision'
           : scanResult.engine === 'offline-ocr'
-            ? 'Offline OCR + Smart Parser'
-            : 'Smart Screenshot Rescue';
+            ? 'On-Device Offline OCR + QR Scanner'
+            : 'Smart Image Rescue';
 
       const renderScreenshotRescueUI = () => {
-        proposalTitle.textContent = `Screenshot Rescue • ${currentTasks.length} AI Task Suggestion${currentTasks.length === 1 ? '' : 's'}`;
-        proposalSub.textContent = `Engine: ${engineBadgeLabel} — Review & approve tasks to your 24h Focus Orbit, or save this screenshot to Thoughts.`;
+        proposalTitle.textContent = `Image Rescue • ${currentTasks.length} Suggestion${currentTasks.length === 1 ? '' : 's'}${currentLinks.length > 0 ? ` • ${currentLinks.length} Link${currentLinks.length === 1 ? '' : 's'}` : ''}`;
+        proposalSub.textContent = `Engine: ${engineBadgeLabel} — Fields not present in the image are left blank.`;
         proposalList.innerHTML = '';
 
-        // 1. Screenshot Preview + Save as Visual Idea Card
-        const defaultIdeaCat = currentTasks[0]?.category || 'study';
+        // 1. Screenshot Preview + Editable Text + Saved Links/QR Bar + Save as Idea Card
+        const defaultIdeaCat = currentTasks[0]?.category || 'work';
         const defaultIdeaPrio = currentTasks[0]?.urgency || 'high';
         const previewCard = document.createElement('div');
         previewCard.style.cssText = `
@@ -690,10 +729,49 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           margin-bottom: 6px;
         `;
 
+        const linksSectionHtml = `
+          <div style="display: flex; flex-direction: column; gap: 5px; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
+              <span style="font-size: 0.6rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
+                Saved Links & QR Codes (${currentLinks.length}):
+              </span>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <input
+                  type="text"
+                  id="manual-link-add-input"
+                  placeholder="Paste URL or bit.ly/..."
+                  style="padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.64rem; width: 135px; font-family: inherit;"
+                />
+                <button type="button" id="manual-link-add-btn" class="pill-badge" style="cursor: pointer; font-size: 0.6rem; padding: 2px 7px;">
+                  + Save Link
+                </button>
+              </div>
+            </div>
+            <div id="scan-links-pills-wrap" style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+              ${
+                currentLinks.length === 0
+                  ? `<span style="font-size: 0.64rem; color: var(--color-black-faint);">No links or QR codes detected — paste one above if needed.</span>`
+                  : currentLinks
+                      .map(
+                        (lnk, lIdx) => `
+                        <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; background: rgba(229,46,46,0.09); border: 1px solid rgba(229,46,46,0.34); font-size: 0.64rem; font-weight: 800;">
+                          <a href="${escapeAttr(lnk.url)}" target="_blank" rel="noopener noreferrer" title="Open ${escapeAttr(lnk.url)}" style="color: #C81E1E; text-decoration: none;">
+                            ${escapeAttr(lnk.label)} ↗
+                          </a>
+                          <button type="button" class="remove-scan-link-btn" data-link-idx="${lIdx}" title="Remove link" style="border: none; background: transparent; color: var(--color-black-muted); font-size: 0.75rem; line-height: 1; cursor: pointer; padding: 0 1px;">&times;</button>
+                        </span>
+                      `
+                      )
+                      .join('')
+              }
+            </div>
+          </div>
+        `;
+
         previewCard.innerHTML = `
           <div style="display: flex; gap: 10px; align-items: flex-start;">
-            <div id="screenshot-thumb-wrap" title="Click to zoom screenshot full-screen" style="position: relative; width: 74px; height: 74px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-medium); cursor: pointer; flex-shrink: 0; background: #121216;">
-              <img src="${scanResult.photoDataUrl}" alt="Uploaded Screenshot" style="width: 100%; height: 100%; object-fit: cover;" />
+            <div id="screenshot-thumb-wrap" title="Click to zoom image full-screen" style="position: relative; width: 74px; height: 74px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-medium); cursor: pointer; flex-shrink: 0; background: #121216;">
+              <img src="${scanResult.photoDataUrl}" alt="Captured Image" style="width: 100%; height: 100%; object-fit: cover;" />
               <span style="position: absolute; bottom: 0; inset-inline: 0; background: rgba(18,18,22,0.75); color: #FFFFFF; font-size: 0.55rem; font-weight: 800; text-align: center; padding: 2px 0;">
                 ZOOM
               </span>
@@ -701,15 +779,17 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
             <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
                 <span style="font-size: 0.62rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">
-                  Detected Screenshot Text / Caption (Editable):
+                  Extracted Text (Editable):
                 </span>
-                <button type="button" id="rescan-text-btn" class="pill-badge" style="cursor: pointer; font-size: 0.6rem; padding: 2px 7px;" title="Re-extract tasks from edited text">
-                  Re-Scan Text
+                <button type="button" id="rescan-text-btn" class="pill-badge" style="cursor: pointer; font-size: 0.6rem; padding: 2px 7px;" title="Re-extract tasks & links from edited text">
+                  Re-Parse Text
                 </button>
               </div>
-              <textarea id="screenshot-ocr-textarea" rows="2" placeholder="Type or edit announcement text (e.g. 'Submit CHED Scholarship form at 3:00 PM')..." style="width: 100%; padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-medium); background: var(--bg-surface); font-family: inherit; font-size: 0.72rem; color: var(--color-black-dominant); resize: vertical;">${escapeAttr(scanResult.rawText || scanResult.suggestedNoteSummary)}</textarea>
+              <textarea id="screenshot-ocr-textarea" rows="2" placeholder="Extracted text from image..." style="width: 100%; padding: 5px 7px; border-radius: var(--radius-sm); border: 1px solid var(--border-medium); background: var(--bg-surface); font-family: inherit; font-size: 0.72rem; color: var(--color-black-dominant); resize: vertical;">${escapeAttr(scanResult.rawText || scanResult.suggestedNoteSummary)}</textarea>
             </div>
           </div>
+
+          ${linksSectionHtml}
 
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--border-subtle);">
             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
@@ -733,7 +813,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
               </label>
             </div>
             <button type="button" id="save-screenshot-note-btn" class="pill-badge" style="cursor: pointer; background: var(--color-black-dominant); color: #FAF7F2; border: none; font-size: 0.65rem; font-weight: 700; padding: 4px 10px;">
-              Save Screenshot to Thoughts
+              Save Image & Links to Thoughts
             </button>
           </div>
         `;
@@ -743,26 +823,61 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
         const notePrioSelect = previewCard.querySelector<HTMLSelectElement>('#screenshot-note-prio')!;
         const saveNoteBtn = previewCard.querySelector<HTMLButtonElement>('#save-screenshot-note-btn')!;
         const rescanBtn = previewCard.querySelector<HTMLButtonElement>('#rescan-text-btn')!;
+        const manualLinkInput = previewCard.querySelector<HTMLInputElement>('#manual-link-add-input')!;
+        const manualLinkBtn = previewCard.querySelector<HTMLButtonElement>('#manual-link-add-btn')!;
 
         previewCard.querySelector('#screenshot-thumb-wrap')?.addEventListener('click', () => {
           openImageLightbox(scanResult.photoDataUrl, ocrTextarea.value || file.name);
         });
 
+        const handleAddManualLink = () => {
+          const raw = manualLinkInput.value.trim();
+          if (!raw) return;
+          const normalized = normalizeToSavedLink(raw);
+          if (normalized) {
+            scanResult.rawText = ocrTextarea.value;
+            currentLinks = mergeSavedLinks(currentLinks, [normalized]);
+            renderScreenshotRescueUI();
+          }
+        };
+
+        manualLinkBtn.addEventListener('click', handleAddManualLink);
+        manualLinkInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddManualLink();
+          }
+        });
+
+        previewCard.querySelectorAll<HTMLButtonElement>('.remove-scan-link-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const idx = parseInt(btn.getAttribute('data-link-idx') || '-1', 10);
+            if (idx >= 0 && idx < currentLinks.length) {
+              scanResult.rawText = ocrTextarea.value;
+              currentLinks.splice(idx, 1);
+              renderScreenshotRescueUI();
+            }
+          });
+        });
+
         rescanBtn.addEventListener('click', () => {
           const editedText = ocrTextarea.value.trim();
           scanResult.rawText = editedText;
+          currentLinks = mergeSavedLinks(qrOnlyLinks, currentLinks, extractLinksFromText(editedText));
           currentTasks = screenshotScannerService.parseAnnouncementTextToTasks(
             editedText,
             file.name,
-            resolveActiveDate()
+            '',
+            currentLinks
           );
           renderScreenshotRescueUI();
         });
 
         saveNoteBtn.addEventListener('click', async () => {
-          const noteText = ocrTextarea.value.trim() || `Screenshot Note: ${file.name}`;
-          const cat = (noteCatSelect.value as TaskCategory) || 'study';
+          const noteText = ocrTextarea.value.trim() || `Image Note: ${file.name}`;
+          const cat = (noteCatSelect.value as TaskCategory) || 'work';
           const prio = (notePrioSelect.value as UrgencyLevel) || 'high';
+          const finalNoteLinks = mergeSavedLinks(currentLinks, extractLinksFromText(noteText));
           saveNoteBtn.disabled = true;
           saveNoteBtn.textContent = 'Saved to Thoughts';
           saveNoteBtn.style.background = '#047857';
@@ -773,11 +888,12 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
             category: cat,
             priority: prio,
             photoUrl: scanResult.photoDataUrl,
+            ...(finalNoteLinks.length > 0 ? { links: finalNoteLinks } : {}),
           });
           eventBus.emit(AppEvents.NOTE_CREATED);
-          const spoken = `Saved your screenshot and note under ${cat} in your Thoughts tab, Bruv.`;
+          const spoken = `Saved your image${finalNoteLinks.length > 0 ? ' and clickable links' : ''} under ${cat} in your Thoughts tab, Bruv.`;
           eventBus.emit(AppEvents.MASCOT_SPEAK, {
-            headline: 'Screenshot saved to Thoughts!',
+            headline: 'Image & links saved to Thoughts!',
             subspeech: spoken,
           });
           voiceService.speak(spoken);
@@ -786,12 +902,17 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
 
         proposalList.appendChild(previewCard);
 
-        // 2. Editable "Approve AI Tasks" Cards (Step 3 of Live Demo)
+        // 2. Editable "Approve AI Tasks" Cards (Blank date/time/duration when absent on image)
         const approveCallbacks: Array<() => Promise<void>> = [];
+        const presetDurations = [0, 15, 30, 45, 60, 90, 120];
 
         currentTasks.forEach((item, index) => {
           const itemCard = document.createElement('div');
           const catColor = CATEGORY_COLORS[item.category] || '#E52E2E';
+          const durValues = presetDurations.includes(item.durationMinutes)
+            ? presetDurations
+            : [...presetDurations, item.durationMinutes].sort((a, b) => a - b);
+
           itemCard.style.cssText = `
             display: flex;
             flex-direction: column;
@@ -806,7 +927,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           itemCard.innerHTML = `
             <div style="display: flex; align-items: center; gap: 6px;">
               <span style="font-size: 0.6rem; font-weight: 800; padding: 2px 6px; border-radius: 999px; background: rgba(229,46,46,0.12); color: var(--color-red-primary);">
-                AI TASK #${index + 1}
+                TASK #${index + 1}
               </span>
               <input
                 type="text"
@@ -823,21 +944,21 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
                   type="date"
                   class="scan-task-date-input"
                   value="${item.date}"
-                  title="Scheduled Date"
+                  title="Date / Deadline (Blank if not in image)"
                   style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700; color: var(--color-black-dominant); font-family: inherit;"
                 />
                 <input
                   type="time"
                   class="scan-task-time-input"
                   value="${item.startTime}"
-                  title="Start Time"
+                  title="Start Time (Blank if not in image)"
                   style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700; color: var(--color-black-dominant); font-family: inherit;"
                 />
-                <select class="scan-task-dur-select" title="Duration" style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
-                  ${[15, 30, 45, 60, 90, 120]
+                <select class="scan-task-dur-select" title="Duration (Optional)" style="padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border-medium); background: var(--bg-surface); font-size: 0.66rem; font-weight: 700;">
+                  ${durValues
                     .map(
                       d =>
-                        `<option value="${d}" ${d === item.durationMinutes ? 'selected' : ''}>${d}m</option>`
+                        `<option value="${d}" ${d === item.durationMinutes ? 'selected' : ''}>${d === 0 ? 'No duration' : `${d}m`}</option>`
                     )
                     .join('')}
                 </select>
@@ -856,7 +977,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
               </div>
 
               <button type="button" class="pill-badge approve-scan-task-btn" style="background: var(--color-red-primary); color: #FAF7F2; border: none; font-size: 0.66rem; font-weight: 800; cursor: pointer; padding: 5px 11px; flex-shrink: 0;">
-                Approve to Orbit
+                Approve Task
               </button>
             </div>
           `;
@@ -873,15 +994,16 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           const approveThisTask = async () => {
             if (isApproved) return;
             isApproved = true;
-            const finalTitle = titleInput.value.trim() || item.title || 'Screenshot Task';
-            const finalDate = dateInput.value || resolveActiveDate();
-            const finalTime = timeInput.value || item.startTime || '09:00';
-            const finalDur = parseInt(durSelect.value || '45', 10);
-            const finalCat = (catSelect.value as TaskCategory) || 'study';
+            const finalTitle = titleInput.value.trim() || item.title || 'Captured Task';
+            const finalDate = dateInput.value.trim(); // "" if left blank!
+            const finalTime = timeInput.value.trim(); // "" if left blank (never invent 04:00 or 09:00)!
+            const finalDur = parseInt(durSelect.value || '0', 10);
+            const finalCat = (catSelect.value as TaskCategory) || 'work';
             const finalUrg = (urgSelect.value as UrgencyLevel) || 'high';
+            const finalTaskLinks = mergeSavedLinks(currentLinks, extractLinksFromText(ocrTextarea.value));
 
             approveBtn.disabled = true;
-            approveBtn.textContent = 'Approved';
+            approveBtn.textContent = 'Saved';
             approveBtn.style.background = '#047857';
             itemCard.style.opacity = '0.72';
 
@@ -893,20 +1015,26 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
               durationMinutes: finalDur,
               urgency: finalUrg,
               notes: ocrTextarea.value.trim()
-                ? `From screenshot "${file.name}": ${ocrTextarea.value.trim().slice(0, 180)}`
-                : `Rescued from screenshot "${file.name}"`,
+                ? `${ocrTextarea.value.trim().slice(0, 220)}`
+                : undefined,
               photoUrl: scanResult.photoDataUrl,
+              ...(finalTaskLinks.length > 0 ? { links: finalTaskLinks } : {}),
             });
 
-            if (finalDate !== resolveActiveDate()) {
+            if (finalDate && finalDate !== resolveActiveDate()) {
               eventBus.emit(AppEvents.DATE_SELECTED, finalDate);
             }
             eventBus.emit(AppEvents.TASK_CREATED);
 
-            const friendly = formatTime12(finalTime);
-            const spoken = `Approved! Scheduled "${finalTitle}" at ${friendly} under ${finalCat} on your Focus Orbit, Bruv.`;
+            const whenPhrase = finalTime
+              ? ` at ${formatTime12(finalTime)}${finalDate ? ` on ${finalDate}` : ''}`
+              : finalDate
+                ? ` for ${finalDate}`
+                : '';
+            const linkPhrase = finalTaskLinks.length > 0 ? ' with your saved links ready to click' : '';
+            const spoken = `Saved "${finalTitle}"${whenPhrase} under ${finalCat}${linkPhrase}, Bruv.`;
             eventBus.emit(AppEvents.MASCOT_SPEAK, {
-              headline: `Approved "${finalTitle}" at ${friendly}`,
+              headline: `Saved "${finalTitle}"${whenPhrase}`,
               subspeech: spoken,
             });
             voiceService.speak(spoken);
@@ -918,7 +1046,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
           proposalList.appendChild(itemCard);
         });
 
-        // 3. Footer row: "+ Add Another Task" & "✓ Approve All to Orbit"
+        // 3. Footer row: "+ Add Blank Task" & "Approve All"
         const footerRow = document.createElement('div');
         footerRow.style.cssText = `
           display: flex;
@@ -930,28 +1058,27 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
 
         footerRow.innerHTML = `
           <button type="button" id="add-extra-scan-task-btn" class="pill-badge" style="cursor: pointer; font-size: 0.65rem;">
-            + Add Another Task from Screenshot
+            + Add Another Task Row
           </button>
           ${
             currentTasks.length > 1
               ? `<button type="button" id="approve-all-scan-tasks-btn" class="btn btn-primary" style="padding: 5px 12px; font-size: 0.68rem;">
-                   Approve All (${currentTasks.length}) to Orbit
+                   Approve All (${currentTasks.length})
                  </button>`
               : ''
           }
         `;
 
         footerRow.querySelector('#add-extra-scan-task-btn')?.addEventListener('click', () => {
-          const now = new Date();
-          const nextHour = (now.getHours() + 1 + currentTasks.length) % 24;
           currentTasks.push({
             id: `scan_task_${Date.now()}_${currentTasks.length}`,
-            title: 'Follow-up from Screenshot',
-            date: resolveActiveDate(),
-            startTime: `${String(nextHour).padStart(2, '0')}:00`,
-            durationMinutes: 45,
-            category: 'study',
+            title: '',
+            date: '',
+            startTime: '',
+            durationMinutes: 0,
+            category: 'work',
             urgency: 'medium',
+            links: currentLinks,
           });
           renderScreenshotRescueUI();
         });
@@ -968,24 +1095,69 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       renderScreenshotRescueUI();
 
       const firstTask = currentTasks[0];
+      const timeDesc = firstTask?.startTime
+        ? ` at ${formatTime12(firstTask.startTime)}`
+        : firstTask?.date
+          ? ` (deadline ${firstTask.date})`
+          : '';
+      const linksDesc =
+        currentLinks.length > 0
+          ? ` I also saved ${currentLinks.length} clickable link${currentLinks.length === 1 ? '' : 's'} from the image.`
+          : '';
       const spokenIntro = firstTask
-        ? `Scanned your screenshot, Bruv! I found ${currentTasks.length} task suggestion${currentTasks.length === 1 ? '' : 's'}, starting with "${firstTask.title}" at ${formatTime12(firstTask.startTime)}. Tap Approve to schedule to your Orbit, or save it to Thoughts.`
-        : `Got your screenshot, Bruv! Review the card below to approve to your Focus Orbit or save to Thoughts.`;
+        ? `Scanned your image, Bruv! Found "${firstTask.title}"${timeDesc}.${linksDesc}`
+        : `Scanned your image, Bruv!${linksDesc} Review below to approve or save to Thoughts.`;
 
       eventBus.emit(AppEvents.MASCOT_SPEAK, {
-        headline: `Screenshot scanned (${currentTasks.length} suggestion${currentTasks.length === 1 ? '' : 's'})`,
+        headline: `Image scanned${currentLinks.length > 0 ? ` • ${currentLinks.length} link${currentLinks.length === 1 ? '' : 's'} ready` : ''}`,
         subspeech: spokenIntro,
       });
       voiceService.speak(spokenIntro);
     } catch (err) {
       console.warn('Screenshot rescue error:', err);
       proposalTitle.textContent = 'Could Not Read Image File';
-      proposalSub.textContent = 'Please select a valid PNG, JPG, or WEBP screenshot image.';
+      proposalSub.textContent = 'Please select a valid PNG, JPG, or WEBP image.';
     }
   }
 
-  photoBtn.addEventListener('click', () => {
+  const photoSourceMenu = container.querySelector<HTMLDivElement>('#photo-source-menu')!;
+  const menuUploadPhotoBtn = container.querySelector<HTMLButtonElement>('#menu-upload-photo-btn')!;
+  const menuLiveCameraBtn = container.querySelector<HTMLButtonElement>('#menu-live-camera-btn')!;
+
+  photoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = photoSourceMenu.style.display === 'flex';
+    photoSourceMenu.style.display = isOpen ? 'none' : 'flex';
+  });
+
+  menuUploadPhotoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    photoSourceMenu.style.display = 'none';
     fileInput.click();
+  });
+
+  menuLiveCameraBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    photoSourceMenu.style.display = 'none';
+    openLiveCameraModal(
+      (capturedFile) => {
+        processUploadedScreenshot(capturedFile);
+      },
+      () => {
+        fileInput.click();
+      }
+    );
+  });
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as Node;
+    if (
+      photoSourceMenu.style.display !== 'none' &&
+      !photoSourceMenu.contains(target) &&
+      !photoBtn.contains(target)
+    ) {
+      photoSourceMenu.style.display = 'none';
+    }
   });
 
   fileInput.addEventListener('change', async () => {
