@@ -9,7 +9,6 @@ import {
   renderSavedLinksHtml,
 } from '../../utils/imageUtils';
 import { sortTasksSmartly } from '../FocusOrbit/orbitCalculator';
-import { LoadingAnimation } from '../LoadingAnimation';
 import { resolveReminderTimeMode, type Task } from '../../types/task';
 
 type FilterType = 'all' | 'duration' | 'one-time' | 'timeless';
@@ -29,6 +28,26 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
   let activeDate = getTodayString();
   let currentFilter: FilterType = 'all';
   let isInitialLoad = true;
+  let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function renderTaskListSkeleton(): string {
+    return `
+      <div class="task-list" id="task-skeleton-container" aria-hidden="true" style="display: flex; flex-direction: column; gap: var(--spacing-2);">
+        ${[1, 2, 3].map(() => `
+          <div class="skeleton-card">
+            <div class="skeleton skeleton-circle" style="width: 22px; height: 22px;"></div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+              <div class="skeleton skeleton-line" style="width: 65%;"></div>
+              <div style="display: flex; gap: 8px;">
+                <div class="skeleton skeleton-line" style="width: 48px; height: 14px;"></div>
+                <div class="skeleton skeleton-line" style="width: 56px; height: 14px;"></div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
 
   function formatShortDateBadge(dateStr: string): string {
     if (!dateStr) return 'No date';
@@ -38,33 +57,45 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
   }
 
   async function loadTasks() {
+    let allTasks: Task[] = [];
+    let allNotes: any[] = [];
+
     if (isInitialLoad) {
-      container.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--spacing-6) var(--spacing-4); min-height: 180px;">
-          <div id="initial-task-lottie" style="width: 80px; height: 80px;"></div>
-        </div>
-      `;
-      const lottieMount = container.querySelector<HTMLElement>('#initial-task-lottie');
-      if (lottieMount) {
-        LoadingAnimation.show(lottieMount, { size: 64, label: 'Loading your schedule & reminders...' });
-      }
+      // Delay showing skeleton by ~150ms so fast loads don't flash
+      skeletonTimer = setTimeout(() => {
+        container.setAttribute('aria-busy', 'true');
+        container.innerHTML = `
+          <div class="section-header" style="margin-bottom: var(--spacing-2);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="skeleton skeleton-line" style="width: 130px; height: 18px;"></div>
+              <div class="skeleton skeleton-line" style="width: 75px; height: 18px;"></div>
+            </div>
+          </div>
+          ${renderTaskListSkeleton()}
+        `;
+      }, 150);
     }
 
-    const [allTasks, allNotes] = await Promise.all([
-      taskRepository.getAllTasks(),
-      noteRepository.getAllNotes(),
-    ]);
-
-    if (isInitialLoad) {
-      const lottieMount = container.querySelector<HTMLElement>('#initial-task-lottie');
-      if (lottieMount) {
-        LoadingAnimation.hide(lottieMount);
+    try {
+      const results = await Promise.all([
+        taskRepository.getAllTasks(),
+        noteRepository.getAllNotes(),
+      ]);
+      allTasks = results[0];
+      allNotes = results[1];
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+    } finally {
+      if (skeletonTimer) {
+        clearTimeout(skeletonTimer);
+        skeletonTimer = null;
       }
+      container.removeAttribute('aria-busy');
       isInitialLoad = false;
     }
 
     // Convert notes into task-compatible reminder view items (seamless unification)
-    const noteItemsAsTasks: Task[] = allNotes.map(n => ({
+    const noteItemsAsTasks: Task[] = allNotes.map((n: any) => ({
       id: `note_as_task_${n.id}`,
       title: n.content,
       category: n.category || 'personal',
@@ -88,7 +119,6 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
     const todayStr = getTodayString();
     const isToday = activeDate === todayStr;
 
-    // Filter by timing type tab (All vs Duration vs One-Time vs Timeless)
     const matchesTimingFilter = (t: Task): boolean => {
       const mode = resolveReminderTimeMode(t);
       if (currentFilter === 'all') return true;

@@ -38,6 +38,29 @@ export function renderThoughtsView(
   container.style.padding = 'var(--spacing-3)';
 
   let activeCategoryFilter: 'all' | TaskCategory = 'all';
+  let isInitialLoad = true;
+  let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function renderThoughtsSkeleton(): string {
+    return `
+      <div id="thoughts-skeleton-container" aria-hidden="true" style="display: flex; flex-direction: column; gap: var(--spacing-3);">
+        ${[1, 2].map(() => `
+          <div class="skeleton-card" style="flex-direction: column; align-items: flex-start; gap: 10px; background: #FFFDF9; border: 1px dashed var(--border-medium); border-top: 3.5px solid var(--border-subtle); padding: var(--spacing-3);">
+            <div style="display: flex; gap: 6px; width: 100%;">
+              <div class="skeleton skeleton-line" style="width: 80px; height: 16px; border-radius: 999px;"></div>
+              <div class="skeleton skeleton-line" style="width: 90px; height: 16px; border-radius: 999px;"></div>
+            </div>
+            <div class="skeleton skeleton-line" style="width: 92%; height: 14px;"></div>
+            <div class="skeleton skeleton-line" style="width: 60%; height: 14px;"></div>
+            <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 4px;">
+              <div class="skeleton skeleton-line" style="width: 60px; height: 12px;"></div>
+              <div class="skeleton skeleton-line" style="width: 40px; height: 12px;"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
 
   container.innerHTML = `
     <div class="section-header" style="margin-bottom: var(--spacing-2);">
@@ -229,7 +252,27 @@ export function renderThoughtsView(
   });
 
   async function loadThoughts() {
-    const allNotes = await noteRepository.getAllNotes();
+    let allNotes: QuickNote[] = [];
+
+    if (isInitialLoad) {
+      skeletonTimer = setTimeout(() => {
+        listContainer.setAttribute('aria-busy', 'true');
+        listContainer.innerHTML = renderThoughtsSkeleton();
+      }, 150);
+    }
+
+    try {
+      allNotes = await noteRepository.getAllNotes();
+    } catch (err) {
+      console.error('Failed to load notes:', err);
+    } finally {
+      if (skeletonTimer) {
+        clearTimeout(skeletonTimer);
+        skeletonTimer = null;
+      }
+      listContainer.removeAttribute('aria-busy');
+      isInitialLoad = false;
+    }
     // Sort by importance (high > medium > low), then newest first
     const prioRank: Record<UrgencyLevel, number> = { high: 0, medium: 1, low: 2 };
     const sortedNotes = [...allNotes].sort((a, b) => {

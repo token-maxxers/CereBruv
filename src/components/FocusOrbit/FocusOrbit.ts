@@ -55,7 +55,18 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     </div>
 
     <!-- 24-Hour Circular Dial Canvas Container -->
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
+    <div id="orbit-dial-region" style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
+      <!-- Orbit Skeleton Placeholder (280x280 circle + weekly strip placeholder) -->
+      <div id="orbit-dial-skeleton" aria-hidden="true" style="display: none; position: absolute; inset: 0; z-index: 10; align-items: center; justify-content: center;">
+        <div class="skeleton skeleton-circle" style="width: 276px; height: 276px; border: 1.5px solid var(--border-medium); display: flex; align-items: center; justify-content: center;">
+          <div style="width: 132px; height: 132px; border-radius: 50%; background: var(--bg-surface); border: 1.5px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 12px; box-sizing: border-box;">
+            <div class="skeleton skeleton-line" style="width: 60px; height: 12px; border-radius: 999px;"></div>
+            <div class="skeleton skeleton-line" style="width: 45px; height: 20px;"></div>
+            <div class="skeleton skeleton-line" style="width: 55px; height: 10px;"></div>
+          </div>
+        </div>
+      </div>
+
       <div style="position: relative; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center;">
         <canvas id="focus-orbit-canvas" width="280" height="280" style="width: 280px; height: 280px; cursor: pointer;"></canvas>
 
@@ -133,6 +144,11 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const centerMonthDay = container.querySelector<HTMLElement>('#center-month-day')!;
   const centerBusyHours = container.querySelector<HTMLElement>('#center-busy-hours')!;
   const centerFreeTime = container.querySelector<HTMLElement>('#center-free-time')!;
+  const dialRegion = container.querySelector<HTMLElement>('#orbit-dial-region')!;
+  const dialSkeleton = container.querySelector<HTMLElement>('#orbit-dial-skeleton')!;
+
+  let isFirstOrbitLoad = true;
+  let orbitSkeletonTimer: ReturnType<typeof setTimeout> | null = null;
 
   function formatFriendlyTime12(time24: string): string {
     const [hStr, mStr] = time24.split(':');
@@ -256,7 +272,29 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   });
 
   async function drawOrbit() {
-    const allTasks = await taskRepository.getAllTasks();
+    if (isFirstOrbitLoad) {
+      orbitSkeletonTimer = setTimeout(() => {
+        dialRegion.setAttribute('aria-busy', 'true');
+        dialSkeleton.style.display = 'flex';
+        renderWeeklyStrip(weeklyStrip, [], selectedDate);
+      }, 150);
+    }
+
+    let allTasks: Task[] = [];
+    try {
+      allTasks = await taskRepository.getAllTasks();
+    } catch (err) {
+      console.error('Failed to load orbit tasks:', err);
+    } finally {
+      if (orbitSkeletonTimer) {
+        clearTimeout(orbitSkeletonTimer);
+        orbitSkeletonTimer = null;
+      }
+      dialRegion.removeAttribute('aria-busy');
+      dialSkeleton.style.display = 'none';
+      isFirstOrbitLoad = false;
+    }
+
     const todayStr = getTodayString();
     const isToday = selectedDate === todayStr;
 
@@ -457,6 +495,17 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   }
 
   function renderWeeklyStrip(el: HTMLElement, allTasks: Task[], activeDateStr: string) {
+    if (isFirstOrbitLoad) {
+      el.innerHTML = '';
+      for (let i = 0; i < 7; i++) {
+        const skelBox = document.createElement('div');
+        skelBox.className = 'skeleton';
+        skelBox.style.cssText = 'flex: 1; height: 42px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);';
+        el.appendChild(skelBox);
+      }
+      return;
+    }
+
     const activeDate = new Date(activeDateStr + 'T00:00:00');
     const dayOfWeek = activeDate.getDay(); // 0 = Sun
     const sunday = new Date(activeDate);
