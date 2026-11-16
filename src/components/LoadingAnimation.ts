@@ -1,4 +1,4 @@
-import loadingJson from '../assets/lottie/loading.json';
+import loaderJson from '../assets/lottie/loader.json';
 import { show, hide, type LottiePlayerOptions } from './LottiePlayer';
 
 export interface LoadingAnimationOptions {
@@ -8,15 +8,15 @@ export interface LoadingAnimationOptions {
 }
 
 /**
- * Standard Loading Animation component using the offline loading.json Lottie asset.
+ * Standard Unified Loading & Upload Animation component using the offline loader.json Lottie asset.
  */
 export const LoadingAnimation = {
   /**
-   * Mounts the standard Lottie loading animation inside the container.
+   * Mounts the standard Lottie loading or upload animation inside the container.
    */
   show(container: HTMLElement, options: LoadingAnimationOptions = {}): Promise<void> {
     const playerOpts: LottiePlayerOptions = {
-      src: loadingJson,
+      src: loaderJson,
       size: options.size ?? 96,
       label: options.label ?? 'Loading...',
       fallbackText: options.fallbackText ?? 'Loading...',
@@ -25,7 +25,7 @@ export const LoadingAnimation = {
   },
 
   /**
-   * Hides the standard Lottie loading animation and cleans up instances.
+   * Hides the standard Lottie loading or upload animation and cleans up instances.
    */
   hide(container: HTMLElement): void {
     hide(container);

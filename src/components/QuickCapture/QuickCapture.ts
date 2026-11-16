@@ -17,6 +17,7 @@ import {
   openLiveCameraModal,
 } from '../../utils/imageUtils';
 import { eventBus, AppEvents } from '../../services/events';
+import { LoadingAnimation } from '../LoadingAnimation';
 import { CATEGORY_COLORS } from '../FocusOrbit/orbitCalculator';
 import type { SavedLink, TaskCategory, UrgencyLevel } from '../../types/task';
 
@@ -692,10 +693,22 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     proposalTitle.textContent = 'Scanning Image & QR Codes...';
     proposalSub.textContent = `Reading "${file.name}" for exact text, deadlines, links & QR codes...`;
     proposalList.innerHTML = `
-      <div id="scan-live-status" style="font-size: var(--font-size-xs); color: var(--color-black-muted); padding: 12px 0; text-align: center; font-weight: 600;">
-        Preparing image, decoding QR codes & reading text...
+      <div id="scan-lottie-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 0 6px;">
+        <div id="scan-lottie-mount" style="width: 96px; height: 96px;"></div>
+        <div id="scan-live-status" style="font-size: var(--font-size-xs); color: var(--color-black-muted); padding: 8px 0 4px; text-align: center; font-weight: 600;">
+          Preparing image, decoding QR codes & reading text...
+        </div>
       </div>
     `;
+
+    const lottieMount = proposalList.querySelector<HTMLElement>('#scan-lottie-mount');
+    if (lottieMount) {
+      LoadingAnimation.show(lottieMount, {
+        size: 96,
+        label: 'Scanning and uploading image...',
+        fallbackText: 'Scanning image & QR codes...',
+      });
+    }
 
     try {
       const scanResult = await screenshotScannerService.scanScreenshot(file, '', (statusText) => {
@@ -714,7 +727,15 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
             ? 'On-Device Offline OCR + QR Scanner'
             : 'Smart Image Rescue';
 
+      const cleanupLottie = () => {
+        const lMount = proposalList.querySelector<HTMLElement>('#scan-lottie-mount');
+        if (lMount) {
+          LoadingAnimation.hide(lMount);
+        }
+      };
+
       const renderScreenshotRescueUI = () => {
+        cleanupLottie();
         proposalTitle.textContent = `Image Rescue • ${currentTasks.length} Suggestion${currentTasks.length === 1 ? '' : 's'}${currentLinks.length > 0 ? ` • ${currentLinks.length} Link${currentLinks.length === 1 ? '' : 's'}` : ''}`;
         proposalSub.textContent = `Engine: ${engineBadgeLabel} — Fields not present in the image are left blank.`;
         proposalList.innerHTML = '';
@@ -1121,6 +1142,10 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       });
       voiceService.speak(spokenIntro);
     } catch (err) {
+      const lMount = proposalList.querySelector<HTMLElement>('#scan-lottie-mount');
+      if (lMount) {
+        LoadingAnimation.hide(lMount);
+      }
       console.warn('Screenshot rescue error:', err);
       proposalTitle.textContent = 'Could Not Read Image File';
       proposalSub.textContent = 'Please select a valid PNG, JPG, or WEBP image.';

@@ -35,7 +35,7 @@ try {
   console.warn('Firebase Messaging SW init skipped (offline mode ready):', err);
 }
 
-const CACHE_NAME = 'cerebruv-cache-v6';
+const CACHE_NAME = 'cerebruv-cache-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -43,7 +43,7 @@ const ASSETS_TO_CACHE = [
   '/mascot.png',
   '/icon-192.png',
   '/icon-512.png',
-  '/loading.json'
+  '/loader.json'
 ];
 
 self.addEventListener('install', (event) => {
