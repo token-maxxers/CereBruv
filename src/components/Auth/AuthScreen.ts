@@ -39,84 +39,105 @@ export function renderAuthScreen(options: AuthScreenOptions): HTMLElement {
       <div class="auth-global-error" id="auth-global-error"></div>
       <div class="auth-global-success" id="auth-global-success"></div>
 
-      <!-- Segmented Mode Control -->
-      <div class="auth-segmented-control" id="auth-segmented-control">
-        <button type="button" class="auth-segment-btn ${currentMode === 'signin' ? 'active' : ''}" id="tab-signin">
+      <!-- Segmented Mode Control with Tablist ARIA and Sliding Pill -->
+      <div class="auth-segmented-control" id="auth-segmented-control" role="tablist" aria-label="Authentication Options" data-active="${currentMode}">
+        <div class="auth-segment-pill" aria-hidden="true"></div>
+        <button 
+          type="button" 
+          role="tab" 
+          id="tab-signin" 
+          aria-selected="${currentMode === 'signin' ? 'true' : 'false'}" 
+          aria-controls="auth-main-form" 
+          tabindex="0"
+          class="auth-segment-btn ${currentMode === 'signin' ? 'active' : ''}"
+        >
           Sign In
         </button>
-        <button type="button" class="auth-segment-btn ${currentMode === 'signup' ? 'active' : ''}" id="tab-signup">
+        <button 
+          type="button" 
+          role="tab" 
+          id="tab-signup" 
+          aria-selected="${currentMode === 'signup' ? 'true' : 'false'}" 
+          aria-controls="auth-main-form" 
+          tabindex="0"
+          class="auth-segment-btn ${currentMode === 'signup' ? 'active' : ''}"
+        >
           ${options.isLinkMode ? 'Create Account' : 'Sign Up'}
         </button>
       </div>
 
-      <!-- Auth Form -->
-      <form class="auth-form" id="auth-main-form" novalidate>
-        <!-- Email Field -->
-        <div class="auth-field-group">
-          <label class="auth-label" for="auth-email">Email Address</label>
-          <div class="auth-input-wrapper">
-            ${mailSvg}
-            <input 
-              type="email" 
-              id="auth-email" 
-              class="auth-input" 
-              placeholder="name@example.com" 
-              autocomplete="email" 
-              required 
-            />
-          </div>
-          <span class="auth-field-error" id="email-error"></span>
-        </div>
+      <!-- Auth Form Container -->
+      <div class="auth-form-container" id="auth-form-container">
+        <form class="auth-form" id="auth-main-form" role="tabpanel" aria-labelledby="${currentMode === 'signin' ? 'tab-signin' : 'tab-signup'}" novalidate>
+          <div class="auth-form-panel" id="auth-panel-fields">
+            <!-- Email Field -->
+            <div class="auth-field-group">
+              <label class="auth-label" for="auth-email">Email Address</label>
+              <div class="auth-input-wrapper">
+                ${mailSvg}
+                <input 
+                  type="email" 
+                  id="auth-email" 
+                  class="auth-input" 
+                  placeholder="name@example.com" 
+                  autocomplete="email" 
+                  required 
+                />
+              </div>
+              <span class="auth-field-error" id="email-error"></span>
+            </div>
 
-        <!-- Password Field -->
-        <div class="auth-field-group">
-          <label class="auth-label" for="auth-password">Password</label>
-          <div class="auth-input-wrapper">
-            ${lockSvg}
-            <input 
-              type="password" 
-              id="auth-password" 
-              class="auth-input" 
-              placeholder="Minimum 6 characters" 
-              autocomplete="${currentMode === 'signin' ? 'current-password' : 'new-password'}" 
-              required 
-            />
-            <button type="button" class="auth-toggle-pwd" id="toggle-password" title="Show password">
-              ${eyeSvg}
+            <!-- Password Field -->
+            <div class="auth-field-group">
+              <label class="auth-label" for="auth-password">Password</label>
+              <div class="auth-input-wrapper">
+                ${lockSvg}
+                <input 
+                  type="password" 
+                  id="auth-password" 
+                  class="auth-input" 
+                  placeholder="Minimum 6 characters" 
+                  autocomplete="${currentMode === 'signin' ? 'current-password' : 'new-password'}" 
+                  required 
+                />
+                <button type="button" class="auth-toggle-pwd" id="toggle-password" title="Show password" aria-label="Show password">
+                  ${eyeSvg}
+                </button>
+              </div>
+              <span class="auth-field-error" id="password-error"></span>
+            </div>
+
+            <!-- Confirm Password Field (Sign up only) -->
+            <div class="auth-field-expandable ${currentMode === 'signup' ? 'is-expanded' : ''}" id="confirm-password-group">
+              <label class="auth-label" for="auth-confirm-password">Confirm Password</label>
+              <div class="auth-input-wrapper">
+                ${lockSvg}
+                <input 
+                  type="password" 
+                  id="auth-confirm-password" 
+                  class="auth-input" 
+                  placeholder="Re-enter your password" 
+                  autocomplete="new-password" 
+                />
+                <button type="button" class="auth-toggle-pwd" id="toggle-confirm-password" title="Show password" aria-label="Show password">
+                  ${eyeSvg}
+                </button>
+              </div>
+              <span class="auth-field-error" id="confirm-password-error"></span>
+            </div>
+
+            <!-- Forgot Password Link (Sign in only) -->
+            <button type="button" class="auth-forgot-link" id="auth-forgot-btn" style="display: ${currentMode === 'signin' ? 'block' : 'none'};">
+              Forgot password?
+            </button>
+
+            <!-- Submit Button -->
+            <button type="submit" class="auth-btn-primary" id="auth-submit-btn">
+              ${currentMode === 'signin' ? 'Sign In' : (options.isLinkMode ? 'Create Account' : 'Create Account')}
             </button>
           </div>
-          <span class="auth-field-error" id="password-error"></span>
-        </div>
-
-        <!-- Confirm Password Field (Sign up only) -->
-        <div class="auth-field-group" id="confirm-password-group" style="display: ${currentMode === 'signup' ? 'flex' : 'none'};">
-          <label class="auth-label" for="auth-confirm-password">Confirm Password</label>
-          <div class="auth-input-wrapper">
-            ${lockSvg}
-            <input 
-              type="password" 
-              id="auth-confirm-password" 
-              class="auth-input" 
-              placeholder="Re-enter your password" 
-              autocomplete="new-password" 
-            />
-            <button type="button" class="auth-toggle-pwd" id="toggle-confirm-password" title="Show password">
-              ${eyeSvg}
-            </button>
-          </div>
-          <span class="auth-field-error" id="confirm-password-error"></span>
-        </div>
-
-        <!-- Forgot Password Link (Sign in only) -->
-        <button type="button" class="auth-forgot-link" id="auth-forgot-btn" style="display: ${currentMode === 'signin' ? 'block' : 'none'};">
-          Forgot password?
-        </button>
-
-        <!-- Submit Button -->
-        <button type="submit" class="auth-btn-primary" id="auth-submit-btn">
-          ${currentMode === 'signin' ? 'Sign In' : (options.isLinkMode ? 'Create Account' : 'Create Account')}
-        </button>
-      </form>
+        </form>
+      </div>
 
       <!-- Divider -->
       <div class="auth-divider">or</div>
@@ -143,8 +164,10 @@ export function renderAuthScreen(options: AuthScreenOptions): HTMLElement {
   const offlineBanner = container.querySelector<HTMLDivElement>('#auth-offline-banner')!;
   const globalError = container.querySelector<HTMLDivElement>('#auth-global-error')!;
   const globalSuccess = container.querySelector<HTMLDivElement>('#auth-global-success')!;
+  const segmentedControl = container.querySelector<HTMLDivElement>('#auth-segmented-control')!;
   const tabSignin = container.querySelector<HTMLButtonElement>('#tab-signin')!;
   const tabSignup = container.querySelector<HTMLButtonElement>('#tab-signup')!;
+  const formContainer = container.querySelector<HTMLDivElement>('#auth-form-container')!;
   const form = container.querySelector<HTMLFormElement>('#auth-main-form')!;
   const emailInput = container.querySelector<HTMLInputElement>('#auth-email')!;
   const passwordInput = container.querySelector<HTMLInputElement>('#auth-password')!;
@@ -164,6 +187,19 @@ export function renderAuthScreen(options: AuthScreenOptions): HTMLElement {
     offlineBanner.style.display = 'block';
   }
 
+  function syncFormContainerHeight() {
+    if (!formContainer) return;
+    const scrollH = form.scrollHeight;
+    if (scrollH > 0) {
+      formContainer.style.height = `${scrollH}px`;
+    }
+  }
+
+  // Update height after initial mount
+  requestAnimationFrame(() => {
+    syncFormContainerHeight();
+  });
+
   function clearErrors() {
     globalError.style.display = 'none';
     globalError.textContent = '';
@@ -175,21 +211,68 @@ export function renderAuthScreen(options: AuthScreenOptions): HTMLElement {
   }
 
   function setMode(mode: 'signin' | 'signup') {
+    if (currentMode === mode) return;
     currentMode = mode;
     clearErrors();
+
+    // Update segmented control data-attribute and button states
+    segmentedControl.setAttribute('data-active', mode);
     tabSignin.classList.toggle('active', mode === 'signin');
     tabSignup.classList.toggle('active', mode === 'signup');
+    tabSignin.setAttribute('aria-selected', mode === 'signin' ? 'true' : 'false');
+    tabSignup.setAttribute('aria-selected', mode === 'signup' ? 'true' : 'false');
+    form.setAttribute('aria-labelledby', mode === 'signin' ? 'tab-signin' : 'tab-signup');
 
+    // Update button text and password autocomplete semantics
     if (mode === 'signin') {
-      confirmGroup.style.display = 'none';
-      forgotBtn.style.display = 'block';
       submitBtn.textContent = 'Sign In';
+      passwordInput.setAttribute('autocomplete', 'current-password');
+      confirmPasswordInput.removeAttribute('required');
+      forgotBtn.style.display = 'block';
+      confirmGroup.classList.remove('is-expanded');
     } else {
-      confirmGroup.style.display = 'flex';
-      forgotBtn.style.display = 'none';
       submitBtn.textContent = 'Create Account';
+      passwordInput.setAttribute('autocomplete', 'new-password');
+      confirmPasswordInput.setAttribute('required', 'true');
+      forgotBtn.style.display = 'none';
+      confirmGroup.classList.add('is-expanded');
     }
+
+    // Check prefers-reduced-motion
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      formContainer.style.height = 'auto';
+      return;
+    }
+
+    // Lock container current height and animate smoothly to the new measured height
+    formContainer.style.height = `${formContainer.offsetHeight}px`;
+    requestAnimationFrame(() => {
+      const targetHeight = form.scrollHeight;
+      formContainer.style.height = `${targetHeight}px`;
+
+      setTimeout(() => {
+        formContainer.style.height = 'auto';
+      }, 260);
+    });
   }
+
+  // Keyboard navigation for tablist
+  tabSignin.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      tabSignup.focus();
+      setMode('signup');
+    }
+  });
+
+  tabSignup.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      tabSignin.focus();
+      setMode('signin');
+    }
+  });
 
   tabSignin.addEventListener('click', () => setMode('signin'));
   tabSignup.addEventListener('click', () => setMode('signup'));
