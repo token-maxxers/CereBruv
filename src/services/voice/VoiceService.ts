@@ -1050,9 +1050,11 @@ export class VoiceService {
           headline: 'Thinking it through, Bruv...',
           subspeech: 'Processing your voice command...',
         });
+        eventBus.emit(AppEvents.MASCOT_THINKING, true);
 
         try {
           const transcript = await geminiService.transcribeAudio(audioBlob);
+          eventBus.emit(AppEvents.MASCOT_THINKING, false);
           this.listening = false;
           this.emitState();
 
@@ -1067,6 +1069,7 @@ export class VoiceService {
             });
           }
         } catch (err) {
+          eventBus.emit(AppEvents.MASCOT_THINKING, false);
           console.warn('Audio transcription failed:', err);
           this.listening = false;
           this.emitState();

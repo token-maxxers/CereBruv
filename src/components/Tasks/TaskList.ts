@@ -9,6 +9,7 @@ import {
   renderSavedLinksHtml,
 } from '../../utils/imageUtils';
 import { sortTasksSmartly } from '../FocusOrbit/orbitCalculator';
+import { LoadingAnimation } from '../LoadingAnimation';
 import { resolveReminderTimeMode, type Task } from '../../types/task';
 
 type FilterType = 'all' | 'duration' | 'one-time' | 'timeless';
@@ -27,6 +28,7 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
 
   let activeDate = getTodayString();
   let currentFilter: FilterType = 'all';
+  let isInitialLoad = true;
 
   function formatShortDateBadge(dateStr: string): string {
     if (!dateStr) return 'No date';
@@ -36,10 +38,30 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
   }
 
   async function loadTasks() {
+    if (isInitialLoad) {
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--spacing-6) var(--spacing-4); min-height: 180px;">
+          <div id="initial-task-lottie" style="width: 80px; height: 80px;"></div>
+        </div>
+      `;
+      const lottieMount = container.querySelector<HTMLElement>('#initial-task-lottie');
+      if (lottieMount) {
+        LoadingAnimation.show(lottieMount, { size: 64, label: 'Loading your schedule & reminders...' });
+      }
+    }
+
     const [allTasks, allNotes] = await Promise.all([
       taskRepository.getAllTasks(),
       noteRepository.getAllNotes(),
     ]);
+
+    if (isInitialLoad) {
+      const lottieMount = container.querySelector<HTMLElement>('#initial-task-lottie');
+      if (lottieMount) {
+        LoadingAnimation.hide(lottieMount);
+      }
+      isInitialLoad = false;
+    }
 
     // Convert notes into task-compatible reminder view items (seamless unification)
     const noteItemsAsTasks: Task[] = allNotes.map(n => ({

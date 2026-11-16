@@ -20,6 +20,7 @@ import { sortTasksSmartly, timeStringToFractionalHour } from './components/Focus
 import { renderDotGraph } from './components/DotGraph/DotGraph';
 import { renderThoughtsView } from './components/Thoughts/ThoughtsView';
 import { renderSavedLinksHtml } from './utils/imageUtils';
+import { LoadingAnimation } from './components/LoadingAnimation';
 import type { UserStats } from './types/user';
 
 let realTimeAlarmInterval: ReturnType<typeof setInterval> | null = null;
@@ -504,7 +505,33 @@ async function mountApp(user: AuthUser) {
   const voiceIconEl = document.querySelector<SVGElement>('#mascot-voice-icon')!;
   const qcInputEl = document.querySelector<HTMLInputElement>('#quick-capture-input');
 
+  let isMascotThinking = false;
+  let mascotThinkingHost: HTMLDivElement | null = null;
+
   function syncMascotAvatarSprite() {
+    // If AI mascot is in thinking / waiting state, mount lottie loading animation over orb
+    if (isMascotThinking) {
+      if (!mascotThinkingHost) {
+        mascotThinkingHost = document.createElement('div');
+        mascotThinkingHost.className = 'mascot-thinking-overlay';
+        mascotThinkingHost.style.position = 'absolute';
+        mascotThinkingHost.style.inset = '0';
+        mascotThinkingHost.style.display = 'flex';
+        mascotThinkingHost.style.alignItems = 'center';
+        mascotThinkingHost.style.justifyContent = 'center';
+        mascotThinkingHost.style.zIndex = '4';
+        mascotThinkingHost.style.background = 'rgba(250, 247, 242, 0.88)';
+        mascotThinkingHost.style.borderRadius = '50%';
+        mascotSiriOrb.appendChild(mascotThinkingHost);
+        LoadingAnimation.show(mascotThinkingHost, { size: 48, label: 'Thinking...' });
+      }
+      return;
+    } else if (mascotThinkingHost) {
+      LoadingAnimation.hide(mascotThinkingHost);
+      mascotThinkingHost.remove();
+      mascotThinkingHost = null;
+    }
+
     const isSpeaking = voiceService.isSpeaking();
     const isListening = voiceService.isListening();
 
@@ -700,6 +727,11 @@ async function mountApp(user: AuthUser) {
         updateMascotStatus();
       }
     }, 3500);
+  });
+
+  eventBus.on(AppEvents.MASCOT_THINKING, (thinking: boolean) => {
+    isMascotThinking = thinking;
+    renderVoiceButtonState();
   });
 
   eventBus.on(AppEvents.NAVIGATE_TAB, (tab: string) => {
@@ -921,10 +953,43 @@ function showAuth(isLinkMode: boolean = false) {
 }
 
 /**
- * Application Bootstrap with Auth Gate
+ * Application Bootstrap with Auth Gate & Transparent Loading Overlay
  */
 function bootstrap() {
   let initialCheckDone = false;
+
+  // Mount an ambient transparent loading overlay directly over the base viewport
+  const overlay = document.createElement('div');
+  overlay.id = 'app-loading-overlay';
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.zIndex = '9999';
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.background = 'rgba(245, 239, 235, 0.65)';
+  overlay.style.backdropFilter = 'blur(4px)';
+  (overlay.style as any).webkitBackdropFilter = 'blur(4px)';
+  overlay.style.transition = 'opacity 250ms ease, visibility 250ms ease';
+  overlay.style.pointerEvents = 'none';
+
+  const lottieMount = document.createElement('div');
+  lottieMount.id = 'boot-lottie-mount';
+  lottieMount.style.width = '72px';
+  lottieMount.style.height = '72px';
+  overlay.appendChild(lottieMount);
+
+  document.body.appendChild(overlay);
+  LoadingAnimation.show(lottieMount, { size: 64, label: 'Loading...' });
+
+  const clearLoading = () => {
+    overlay.style.opacity = '0';
+    overlay.style.visibility = 'hidden';
+    setTimeout(() => {
+      LoadingAnimation.hide(lottieMount);
+      overlay.remove();
+    }, 260);
+  };
 
   authService.onAuthChange((user: AuthUser | null) => {
     if (!initialCheckDone) {
@@ -934,6 +999,7 @@ function bootstrap() {
       } else {
         showAuth(false);
       }
+      clearLoading();
     } else {
       // Auth state changed after startup (e.g. signed out)
       if (!user) {
@@ -952,6 +1018,7 @@ function bootstrap() {
       } else {
         showAuth(false);
       }
+      clearLoading();
     }
   }, 1500);
 }

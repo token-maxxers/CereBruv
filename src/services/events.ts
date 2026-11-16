@@ -48,4 +48,5 @@ export const AppEvents = {
   ALARM_POPUP: 'alarm:popup',
   SETTINGS_CHANGED: 'settings:changed',
   NAVIGATE_TAB: 'nav:tab',
+  MASCOT_THINKING: 'mascot:thinking',
 } as const;
