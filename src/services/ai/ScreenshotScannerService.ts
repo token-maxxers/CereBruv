@@ -4,7 +4,6 @@ import {
   decodeQrCodesFromImage,
   extractLinksFromText,
   mergeSavedLinks,
-  preprocessImageForOcr,
 } from '../../utils/imageUtils';
 import type { SavedLink, TaskCategory, UrgencyLevel } from '../../types/task';
 
@@ -543,8 +542,7 @@ export class ScreenshotScannerService {
   }
 
   /**
-   * Runs client-side OCR (native TextDetector if supported, else Tesseract.js WASM worker)
-   * on the color-preserving + inverted-footer preprocessed image.
+   * Runs native TextDetector if supported by the browser as an offline fallback.
    */
   private async runClientSideOcr(
     file: Blob,
@@ -562,35 +560,9 @@ export class ScreenshotScannerService {
             return text;
           }
         }
-      } catch {
-        // Fall through to Tesseract.js
+      } catch (err) {
+        console.warn('Native TextDetector notice:', err);
       }
-    }
-
-    try {
-      onProgress?.('Preparing high-clarity OCR canvas...');
-      const preprocessedDataUrl = await preprocessImageForOcr(file, 1500);
-
-      onProgress?.('Starting on-device OCR engine...');
-      const Tesseract = await import('tesseract.js');
-      const recognizePromise = Tesseract.recognize(preprocessedDataUrl, 'eng', {
-        logger: (msg: { status?: string; progress?: number }) => {
-          if (msg.status === 'recognizing text' && typeof msg.progress === 'number') {
-            const pct = Math.round(msg.progress * 100);
-            onProgress?.(`Reading text from image (${pct}%)...`);
-          } else if (msg.status) {
-            onProgress?.(`OCR: ${msg.status}...`);
-          }
-        },
-      });
-
-      const timeoutPromise = new Promise<null>(resolve => setTimeout(() => resolve(null), 16000));
-      const result = await Promise.race([recognizePromise, timeoutPromise]);
-      if (result && result.data && typeof result.data.text === 'string') {
-        return result.data.text.trim();
-      }
-    } catch (err) {
-      console.warn('Client-side OCR fallback notice:', err);
     }
 
     return '';
@@ -599,8 +571,8 @@ export class ScreenshotScannerService {
   /**
    * Main entry point for scanning an uploaded screenshot or live camera snapshot:
    * - Always decodes embedded QR codes offline/online in parallel
-   * - Uses Cloud Gemini 2.5 Flash Vision when available (production or VITE_GEMINI_API_KEY on localhost)
-   * - Falls back to Color-Aware Offline OCR + Smart Poster/Announcement Parser
+   * - Uses Cloud Gemini 3.8 Flash Vision when available (production or VITE_GEMINI_API_KEY on localhost)
+   * - Falls back to native browser TextDetector + QR Scanner + Smart Rescue Parser
    * - Strictly leaves date, startTime, and durationMinutes blank when absent in the image
    */
   async scanScreenshot(
@@ -614,10 +586,10 @@ export class ScreenshotScannerService {
       decodeQrCodesFromImage(file),
     ]);
 
-    // Layer 1: Cloud Gemini 2.5 Flash Vision (when online + either deployed or VITE_GEMINI_API_KEY set)
+    // Layer 1: Cloud Gemini 3.8 Flash Vision (when online + either deployed or VITE_GEMINI_API_KEY set)
     if (geminiService.canRunCloudVision()) {
       try {
-        onProgress?.('Reading image with Google Gemini 2.5 Flash Vision...');
+        onProgress?.('Reading image with Google Gemini 3.8 Flash Vision...');
         const visionPayload = await geminiService.analyzeScreenshotWithVision(file);
         if (visionPayload && (visionPayload.tasks.length > 0 || visionPayload.fullText)) {
           const mergedLinks = mergeSavedLinks(qrLinks, visionPayload.links);
@@ -650,11 +622,14 @@ export class ScreenshotScannerService {
           };
         }
       } catch (err) {
-        console.warn('Gemini Vision unavailable, falling back to on-device OCR:', err);
+        console.warn('Gemini Vision unavailable, falling back to offline mode:', err);
       }
     }
 
-    // Layer 2: On-Device Offline OCR + QR + Link Extractor + Zero-Hallucination Parser
+    // Inform user of offline / Gemini unavailable status
+    onProgress?.('Offline mode: scanned QR codes and file metadata (connect to the internet for Gemini Vision).');
+
+    // Layer 2: Browser native TextDetector + QR + Link Extractor + Smart Rescue Parser
     const ocrText = await this.runClientSideOcr(file, onProgress);
     const cleanedLines = sanitizeAndHealOcrText(ocrText);
     const cleanText = cleanedLines.join('\n');
