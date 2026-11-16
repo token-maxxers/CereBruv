@@ -5,6 +5,8 @@ import { extractLinksFromText, mergeSavedLinks, normalizeToSavedLink } from '../
 import type { SavedLink, Task, TaskCategory, UrgencyLevel } from '../../types/task';
 import type { IAIService } from './IAIService';
 
+export const GEMINI_MODEL = 'gemini-3.8-flash';
+
 export interface GeminiVisionScanPayload {
   fullText: string;
   links: SavedLink[];
@@ -74,7 +76,7 @@ export class GeminiService implements IAIService {
     if (!this.textModel) {
       const ai = getAI(app, { backend: new GoogleAIBackend() });
       this.textModel = getGenerativeModel(ai, {
-        model: 'gemini-2.5-flash',
+        model: GEMINI_MODEL,
         systemInstruction: {
           role: 'system',
           parts: [
@@ -93,7 +95,7 @@ export class GeminiService implements IAIService {
     if (!this.visionModel) {
       const ai = getAI(app, { backend: new GoogleAIBackend() });
       this.visionModel = getGenerativeModel(ai, {
-        model: 'gemini-2.5-flash',
+        model: GEMINI_MODEL,
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: Schema.object({
@@ -154,7 +156,7 @@ In 1-2 short sentences (max 2 sentences), give me your mascot check-in and advic
       try {
         if (directKey) {
           const resp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(directKey)}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(directKey)}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -231,7 +233,7 @@ STRICT ACCURACY RULES (DO NOT HALLUCINATE):
 
     if (directKey) {
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(directKey)}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(directKey)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -366,7 +368,7 @@ STRICT ACCURACY RULES (DO NOT HALLUCINATE):
 
     const mimeType = audioBlob.type || 'audio/webm';
     const ai = getAI(app, { backend: new GoogleAIBackend() });
-    const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+    const model = getGenerativeModel(ai, { model: GEMINI_MODEL });
 
     const result = await model.generateContent([
       {

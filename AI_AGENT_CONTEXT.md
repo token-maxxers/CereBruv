@@ -87,7 +87,7 @@ CereBruv/
 │   │   │   └── FirestoreAdapter.ts    # Firestore storage implementation (users/{uid}/...)
 │   │   ├── ai/                        # Firebase AI / Gemini Companion Layer
 │   │   │   ├── IAIService.ts          # AI Interface contract
-│   │   │   └── GeminiService.ts       # Gemini 2.5 Flash companion integration (firebase/ai)
+│   │   │   └── GeminiService.ts       # Gemini 3.8 Flash companion integration (firebase/ai)
 │   │   ├── voice/
 │   │   │   └── VoiceService.ts        # Local keyword/date/time parser, TTS Talk-Back & STT engine
 │   │   └── notifications/
@@ -300,7 +300,7 @@ CereBruv/
 * **Phase:** Phase 11 Complete - Gemini Workload Analysis & Mascot AI Companion.
 * **Action:**
   1. Created `src/services/ai/IAIService.ts` defining `analyzeWorkload(tasks: Task[]): Promise<string>`.
-  2. Implemented `src/services/ai/GeminiService.ts` using `firebase/ai` (`getAI`, `GoogleAIBackend`, and `getGenerativeModel` with `gemini-2.5-flash`), without exposing any API key in client code.
+  2. Implemented `src/services/ai/GeminiService.ts` using `firebase/ai` (`getAI`, `GoogleAIBackend`, and `getGenerativeModel` with `gemini-3.8-flash`), without exposing any API key in client code.
   3. Configured mascot persona system instructions (punchy, friendly CereBruv voice, calling user "bruv", maximum 2 sentences, no emojis).
   4. Implemented a strict 5-second timeout via `Promise.race` on AI calls.
   5. Updated `updateMascotStatus()` in `src/main.ts` with instant rule-based fallback, debouncing AI calls (400ms) to ensure at most one request per batch of task changes and safely ignoring outdated or offline responses.
@@ -388,7 +388,7 @@ CereBruv/
   1. **Image Compression, Dark-Mode OCR Preprocessing & Lightbox (`src/utils/imageUtils.ts`)**:
      - Added `compressImageToDataUrl()` (~35-55 KB JPEG Data URLs safe for `localStorage` and Firestore documents), `preprocessImageForOcr()` (auto-detects dark-mode group chat screenshots and stretches contrast for accurate OCR), and `openImageLightbox()` for full-screen screenshot zoom.
   2. **Hybrid Cloud + Client-Side Offline Screenshot Scanner (`src/services/ai/ScreenshotScannerService.ts`)**:
-     - Uses Gemini Vision when online in production and automatically runs on-device OCR (`tesseract.js` WebAssembly + browser `TextDetector`) + Smart Announcement/Deadline Parser when offline or on `localhost`.
+     - Uses Gemini Vision when online in production (or with API key on localhost) and automatically falls back to native browser `TextDetector` + multi-region QR scanning + Smart Rescue Parser when offline or Gemini is unavailable.
      - Extracts task titles, dates (`today`, `tomorrow`, weekdays, month/day), times, durations, categories, and urgency (`high` for scholarships, deadlines, exams, submissions), with a zero-fail editable rescue fallback.
   3. **Interactive Screenshot Rescue UI (`src/components/QuickCapture/QuickCapture.ts`)**:
      - Supports both file upload (Camera button) and direct clipboard screenshot paste (`Ctrl+V`).
@@ -468,7 +468,7 @@ CereBruv/
   1. **Image Compression, Dark-Mode OCR Preprocessing & Lightbox (`src/utils/imageUtils.ts`)**:
      - Added `compressImageToDataUrl()` (~35-55 KB JPEG Data URLs safe for `localStorage` and Firestore documents), `preprocessImageForOcr()` (auto-detects dark-mode group chat screenshots and stretches contrast for accurate OCR), and `openImageLightbox()` for full-screen screenshot zoom.
   2. **Hybrid Cloud + Client-Side Offline Screenshot Scanner (`src/services/ai/ScreenshotScannerService.ts`)**:
-     - Uses Gemini Vision when online in production and automatically runs on-device OCR (`tesseract.js` WebAssembly + browser `TextDetector`) + Smart Announcement/Deadline Parser when offline or on `localhost`.
+     - Uses Gemini Vision when online in production (or with API key on localhost) and automatically falls back to native browser `TextDetector` + multi-region QR scanning + Smart Rescue Parser when offline or Gemini is unavailable.
      - Extracts task titles, dates (`today`, `tomorrow`, weekdays, month/day), times, durations, categories, and urgency (`high` for scholarships, deadlines, exams, submissions), with a zero-fail editable rescue fallback.
   3. **Interactive Screenshot Rescue UI (`src/components/QuickCapture/QuickCapture.ts`)**:
      - Supports both file upload (Camera button) and direct clipboard screenshot paste (`Ctrl+V`).
@@ -491,11 +491,29 @@ CereBruv/
      - Added `decodeQrCodesFromImage()` (combining native `BarcodeDetector` + multi-region `jsQR` scanning) and `extractLinksFromText()` (capturing full URLs, bare shortlinks/domains like `bit.ly/...`, `forms.gle/...`, `facebook.com/...`, `*.gov.ph`, and emails).
      - Rendered 1-click openable link pills in the Image Rescue drawer, `TaskList.ts` (including a *Saved Deadlines & Upcoming Dates* section), `FocusOrbit.ts` (Realistic Next Task + Arc Popover), `main.ts` (Alarm Toast Popups), `TaskForm.ts`, `ThoughtsView.ts`, and `DotGraph.ts` (`#node-inspector`).
   3. **Higher OCR Accuracy & Optional `VITE_GEMINI_API_KEY` Direct Cloud Vision (`src/utils/imageUtils.ts`, `src/services/ai/GeminiService.ts`, `src/services/ai/ScreenshotScannerService.ts`)**:
-     - Added optional `VITE_GEMINI_API_KEY` support in `GeminiService.ts` and `.env.example` so Google Gemini 2.5 Flash Vision can run directly on `localhost` without Firebase App Check `401` blocks.
+     - Added optional `VITE_GEMINI_API_KEY` support in `GeminiService.ts` and `.env.example` so Google Gemini 3.8 Flash Vision can run directly on `localhost` without Firebase App Check `401` blocks.
      - Fixed `preprocessImageForOcr()` so colored/red/yellow poster text is preserved without white-clipping, outer screenshot frame bars are whitened, and dark footer ribbons with white contact links/emails are upscaled and inverted onto the OCR canvas in a single pass.
   4. **Zero Invented Time, Date, or Duration When Absent in Image (`ScreenshotScannerService.ts`, `GeminiService.ts`, `orbitCalculator.ts`, `NotificationService.ts`, `main.ts`, `TaskForm.ts`)**:
      - Removed all fallback time/date/duration guesses (`nextHour` / `04:00` / `45m`), leaving `startTime` (`""`), `date` (`""`), and `durationMinutes` (`0`) blank whenever not explicitly written on the scanned image, and guarded Orbit rendering, smart sorting, mascot status, and alarms for untimed/undated tasks.
 * **Next Action:** Ready for Buildathon live demo and Firebase Hosting deployment.
+
+### Entry #23 — Transition to Gemini Vision Primary & Native TextDetector Offline Fallback
+* **Agent:** Antigravity
+* **Status:** Completed, Built & Verified
+* **Summary of Work:**
+  1. **Removed `tesseract.js` from `package.json`**:
+     - Eliminated heavy Tesseract.js WASM and worker dependencies.
+     - Ran `npm install` to prune node_modules.
+  2. **Refactored `src/services/ai/ScreenshotScannerService.ts` & `src/utils/imageUtils.ts`**:
+     - Removed dynamic `import('tesseract.js')`, progress logger, and timeout promises.
+     - Removed `preprocessImageForOcr()` and Tesseract-specific grayscale/binarization canvas helpers.
+     - Kept multi-region `jsQR` and browser native `window.TextDetector` as lightweight offline fallbacks.
+     - Preserved Smart Rescue fallback creating editable task cards and idea cards from filename or QR links.
+     - Added offline mode status reporting: `"Offline mode: scanned QR codes and file metadata (connect to the internet for Gemini Vision)."` when offline or when Gemini Vision is unavailable.
+  3. **Verified Repository Cleanliness & Build**:
+     - Checked repo for remaining `tesseract` references and ensured none remain.
+     - Verified `npm run build` succeeds cleanly.
+* **Next Action:** Ready for live demo and Firebase Hosting deployment.
 
 ---
 
