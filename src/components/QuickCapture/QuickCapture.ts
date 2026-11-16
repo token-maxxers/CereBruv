@@ -709,7 +709,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
 
       const engineBadgeLabel =
         scanResult.engine === 'gemini-vision'
-          ? 'Google Gemini 2.5 Vision'
+          ? 'Google Gemini 3.8 Vision'
           : scanResult.engine === 'offline-ocr'
             ? 'On-Device Offline OCR + QR Scanner'
             : 'Smart Image Rescue';
