@@ -364,9 +364,9 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       if (updated.completed) {
         const stats = await userStatsRepository.incrementTaskCount();
         eventBus.emit(AppEvents.STATS_UPDATED, stats);
-        const congrats = `Awesome job, Bruv! You crushed "${updated.title}" and earned 25 XP!`;
+        const congrats = `Awesome job, Bruv! You crushed "${updated.title}"!`;
         eventBus.emit(AppEvents.MASCOT_SPEAK, {
-          headline: `Crushed "${updated.title}" (+25 XP)!`,
+          headline: `Crushed "${updated.title}"!`,
           subspeech: congrats,
         });
         voiceService.speak(congrats);
