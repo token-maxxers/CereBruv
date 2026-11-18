@@ -16,7 +16,7 @@ This document consolidates the complete read-only audit, findings, implementatio
 | **Hide XP & Levels from Header and Popups** | **Remove (UI)** | Fully removing XP types across 8 storage layers risks breaking DB schema before pitch; hiding UI leaves streaks intact with zero regression risk. *(XP UI removed & clean streak/task counts displayed)* | **Med** | **S** | **DONE** |
 | **Guest Profile Display & Upgrade Flow** | **Enhance** | Profile shows "Guest Bruv" without an inline name change input; linking exists but needs cleaner UX. | **Med** | **S** | **YES** |
 | **In-App Permissions Dashboard in Settings** | **Add** | Current bell button already has toggles; needs permission status badges (mic, camera, notifications) and reset guides. *(Added live Permissions section to settings popover)* | **Low** | **S** | **DONE** |
-| **SVG Contribution Heatmap for Streak** | **Add** | Cloud tab only displays `stats.streakDays`; backfilling daily completions into a pure SVG/HTML grid adds pitch visual appeal without dependencies. | **Low** | **M** | **YES** |
+| **SVG Contribution Heatmap for Streak** | **Add** | Cloud tab only displays `stats.streakDays`; backfilling daily completions into a pure SVG/HTML grid adds pitch visual appeal without dependencies. *(Rendered 7x12-week grid in CloudView with 4-level theme intensity)* | **Low** | **M** | **DONE** |
 | **Leftover Tesseract / Dead OCR References** | **Fix** | `dist/sw.js` and `public/sw.js` cache nonexistent `.traineddata.gz` and `.wasm` files. | **Low** | **S** | **YES** |
 | **Uncleaned Timers in Canvas & Voice Loops** | **Fix** | `FocusOrbit.ts` `setInterval` leaks on tab mount; `DotGraph.ts` leaves global window listeners. | **Med** | **S** | **NO** (Touch after pitch) |
 
@@ -127,6 +127,18 @@ This document consolidates the complete read-only audit, findings, implementatio
 - For "not asked" / "prompt": renders an inline `Request` pill button. For mic and camera, it briefly requests stream via `getUserMedia` and immediately stops all media tracks.
 - For "denied": displays red instructions telling the user how to unblock access in browser site settings.
 - Binds `navigator.permissions.query(...).onchange` and re-checks state on bell click or request button clicks.
+
+### Per-Day Activity History & 7×12-Week Heatmap
+- Added optional `activityHistory?: Record<string, number>` (YYYY-MM-DD $\to$ completion count) to `UserStats` (`src/types/user.ts:7`).
+- Updated `incrementTaskCount()` in both `LocalStorageAdapter.ts:260` and `FirestoreAdapter.ts:416` to:
+  1. Increment `activityHistory[today]` count.
+  2. Compute and advance the daily active streak (`streakDays`) so task completion directly protects the streak.
+- Added `decrementTaskCount()` to `IUserStatsRepository`, `LocalStorageAdapter`, and `FirestoreAdapter` for un-completing tasks from `TaskList.ts` and `FocusOrbit.ts`.
+- In `CloudView.ts`:
+  1. Implemented zero-dependency `renderContributionHeatmapHtml` rendering an 84-day (7 rows $\times$ 12 columns) CSS Grid.
+  2. Styled 4-level color intensity using existing design variables (`--bg-cream`, `--color-red-subtle`, `rgba(229, 46, 46, 0.45)`, `--color-red-primary`).
+  3. Added dynamic native tooltips (`title="N tasks on DATE"`) and a bottom "Less/More" legend.
+  4. Includes safe fallback and approximate backfill from existing completed tasks if `activityHistory` is not yet populated.
 
 ### Microphone Auto-Start & Audio Bleed Audit Findings
 1. **Mic Starts & Restarts without User Gesture**:
