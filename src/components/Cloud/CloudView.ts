@@ -1,6 +1,10 @@
 import { taskRepository, noteRepository, userStatsRepository } from '../../services/storage';
 import { authService, type AuthUser } from '../../services/auth/AuthService';
+import { updateProfile } from 'firebase/auth';
+import { auth } from '../../services/firebase';
 import type { Task } from '../../types/task';
+
+const LOCAL_DISPLAY_NAME_KEY = 'cerebruv_custom_display_name';
 
 export interface CloudViewOptions {
   onUpgradeGuest?: () => void;
@@ -85,8 +89,10 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
     const stats = await userStatsRepository.getStats();
     const user: AuthUser | null = authService.getCurrentUser();
 
+    const localCustomName = localStorage.getItem(LOCAL_DISPLAY_NAME_KEY) || '';
+
     // Determine account display properties
-    const displayName = user?.displayName || user?.email || (user?.isAnonymous ? 'Guest Bruv' : 'CereBruv User');
+    const displayName = localCustomName || user?.displayName || user?.email || (user?.isAnonymous ? 'Guest Bruv' : 'CereBruv User');
     const emailSubtitle = user?.email || (user?.isAnonymous ? 'Guest Session (Not linked to email)' : '');
     const initial = (displayName.charAt(0) || 'U').toUpperCase();
 
@@ -119,10 +125,25 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
         <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-top: 4px;">
           ${avatarHtml}
           <div style="flex: 1; min-width: 0;">
-            <div style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${displayName}
+            <div id="display-name-view-container" style="display: flex; align-items: center; gap: 8px;">
+              <span id="display-name-text" style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${displayName}
+              </span>
+              <button type="button" id="edit-display-name-btn" title="Edit name" style="background: none; border: none; cursor: pointer; color: var(--color-black-muted); padding: 2px; display: flex; align-items: center;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+              </button>
             </div>
-            ${emailSubtitle ? `<div style="font-size: var(--font-size-xs); color: var(--color-black-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${emailSubtitle}</div>` : ''}
+
+            <div id="display-name-edit-container" style="display: none; align-items: center; gap: 6px; margin-top: 2px;">
+              <input type="text" id="display-name-input" maxlength="30" value="${displayName === 'Guest Bruv' || displayName === 'CereBruv User' ? '' : displayName}" placeholder="Enter name" style="padding: 4px 8px; font-size: var(--font-size-xs); border: 1px solid var(--border-medium); border-radius: var(--radius-sm); outline: none; background: var(--bg-surface-elevated); color: var(--color-black-dominant); width: 140px;" />
+              <button type="button" id="save-display-name-btn" class="pill-badge" style="background: var(--color-red-primary); color: #FAF7F2; border: none; padding: 4px 8px; cursor: pointer; font-size: 10px; font-weight: 700;">Save</button>
+              <button type="button" id="cancel-display-name-btn" class="pill-badge" style="background: var(--bg-cream); color: var(--color-black-muted); border: 1px solid var(--border-subtle); padding: 4px 8px; cursor: pointer; font-size: 10px;">Cancel</button>
+            </div>
+
+            ${emailSubtitle ? `<div style="font-size: var(--font-size-xs); color: var(--color-black-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;">${emailSubtitle}</div>` : ''}
           </div>
         </div>
 
@@ -132,22 +153,10 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
       </div>
 
       <div class="section-header">
-        <h2 class="section-title">Cloud & Storage Status</h2>
+        <h2 class="section-title">Your Activity & Overview</h2>
       </div>
 
       <div style="display: flex; flex-direction: column; gap: var(--spacing-3);">
-        <div style="background: var(--bg-surface-elevated); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--border-medium);">
-          <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted); text-transform: uppercase;">
-            ACTIVE ENGINE
-          </div>
-          <div style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); margin-top: 2px;">
-            Google Firebase Cloud Firestore
-          </div>
-          <p style="font-size: var(--font-size-xs); color: var(--color-black-muted); margin-top: 4px;">
-            Data is scoped under your authenticated user ID and synced offline via persistent local cache.
-          </p>
-        </div>
-
         <div class="form-row">
           <div style="background: var(--bg-surface-elevated); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); text-align: center;">
             <div style="font-size: var(--font-size-2xl); font-weight: 800; color: var(--color-red-primary);">${tasks.length}</div>
@@ -206,6 +215,56 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
           }
         }
       }
+    });
+
+    // Inline display name edit listeners
+    const nameViewContainer = container.querySelector<HTMLDivElement>('#display-name-view-container');
+    const nameEditContainer = container.querySelector<HTMLDivElement>('#display-name-edit-container');
+    const nameInput = container.querySelector<HTMLInputElement>('#display-name-input');
+    const editNameBtn = container.querySelector<HTMLButtonElement>('#edit-display-name-btn');
+    const saveNameBtn = container.querySelector<HTMLButtonElement>('#save-display-name-btn');
+    const cancelNameBtn = container.querySelector<HTMLButtonElement>('#cancel-display-name-btn');
+
+    editNameBtn?.addEventListener('click', () => {
+      if (nameViewContainer && nameEditContainer && nameInput) {
+        nameViewContainer.style.display = 'none';
+        nameEditContainer.style.display = 'flex';
+        nameInput.focus();
+      }
+    });
+
+    cancelNameBtn?.addEventListener('click', () => {
+      if (nameViewContainer && nameEditContainer) {
+        nameEditContainer.style.display = 'none';
+        nameViewContainer.style.display = 'flex';
+      }
+    });
+
+    saveNameBtn?.addEventListener('click', async () => {
+      if (!nameInput) return;
+      const trimmed = nameInput.value.trim().slice(0, 30);
+      if (!trimmed) {
+        alert('Please enter a non-empty name (up to 30 characters).');
+        return;
+      }
+
+      saveNameBtn.disabled = true;
+      saveNameBtn.textContent = 'Saving...';
+
+      // Always save to localStorage for offline/guest retention
+      localStorage.setItem(LOCAL_DISPLAY_NAME_KEY, trimmed);
+
+      // If user is authenticated in Firebase, sync to Firebase Auth user profile
+      const currentAuthUser = auth.currentUser;
+      if (currentAuthUser) {
+        try {
+          await updateProfile(currentAuthUser, { displayName: trimmed });
+        } catch (err) {
+          console.warn('Could not update Firebase Auth profile, saved locally:', err);
+        }
+      }
+
+      await loadData();
     });
   }
 
