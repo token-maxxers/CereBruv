@@ -418,18 +418,73 @@ export class FirestoreUserStatsRepository implements IUserStatsRepository {
     if (!uid) return localStatsFallback.incrementTaskCount();
 
     const ref = this.statsDoc(uid);
+    const today = this.getTodayString();
     const snap = await getDoc(ref).catch(() => null);
     const current = snap && snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+
+    // Update daily streak
+    let newStreak = current.streakDays;
+    if (current.lastActiveDate !== today) {
+      if (current.lastActiveDate) {
+        const lastDate = new Date(current.lastActiveDate + 'T00:00:00');
+        const currentDate = new Date(today + 'T00:00:00');
+        const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+        if (diffDays === 1) {
+          newStreak += 1;
+        } else if (diffDays > 1) {
+          newStreak = 1;
+        }
+      } else {
+        newStreak = 1;
+      }
+    }
 
     const newXP = current.experiencePoints + 25;
     const newTasks = current.tasksCompletedTotal + 1;
     const newLevel = Math.floor(newXP / 100) + 1;
 
+    // Per-day activity history
+    const history = current.activityHistory ? { ...current.activityHistory } : {};
+    history[today] = (history[today] || 0) + 1;
+
+    const updated: UserStats = {
+      ...current,
+      streakDays: newStreak,
+      lastActiveDate: today,
+      tasksCompletedTotal: newTasks,
+      experiencePoints: newXP,
+      level: newLevel,
+      activityHistory: history
+    };
+
+    await commitFirestoreWrite(setDoc(ref, updated, { merge: true }));
+    return updated;
+  }
+
+  async decrementTaskCount(): Promise<UserStats> {
+    const uid = getOptionalUid();
+    if (!uid) return localStatsFallback.decrementTaskCount();
+
+    const ref = this.statsDoc(uid);
+    const today = this.getTodayString();
+    const snap = await getDoc(ref).catch(() => null);
+    const current = snap && snap.exists() ? (snap.data() as UserStats) : this.defaultStats();
+
+    const newTasks = Math.max(0, current.tasksCompletedTotal - 1);
+    const newXP = Math.max(0, current.experiencePoints - 25);
+    const newLevel = Math.floor(newXP / 100) + 1;
+
+    const history = current.activityHistory ? { ...current.activityHistory } : {};
+    if (history[today] && history[today] > 0) {
+      history[today] -= 1;
+    }
+
     const updated: UserStats = {
       ...current,
       tasksCompletedTotal: newTasks,
       experiencePoints: newXP,
-      level: newLevel
+      level: newLevel,
+      activityHistory: history
     };
 
     await commitFirestoreWrite(setDoc(ref, updated, { merge: true }));
