@@ -1498,8 +1498,8 @@ export class VoiceService {
         }
         eventBus.emit(AppEvents.TASK_COMPLETED, updated);
 
-        const headline = `I got you, Bruv — "${match.title}" done (+25 XP)!`;
-        const spokenReply = `I got you, Bruv. Marked ${match.title} complete and added 25 XP to your streak.`;
+        const headline = `I got you, Bruv — "${match.title}" done!`;
+        const spokenReply = `I got you, Bruv. Marked ${match.title} complete and updated your streak.`;
         eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
         this.speak(spokenReply);
         return { intent: 'complete_task', headline, spokenReply };
