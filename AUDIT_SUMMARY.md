@@ -8,7 +8,7 @@ This document consolidates the complete read-only audit, findings, implementatio
 
 | Item | Type | Why | Demo Risk | Effort | Recommended Before Pitch? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Silent Auto-Add on Speech / Enter** | **Fix** | Ambient mic pickup creates tasks or drops thoughts silently without user tap; Enter key in QuickCapture creates notes directly. | **High** | **S** | **YES** |
+| **Silent Auto-Add on Speech / Enter** | **Fix** | Ambient mic pickup creates tasks or drops thoughts silently without user tap; Enter key in QuickCapture creates notes directly. *(Gated behind `ENABLE_VOICE_AUTO_CREATE = false` + Thoughts toast added)* | **High** | **S** | **DONE** |
 | **Missed-Task Negative XP & Voice Humiliation** | **Fix / Disable** | Overdue tasks trigger `-10 XP` toast, sound, vibration, and audible mascot voice during pitch. *(Gated behind `ENABLE_MISSED_PENALTY = false`)* | **High** | **S** | **DONE** |
 | **FCM Permission Blocked Crash** | **Fix** | `getToken()` throws uncaught error if user blocks browser notifications or if VAPID key is absent. *(Protected with early return & clean warn)* | **High** | **S** | **DONE** |
 | **Hardcoded Firebase Credentials in Service Worker** | **Fix** | `public/sw.js` and `dist/sw.js` expose production Firebase config and API key in source control. | **High** | **S** | **YES** |
@@ -106,6 +106,20 @@ This document consolidates the complete read-only audit, findings, implementatio
 - Updated `initFirebaseCloudMessaging()` in `src/services/notifications/NotificationService.ts:411-442`.
 - Added early-exit `if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return null;`.
 - Wrapped `getToken()` call in dedicated `try/catch` returning `null` with a single-line warning, eliminating console stack spam and ensuring app startup and in-app alarms continue uninterrupted when push is blocked.
+
+### Voice Auto-Creation Disabled & Confirmation Enforced
+- Added `export const ENABLE_VOICE_AUTO_CREATE = false;` in `src/services/voice/VoiceService.ts:39`.
+- **At L1522**: Gated `create_task` path so all voice tasks route through `this.pendingTaskDraft` confirmation rather than saving directly to `taskRepository`.
+- **At L1574**: Gated unrecognized speech fallback so it no longer calls `noteRepository.createNote(...)`. Instead, it emits the polite "Didn't catch that, Bruv" feedback prompt.
+- **QuickCapture Enter Feedback**: Added a clean 2.5s pill badge toast ("✓ Saved to Thoughts") above the QuickCapture input on Enter key submission.
+
+### Microphone Auto-Start & Audio Bleed Audit Findings
+1. **Mic Starts & Restarts without User Gesture**:
+   - `VoiceService.ts:919` (`recognition.onend`): If recognition pauses before `speechInactivityTimer` expires, it automatically calls `recognition.start()` without user interaction.
+   - User gesture is strictly required for initial mic start via avatar click (`main.ts:683`). "Talkative voice mode" only speaks aloud (`voiceService.speak(...)`); it does not auto-open the mic.
+2. **Can TTS Be Heard by Recognition?**:
+   - **YES, unless muted or using headphones.**
+   - While `toggleListening()` calls `stopSpeaking()` on startup, subsequent voice answers call `this.speak(...)` while recognition or fallback loops may still be active or restarting. Laptop speaker sound bleeds directly into the internal microphone and gets picked up as audio input. Disabling auto-creation prevents this feedback loop from generating ghost notes or tasks.
 
 ---
 
