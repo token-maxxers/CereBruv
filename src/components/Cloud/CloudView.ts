@@ -1,9 +1,78 @@
 import { taskRepository, noteRepository, userStatsRepository } from '../../services/storage';
 import { authService, type AuthUser } from '../../services/auth/AuthService';
+import type { Task } from '../../types/task';
 
 export interface CloudViewOptions {
   onUpgradeGuest?: () => void;
   onSignOut?: () => void;
+}
+
+/**
+ * Renders a lightweight 7-row by 12-column GitHub-style activity contribution grid.
+ */
+function renderContributionHeatmapHtml(
+  activityHistory: Record<string, number> | undefined,
+  tasks: Task[]
+): string {
+  // Approximate backfill: If activityHistory is empty, aggregate completed tasks by their date or updatedAt timestamp.
+  const history: Record<string, number> = activityHistory ? { ...activityHistory } : {};
+  if (Object.keys(history).length === 0) {
+    tasks.forEach((t) => {
+      if (t.completed) {
+        let dateKey = t.date;
+        if (!dateKey && t.updatedAt) {
+          const d = new Date(t.updatedAt);
+          dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        if (dateKey) {
+          history[dateKey] = (history[dateKey] || 0) + 1;
+        }
+      }
+    });
+  }
+
+  // Generate 84 days (12 weeks of 7 days) ending today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const days: Array<{ dateStr: string; count: number }> = [];
+  for (let i = 83; i >= 0; i--) {
+    const cur = new Date(today);
+    cur.setDate(today.getDate() - i);
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    const d = String(cur.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    const count = history[dateStr] || 0;
+    days.push({ dateStr, count });
+  }
+
+  // 12 columns x 7 rows CSS Grid
+  const cellsHtml = days
+    .map((day) => {
+      let bg = 'var(--bg-cream, #F5EFEB)';
+      let border = '1px solid var(--border-subtle)';
+      if (day.count >= 4) {
+        bg = 'var(--color-red-primary, #E52E2E)';
+        border = 'none';
+      } else if (day.count >= 2) {
+        bg = 'rgba(229, 46, 46, 0.45)';
+        border = 'none';
+      } else if (day.count >= 1) {
+        bg = 'var(--color-red-subtle, #FDEDEC)';
+        border = '1px solid rgba(229, 46, 46, 0.25)';
+      }
+
+      const tooltip = `${day.count} task${day.count === 1 ? '' : 's'} on ${day.dateStr}`;
+      return `<div class="contrib-cell" title="${tooltip}" style="width: 11px; height: 11px; border-radius: 2px; background: ${bg}; border: ${border}; box-sizing: border-box; cursor: pointer;"></div>`;
+    })
+    .join('');
+
+  return `
+    <div style="display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column; grid-auto-columns: 11px; gap: 3.5px; width: fit-content;">
+      ${cellsHtml}
+    </div>
+  `;
 }
 
 export function renderCloudView(options?: CloudViewOptions): HTMLElement {
@@ -93,6 +162,30 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
           <div style="background: var(--bg-surface-elevated); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); text-align: center; grid-column: span 2;">
             <div style="font-size: var(--font-size-lg); font-weight: 800; color: var(--color-black-dominant);">${stats.streakDays} Day Active Streak</div>
             <div style="font-size: var(--font-size-xs); color: var(--color-black-muted);">${stats.tasksCompletedTotal} Tasks Completed</div>
+          </div>
+        </div>
+
+        <!-- 7x12-Week Activity Contribution Heatmap -->
+        <div style="background: var(--bg-surface-elevated); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--border-medium); margin-top: var(--spacing-1);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-black-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+              Activity Contribution Heatmap
+            </div>
+            <span style="font-size: 10px; color: var(--color-black-muted); font-weight: 600;">Last 12 Weeks</span>
+          </div>
+
+          <div style="overflow-x: auto; padding-bottom: 4px;">
+            ${renderContributionHeatmapHtml(stats.activityHistory, tasks)}
+          </div>
+
+          <!-- Heatmap Legend -->
+          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px; font-size: 10px; color: var(--color-black-muted);">
+            <span>Less</span>
+            <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--bg-cream, #F5EFEB); border: 1px solid var(--border-subtle);"></div>
+            <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--color-red-subtle, #FDEDEC);"></div>
+            <div style="width: 10px; height: 10px; border-radius: 2px; background: rgba(229, 46, 46, 0.45);"></div>
+            <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--color-red-primary, #E52E2E);"></div>
+            <span style="margin-left: 2px;">More</span>
           </div>
         </div>
       </div>
