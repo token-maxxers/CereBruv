@@ -259,9 +259,55 @@ export class LocalUserStatsRepository implements IUserStatsRepository {
 
   async incrementTaskCount(): Promise<UserStats> {
     const stats = this.read();
+    const today = this.getTodayString();
+
+    // Update daily streak
+    if (stats.lastActiveDate !== today) {
+      if (stats.lastActiveDate) {
+        const lastDate = new Date(stats.lastActiveDate + 'T00:00:00');
+        const currentDate = new Date(today + 'T00:00:00');
+        const diffDays = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+        if (diffDays === 1) {
+          stats.streakDays += 1;
+        } else if (diffDays > 1) {
+          stats.streakDays = 1;
+        }
+      } else {
+        stats.streakDays = 1;
+      }
+      stats.lastActiveDate = today;
+    }
+
     stats.tasksCompletedTotal += 1;
     stats.experiencePoints += 25; // 25 XP per task completed
     stats.level = Math.floor(stats.experiencePoints / 100) + 1;
+
+    // Per-day activity history
+    const history = stats.activityHistory ? { ...stats.activityHistory } : {};
+    history[today] = (history[today] || 0) + 1;
+    stats.activityHistory = history;
+
+    this.write(stats);
+    return stats;
+  }
+
+  async decrementTaskCount(): Promise<UserStats> {
+    const stats = this.read();
+    const today = this.getTodayString();
+
+    if (stats.tasksCompletedTotal > 0) {
+      stats.tasksCompletedTotal -= 1;
+    }
+    stats.experiencePoints = Math.max(0, stats.experiencePoints - 25);
+    stats.level = Math.floor(stats.experiencePoints / 100) + 1;
+
+    if (stats.activityHistory && stats.activityHistory[today] > 0) {
+      stats.activityHistory = {
+        ...stats.activityHistory,
+        [today]: stats.activityHistory[today] - 1
+      };
+    }
+
     this.write(stats);
     return stats;
   }
