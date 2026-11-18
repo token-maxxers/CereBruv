@@ -665,6 +665,27 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
         voiceService.speak(spoken);
         inputEl.disabled = false;
         inputEl.placeholder = 'Saved to Thoughts! Type another...';
+
+        // Brief "Saved to Thoughts" visual feedback toast
+        const toastEl = document.createElement('div');
+        toastEl.className = 'pill-badge';
+        toastEl.textContent = '✓ Saved to Thoughts';
+        toastEl.style.position = 'absolute';
+        toastEl.style.bottom = '100%';
+        toastEl.style.left = '50%';
+        toastEl.style.transform = 'translateX(-50%) translateY(-8px)';
+        toastEl.style.backgroundColor = 'var(--color-black-dominant)';
+        toastEl.style.color = '#FAF7F2';
+        toastEl.style.fontSize = '0.72rem';
+        toastEl.style.fontWeight = '700';
+        toastEl.style.padding = '5px 12px';
+        toastEl.style.zIndex = '50';
+        toastEl.style.boxShadow = 'var(--shadow-card)';
+        toastEl.style.pointerEvents = 'none';
+        const parentHost = inputEl.parentElement || container;
+        parentHost.style.position = 'relative';
+        parentHost.appendChild(toastEl);
+        setTimeout(() => toastEl.remove(), 2500);
       }
 
       setTimeout(() => {

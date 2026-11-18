@@ -27,6 +27,8 @@ export interface AlarmPopupPayload {
 const PREFS_STORAGE_KEY = 'cerebruv_alert_prefs_v1';
 const FIRED_ALARMS_KEY = 'cerebruv_fired_alarms_v1';
 
+export const ENABLE_MISSED_PENALTY = false;
+
 class NotificationService {
   private permissionGranted: boolean = false;
   private fcmInitialized: boolean = false;
@@ -375,7 +377,7 @@ class NotificationService {
 
       // 4. Missed / Overdue Task Check (Task window ended > 2 mins ago and still not completed)
       const keyMissed = `${task.id}_${todayStr}_missed`;
-      if (minsPastEnd >= 2 && !this.hasAlarmFired(keyMissed)) {
+      if (ENABLE_MISSED_PENALTY && minsPastEnd >= 2 && !this.hasAlarmFired(keyMissed)) {
         this.markAlarmFired(keyMissed);
         const penalty = task.urgency === 'high' ? -15 : -10;
         triggered.push({
@@ -405,6 +407,9 @@ class NotificationService {
    */
   async initFirebaseCloudMessaging(): Promise<string | null> {
     if (this.fcmInitialized) return null;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return null;
+    }
 
     try {
       const messaging = await getFirebaseMessaging();
@@ -419,10 +424,16 @@ class NotificationService {
         serviceWorkerRegistration = await navigator.serviceWorker.ready;
       }
 
-      const token = await getToken(messaging, {
-        vapidKey,
-        serviceWorkerRegistration,
-      });
+      let token: string | null = null;
+      try {
+        token = await getToken(messaging, {
+          vapidKey,
+          serviceWorkerRegistration,
+        });
+      } catch (tokenErr: any) {
+        console.warn('FCM token acquisition skipped or unavailable:', tokenErr?.message || tokenErr);
+        return null;
+      }
 
       if (token) {
         this.fcmInitialized = true;
@@ -440,8 +451,8 @@ class NotificationService {
 
         return token;
       }
-    } catch (err) {
-      console.warn('Failed to initialize Firebase Cloud Messaging:', err);
+    } catch (err: any) {
+      console.warn('Failed to initialize Firebase Cloud Messaging:', err?.message || err);
     }
 
     return null;
