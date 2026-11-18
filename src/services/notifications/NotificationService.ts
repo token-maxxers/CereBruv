@@ -27,6 +27,8 @@ export interface AlarmPopupPayload {
 const PREFS_STORAGE_KEY = 'cerebruv_alert_prefs_v1';
 const FIRED_ALARMS_KEY = 'cerebruv_fired_alarms_v1';
 
+export const ENABLE_MISSED_PENALTY = false;
+
 class NotificationService {
   private permissionGranted: boolean = false;
   private fcmInitialized: boolean = false;
@@ -375,7 +377,7 @@ class NotificationService {
 
       // 4. Missed / Overdue Task Check (Task window ended > 2 mins ago and still not completed)
       const keyMissed = `${task.id}_${todayStr}_missed`;
-      if (minsPastEnd >= 2 && !this.hasAlarmFired(keyMissed)) {
+      if (ENABLE_MISSED_PENALTY && minsPastEnd >= 2 && !this.hasAlarmFired(keyMissed)) {
         this.markAlarmFired(keyMissed);
         const penalty = task.urgency === 'high' ? -15 : -10;
         triggered.push({
