@@ -106,6 +106,61 @@ async function mountApp(user: AuthUser) {
               Allow OS Alerts
             </button>
           </div>
+
+          <!-- Permissions Status & Direct Controls Section -->
+          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 800; color: var(--color-red-primary); letter-spacing: 0.05em; margin-bottom: 8px;">
+              SYSTEM PERMISSIONS
+            </div>
+
+            <!-- Notifications Perm Item -->
+            <div class="permission-item-row" style="margin-bottom: 8px; font-size: 11px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <strong style="color: var(--color-black-dominant); display: block;">Notifications</strong>
+                  <span id="perm-status-notif" style="color: var(--color-black-muted); font-size: 10px;">Checking...</span>
+                </div>
+                <button type="button" id="perm-btn-notif" class="pill-badge" style="display: none; cursor: pointer; font-size: 10px; padding: 3px 8px; background: var(--color-red-primary); color: #FAF7F2; border: none;">
+                  Enable
+                </button>
+              </div>
+              <div id="perm-guide-notif" style="display: none; margin-top: 4px; font-size: 10px; color: var(--color-red-primary); line-height: 1.3;">
+                Notifications are blocked. Tap the tune/padlock icon in the address bar &rarr; Site settings &rarr; Allow notifications.
+              </div>
+            </div>
+
+            <!-- Microphone Perm Item -->
+            <div class="permission-item-row" style="margin-bottom: 8px; font-size: 11px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <strong style="color: var(--color-black-dominant); display: block;">Microphone</strong>
+                  <span id="perm-status-mic" style="color: var(--color-black-muted); font-size: 10px;">Checking...</span>
+                </div>
+                <button type="button" id="perm-btn-mic" class="pill-badge" style="display: none; cursor: pointer; font-size: 10px; padding: 3px 8px; background: var(--color-red-primary); color: #FAF7F2; border: none;">
+                  Enable
+                </button>
+              </div>
+              <div id="perm-guide-mic" style="display: none; margin-top: 4px; font-size: 10px; color: var(--color-red-primary); line-height: 1.3;">
+                Microphone is blocked. Tap the tune/padlock icon in the address bar &rarr; Site settings &rarr; Allow microphone.
+              </div>
+            </div>
+
+            <!-- Camera Perm Item -->
+            <div class="permission-item-row" style="font-size: 11px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <strong style="color: var(--color-black-dominant); display: block;">Camera</strong>
+                  <span id="perm-status-cam" style="color: var(--color-black-muted); font-size: 10px;">Checking...</span>
+                </div>
+                <button type="button" id="perm-btn-cam" class="pill-badge" style="display: none; cursor: pointer; font-size: 10px; padding: 3px 8px; background: var(--color-red-primary); color: #FAF7F2; border: none;">
+                  Enable
+                </button>
+              </div>
+              <div id="perm-guide-cam" style="display: none; margin-top: 4px; font-size: 10px; color: var(--color-red-primary); line-height: 1.3;">
+                Camera is blocked. Tap the tune/padlock icon in the address bar &rarr; Site settings &rarr; Allow camera.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -315,6 +370,118 @@ async function mountApp(user: AuthUser) {
     } else {
       alert('Browser notifications are blocked. Allow notifications in your browser site settings to receive background alerts.');
     }
+  });
+
+  // System Permissions Status & Action Handlers
+  const permStatusNotif = document.querySelector<HTMLSpanElement>('#perm-status-notif')!;
+  const permBtnNotif = document.querySelector<HTMLButtonElement>('#perm-btn-notif')!;
+  const permGuideNotif = document.querySelector<HTMLDivElement>('#perm-guide-notif')!;
+
+  const permStatusMic = document.querySelector<HTMLSpanElement>('#perm-status-mic')!;
+  const permBtnMic = document.querySelector<HTMLButtonElement>('#perm-btn-mic')!;
+  const permGuideMic = document.querySelector<HTMLDivElement>('#perm-guide-mic')!;
+
+  const permStatusCam = document.querySelector<HTMLSpanElement>('#perm-status-cam')!;
+  const permBtnCam = document.querySelector<HTMLButtonElement>('#perm-btn-cam')!;
+  const permGuideCam = document.querySelector<HTMLDivElement>('#perm-guide-cam')!;
+
+  type PermState = 'granted' | 'denied' | 'prompt' | 'unknown';
+
+  function applyPermUI(
+    state: PermState,
+    statusEl: HTMLSpanElement,
+    btnEl: HTMLButtonElement,
+    guideEl: HTMLDivElement
+  ) {
+    if (state === 'granted') {
+      statusEl.textContent = '✓ Granted';
+      statusEl.style.color = '#059669';
+      btnEl.style.display = 'none';
+      guideEl.style.display = 'none';
+    } else if (state === 'denied') {
+      statusEl.textContent = '✕ Denied (Blocked)';
+      statusEl.style.color = 'var(--color-red-primary)';
+      btnEl.style.display = 'none';
+      guideEl.style.display = 'block';
+    } else if (state === 'prompt') {
+      statusEl.textContent = 'Not asked';
+      statusEl.style.color = 'var(--color-black-muted)';
+      btnEl.style.display = 'inline-block';
+      btnEl.textContent = 'Request';
+      guideEl.style.display = 'none';
+    } else {
+      statusEl.textContent = 'Unknown';
+      statusEl.style.color = 'var(--color-black-muted)';
+      btnEl.style.display = 'inline-block';
+      btnEl.textContent = 'Check';
+      guideEl.style.display = 'none';
+    }
+  }
+
+  async function updatePermissionsDashboard() {
+    // 1. Notifications
+    let notifState: PermState = 'unknown';
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') notifState = 'granted';
+      else if (Notification.permission === 'denied') notifState = 'denied';
+      else if (Notification.permission === 'default') notifState = 'prompt';
+    }
+    applyPermUI(notifState, permStatusNotif, permBtnNotif, permGuideNotif);
+
+    // 2. Microphone
+    let micState: PermState = 'unknown';
+    if (navigator?.permissions?.query) {
+      try {
+        const queryRes = await navigator.permissions.query({ name: 'microphone' as any });
+        micState = queryRes.state as PermState;
+        queryRes.onchange = () => updatePermissionsDashboard();
+      } catch {
+        micState = 'unknown';
+      }
+    }
+    applyPermUI(micState, permStatusMic, permBtnMic, permGuideMic);
+
+    // 3. Camera
+    let camState: PermState = 'unknown';
+    if (navigator?.permissions?.query) {
+      try {
+        const queryRes = await navigator.permissions.query({ name: 'camera' as any });
+        camState = queryRes.state as PermState;
+        queryRes.onchange = () => updatePermissionsDashboard();
+      } catch {
+        camState = 'unknown';
+      }
+    }
+    applyPermUI(camState, permStatusCam, permBtnCam, permGuideCam);
+  }
+
+  permBtnNotif.addEventListener('click', async () => {
+    await notificationService.requestPermission();
+    await updatePermissionsDashboard();
+  });
+
+  permBtnMic.addEventListener('click', async () => {
+    if (navigator?.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch {}
+    }
+    await updatePermissionsDashboard();
+  });
+
+  permBtnCam.addEventListener('click', async () => {
+    if (navigator?.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch {}
+    }
+    await updatePermissionsDashboard();
+  });
+
+  bellBtn.addEventListener('click', () => {
+    updatePermissionsDashboard();
   });
 
   function showAlarmPopupToast(payload: AlarmPopupPayload) {
