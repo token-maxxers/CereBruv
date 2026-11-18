@@ -91,8 +91,8 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
           </div>
 
           <div style="background: var(--bg-surface-elevated); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); text-align: center; grid-column: span 2;">
-            <div style="font-size: var(--font-size-lg); font-weight: 800; color: var(--color-black-dominant);">Level ${stats.level} &bull; ${stats.experiencePoints} XP</div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-black-muted);">${stats.streakDays} Day Active Streak</div>
+            <div style="font-size: var(--font-size-lg); font-weight: 800; color: var(--color-black-dominant);">${stats.streakDays} Day Active Streak</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-black-muted);">${stats.tasksCompletedTotal} Tasks Completed</div>
           </div>
         </div>
       </div>
