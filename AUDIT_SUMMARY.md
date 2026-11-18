@@ -14,7 +14,7 @@ This document consolidates the complete read-only audit, findings, implementatio
 | **Hardcoded Firebase Credentials in Service Worker** | **Fix** | `public/sw.js` and `dist/sw.js` expose production Firebase config and API key in source control. | **High** | **S** | **YES** |
 | **Firestore Security Rules for User Profile** | **Fix / Enhance** | Current rule only allows `users/{userId}/**`. Public profile or global username uniqueness cannot be enforced without rule update. | **High** | **M** | **NO** (Keep simple for demo) |
 | **Hide XP & Levels from Header and Popups** | **Remove (UI)** | Fully removing XP types across 8 storage layers risks breaking DB schema before pitch; hiding UI leaves streaks intact with zero regression risk. *(XP UI removed & clean streak/task counts displayed)* | **Med** | **S** | **DONE** |
-| **Guest Profile Display & Upgrade Flow** | **Enhance** | Profile shows "Guest Bruv" without an inline name change input; linking exists but needs cleaner UX. | **Med** | **S** | **YES** |
+| **Guest Profile Display & Upgrade Flow** | **Enhance** | Profile shows "Guest Bruv" without an inline name change input; linking exists but needs cleaner UX. *(Added inline editable displayName with Firebase Auth + localStorage sync)* | **Med** | **S** | **DONE** |
 | **In-App Permissions Dashboard in Settings** | **Add** | Current bell button already has toggles; needs permission status badges (mic, camera, notifications) and reset guides. *(Added live Permissions section to settings popover)* | **Low** | **S** | **DONE** |
 | **SVG Contribution Heatmap for Streak** | **Add** | Cloud tab only displays `stats.streakDays`; backfilling daily completions into a pure SVG/HTML grid adds pitch visual appeal without dependencies. *(Rendered 7x12-week grid in CloudView with 4-level theme intensity)* | **Low** | **M** | **DONE** |
 | **Leftover Tesseract / Dead OCR References** | **Fix** | `dist/sw.js` and `public/sw.js` cache nonexistent `.traineddata.gz` and `.wasm` files. | **Low** | **S** | **YES** |
@@ -139,6 +139,16 @@ This document consolidates the complete read-only audit, findings, implementatio
   2. Styled 4-level color intensity using existing design variables (`--bg-cream`, `--color-red-subtle`, `rgba(229, 46, 46, 0.45)`, `--color-red-primary`).
   3. Added dynamic native tooltips (`title="N tasks on DATE"`) and a bottom "Less/More" legend.
   4. Includes safe fallback and approximate backfill from existing completed tasks if `activityHistory` is not yet populated.
+
+### Editable Display Name in Profile
+- Added inline profile editing in `CloudView.ts:92-160, 230-280`.
+- Tapping the pencil icon reveals an input field (max 30 chars, trimmed, rejects empty input) with **Save** and **Cancel** buttons.
+- On Save:
+  1. Persists to `localStorage` under `cerebruv_custom_display_name` (instant fallback for guests and offline use).
+  2. Invokes `updateProfile(auth.currentUser, { displayName: trimmed })` from `firebase/auth` if signed in.
+  3. Automatically re-renders the profile card with the updated initial avatar and custom name in place of "Guest Bruv".
+- Zero schema or rule changes required.
+- **Removed Developer Storage Clutter**: Stripped the technical "Cloud & Storage Status / ACTIVE ENGINE: Google Firebase Cloud Firestore" debug banner from `CloudView.ts`, retitling the section cleanly to "Your Activity & Overview".
 
 ### Microphone Auto-Start & Audio Bleed Audit Findings
 1. **Mic Starts & Restarts without User Gesture**:
