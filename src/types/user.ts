@@ -4,4 +4,5 @@ export interface UserStats {
   experiencePoints: number;
   tasksCompletedTotal: number;
   level: number;
+  activityHistory?: Record<string, number>; // YYYY-MM-DD -> completed count
 }

@@ -217,14 +217,19 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     if (updated.completed) {
       const stats = await userStatsRepository.incrementTaskCount();
       eventBus.emit(AppEvents.STATS_UPDATED, stats);
-      const congrats = `Awesome job, Bruv! You crushed "${updated.title}" and earned 25 XP!`;
+      const congrats = `Awesome job, Bruv! You crushed "${updated.title}"!`;
       eventBus.emit(AppEvents.MASCOT_SPEAK, {
-        headline: `Crushed "${updated.title}" (+25 XP)!`,
+        headline: `Crushed "${updated.title}"!`,
         subspeech: congrats,
       });
       voiceService.speak(congrats);
       notificationService.playAlarmChime('success');
       notificationService.triggerVibration([120, 60, 180]);
+    } else {
+      if (userStatsRepository.decrementTaskCount) {
+        const stats = await userStatsRepository.decrementTaskCount();
+        eventBus.emit(AppEvents.STATS_UPDATED, stats);
+      }
     }
     eventBus.emit(AppEvents.TASK_COMPLETED, updated);
     arcPopover.style.display = 'none';
