@@ -5,4 +5,5 @@ export interface IUserStatsRepository {
   addExperience(amount: number): Promise<UserStats>;
   recordDailyActivity(): Promise<UserStats>;
   incrementTaskCount(): Promise<UserStats>;
+  decrementTaskCount?(): Promise<UserStats>;
 }
