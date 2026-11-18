@@ -58,9 +58,6 @@ async function mountApp(user: AuthUser) {
           <span>STREAK</span>
           <strong id="streak-count">0d</strong>
         </div>
-        <div class="pill-badge" id="xp-badge">
-          <span id="xp-count">0 XP</span>
-        </div>
 
         <!-- Top Navbar Voice, Sound, Vibration & Popup Settings Popover -->
         <div class="header-settings-popover" id="header-settings-popover" style="display: none;">
@@ -365,7 +362,7 @@ async function mountApp(user: AuthUser) {
 
         <div style="display: flex; gap: 8px;">
           <button type="button" id="alarm-toast-complete" style="flex: 1; padding: 7px 10px; border-radius: 999px; border: none; background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
-            Complete (+25 XP)
+            Complete Task
           </button>
           <button type="button" id="alarm-toast-reschedule" style="padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-cream); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
             Edit / Reschedule
@@ -388,9 +385,9 @@ async function mountApp(user: AuthUser) {
       }
       notificationService.playAlarmChime('success');
       notificationService.triggerVibration([80, 50, 120]);
-      const msg = `Awesome job, Bruv! You crushed "${payload.task.title}" and earned 25 XP!`;
+      const msg = `Awesome job, Bruv! You crushed "${payload.task.title}"!`;
       eventBus.emit(AppEvents.MASCOT_SPEAK, {
-        headline: `Crushed "${payload.task.title}"! (+25 XP)`,
+        headline: `Crushed "${payload.task.title}"!`,
         subspeech: msg
       });
       voiceService.speak(msg);
