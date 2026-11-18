@@ -39,6 +39,8 @@ export interface PendingTaskDraft {
   rawTranscript: string;
 }
 
+export const ENABLE_VOICE_AUTO_CREATE = false;
+
 export interface VoiceExecutionOutcome {
   intent: LocalVoiceIntent;
   headline: string;
@@ -1517,7 +1519,7 @@ export class VoiceService {
         Boolean(parsed.durationSpecified) &&
         Boolean(parsed.urgencySpecified);
 
-      if (!allDetailsSpecified) {
+      if (!ENABLE_VOICE_AUTO_CREATE || !allDetailsSpecified) {
         this.pendingTaskDraft = {
           title: parsed.title,
           date: parsed.date,
@@ -1568,6 +1570,14 @@ export class VoiceService {
     }
 
     // 5. Create Note / Idea (Saved to Thoughts Tab with Category & Priority — no alarms or deadlines)
+    if (!ENABLE_VOICE_AUTO_CREATE) {
+      const headline = "Didn't catch that, Bruv.";
+      const spokenReply = "I heard you, Bruv, but I didn't catch a command. Say 'Add task at time' or tap my avatar again.";
+      eventBus.emit(AppEvents.MASCOT_SPEAK, { headline, subspeech: spokenReply });
+      this.speak(spokenReply);
+      return { intent: 'query_schedule', headline, spokenReply };
+    }
+
     const noteCategory = parsed.category || this.inferCategory(parsed.rawText);
     const notePriority = parsed.urgency || 'medium';
     const noteContent = (parsed.title || parsed.rawText).trim();
