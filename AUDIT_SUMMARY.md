@@ -10,7 +10,7 @@ This document consolidates the complete read-only audit, findings, implementatio
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Silent Auto-Add on Speech / Enter** | **Fix** | Ambient mic pickup creates tasks or drops thoughts silently without user tap; Enter key in QuickCapture creates notes directly. | **High** | **S** | **YES** |
 | **Missed-Task Negative XP & Voice Humiliation** | **Fix / Disable** | Overdue tasks trigger `-10 XP` toast, sound, vibration, and audible mascot voice during pitch. *(Gated behind `ENABLE_MISSED_PENALTY = false`)* | **High** | **S** | **DONE** |
-| **FCM Permission Blocked Crash** | **Fix** | `getToken()` throws uncaught error if user blocks browser notifications or if VAPID key is absent. | **High** | **S** | **YES** |
+| **FCM Permission Blocked Crash** | **Fix** | `getToken()` throws uncaught error if user blocks browser notifications or if VAPID key is absent. *(Protected with early return & clean warn)* | **High** | **S** | **DONE** |
 | **Hardcoded Firebase Credentials in Service Worker** | **Fix** | `public/sw.js` and `dist/sw.js` expose production Firebase config and API key in source control. | **High** | **S** | **YES** |
 | **Firestore Security Rules for User Profile** | **Fix / Enhance** | Current rule only allows `users/{userId}/**`. Public profile or global username uniqueness cannot be enforced without rule update. | **High** | **M** | **NO** (Keep simple for demo) |
 | **Hide XP & Levels from Header and Popups** | **Remove (UI)** | Fully removing XP types across 8 storage layers risks breaking DB schema before pitch; hiding UI leaves streaks intact with zero regression risk. | **Med** | **S** | **YES** |
@@ -101,6 +101,11 @@ This document consolidates the complete read-only audit, findings, implementatio
 - Added `ENABLE_MISSED_PENALTY = false` in `src/services/notifications/NotificationService.ts:29`.
 - Gated the `stage === 'missed'` alarm generation branch at line 380 so that no missed-task alarm, sound, vibration, voice, or XP penalty fires.
 - **Persistence Verified**: Fired alarm state survives page reloads via `localStorage` key `cerebruv_fired_alarms_v1`.
+
+### Fail-Safe FCM Push Token Acquisition
+- Updated `initFirebaseCloudMessaging()` in `src/services/notifications/NotificationService.ts:411-442`.
+- Added early-exit `if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return null;`.
+- Wrapped `getToken()` call in dedicated `try/catch` returning `null` with a single-line warning, eliminating console stack spam and ensuring app startup and in-app alarms continue uninterrupted when push is blocked.
 
 ---
 
