@@ -15,7 +15,7 @@ This document consolidates the complete read-only audit, findings, implementatio
 | **Firestore Security Rules for User Profile** | **Fix / Enhance** | Current rule only allows `users/{userId}/**`. Public profile or global username uniqueness cannot be enforced without rule update. | **High** | **M** | **NO** (Keep simple for demo) |
 | **Hide XP & Levels from Header and Popups** | **Remove (UI)** | Fully removing XP types across 8 storage layers risks breaking DB schema before pitch; hiding UI leaves streaks intact with zero regression risk. *(XP UI removed & clean streak/task counts displayed)* | **Med** | **S** | **DONE** |
 | **Guest Profile Display & Upgrade Flow** | **Enhance** | Profile shows "Guest Bruv" without an inline name change input; linking exists but needs cleaner UX. | **Med** | **S** | **YES** |
-| **In-App Permissions Dashboard in Settings** | **Add** | Current bell button already has toggles; needs permission status badges (mic, camera, notifications) and reset guides. | **Low** | **S** | **YES** |
+| **In-App Permissions Dashboard in Settings** | **Add** | Current bell button already has toggles; needs permission status badges (mic, camera, notifications) and reset guides. *(Added live Permissions section to settings popover)* | **Low** | **S** | **DONE** |
 | **SVG Contribution Heatmap for Streak** | **Add** | Cloud tab only displays `stats.streakDays`; backfilling daily completions into a pure SVG/HTML grid adds pitch visual appeal without dependencies. | **Low** | **M** | **YES** |
 | **Leftover Tesseract / Dead OCR References** | **Fix** | `dist/sw.js` and `public/sw.js` cache nonexistent `.traineddata.gz` and `.wasm` files. | **Low** | **S** | **YES** |
 | **Uncleaned Timers in Canvas & Voice Loops** | **Fix** | `FocusOrbit.ts` `setInterval` leaks on tab mount; `DotGraph.ts` leaves global window listeners. | **Med** | **S** | **NO** (Touch after pitch) |
@@ -120,6 +120,13 @@ This document consolidates the complete read-only audit, findings, implementatio
 - **Double-Award Inspection on main.ts:385**:
   - `main.ts:385` directly calls `userStatsRepository.addExperience(25)` when clicking "Complete Task" on the floating alarm toast.
   - Notice that it calls `taskRepository.toggleTaskCompletion(...)` directly without going through `FocusOrbit` or `TaskList` handlers. Therefore, it does **NOT** call `incrementTaskCount()`. There is no double-award in `main.ts:385`, but `tasksCompletedTotal` was previously not incremented from that toast path (only XP was). Storage types and underlying adapters remain unmodified.
+
+### System Permissions Dashboard in Settings Popover
+- Added a dedicated "SYSTEM PERMISSIONS" section in `#header-settings-popover` (`main.ts:100-160, 420-530`).
+- Displays live status for **Notifications**, **Microphone**, and **Camera** (`granted`, `denied`, `not asked`, `unknown`).
+- For "not asked" / "prompt": renders an inline `Request` pill button. For mic and camera, it briefly requests stream via `getUserMedia` and immediately stops all media tracks.
+- For "denied": displays red instructions telling the user how to unblock access in browser site settings.
+- Binds `navigator.permissions.query(...).onchange` and re-checks state on bell click or request button clicks.
 
 ### Microphone Auto-Start & Audio Bleed Audit Findings
 1. **Mic Starts & Restarts without User Gesture**:
