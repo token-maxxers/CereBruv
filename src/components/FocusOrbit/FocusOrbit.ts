@@ -225,6 +225,11 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       voiceService.speak(congrats);
       notificationService.playAlarmChime('success');
       notificationService.triggerVibration([120, 60, 180]);
+    } else {
+      if (userStatsRepository.decrementTaskCount) {
+        const stats = await userStatsRepository.decrementTaskCount();
+        eventBus.emit(AppEvents.STATS_UPDATED, stats);
+      }
     }
     eventBus.emit(AppEvents.TASK_COMPLETED, updated);
     arcPopover.style.display = 'none';
