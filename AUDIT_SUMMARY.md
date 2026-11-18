@@ -13,7 +13,7 @@ This document consolidates the complete read-only audit, findings, implementatio
 | **FCM Permission Blocked Crash** | **Fix** | `getToken()` throws uncaught error if user blocks browser notifications or if VAPID key is absent. *(Protected with early return & clean warn)* | **High** | **S** | **DONE** |
 | **Hardcoded Firebase Credentials in Service Worker** | **Fix** | `public/sw.js` and `dist/sw.js` expose production Firebase config and API key in source control. | **High** | **S** | **YES** |
 | **Firestore Security Rules for User Profile** | **Fix / Enhance** | Current rule only allows `users/{userId}/**`. Public profile or global username uniqueness cannot be enforced without rule update. | **High** | **M** | **NO** (Keep simple for demo) |
-| **Hide XP & Levels from Header and Popups** | **Remove (UI)** | Fully removing XP types across 8 storage layers risks breaking DB schema before pitch; hiding UI leaves streaks intact with zero regression risk. | **Med** | **S** | **YES** |
+| **Hide XP & Levels from Header and Popups** | **Remove (UI)** | Fully removing XP types across 8 storage layers risks breaking DB schema before pitch; hiding UI leaves streaks intact with zero regression risk. *(XP UI removed & clean streak/task counts displayed)* | **Med** | **S** | **DONE** |
 | **Guest Profile Display & Upgrade Flow** | **Enhance** | Profile shows "Guest Bruv" without an inline name change input; linking exists but needs cleaner UX. | **Med** | **S** | **YES** |
 | **In-App Permissions Dashboard in Settings** | **Add** | Current bell button already has toggles; needs permission status badges (mic, camera, notifications) and reset guides. | **Low** | **S** | **YES** |
 | **SVG Contribution Heatmap for Streak** | **Add** | Cloud tab only displays `stats.streakDays`; backfilling daily completions into a pure SVG/HTML grid adds pitch visual appeal without dependencies. | **Low** | **M** | **YES** |
@@ -112,6 +112,14 @@ This document consolidates the complete read-only audit, findings, implementatio
 - **At L1522**: Gated `create_task` path so all voice tasks route through `this.pendingTaskDraft` confirmation rather than saving directly to `taskRepository`.
 - **At L1574**: Gated unrecognized speech fallback so it no longer calls `noteRepository.createNote(...)`. Instead, it emits the polite "Didn't catch that, Bruv" feedback prompt.
 - **QuickCapture Enter Feedback**: Added a clean 2.5s pill badge toast ("✓ Saved to Thoughts") above the QuickCapture input on Enter key submission.
+
+### XP & Level UI Concealment
+- Removed `#xp-badge` pill markup from `main.ts:57-63`; `updateStatsUI` remains null-safe via `if (xpEl)`.
+- Removed "+25 XP" and re-worded completion buttons and speech lines in `main.ts:365-390`, `FocusOrbit.ts:218-228`, `TaskList.ts:365-375`, and `VoiceService.ts:1501-1504`.
+- Replaced the "Level X • Y XP" stat line in `CloudView.ts:93-96` with `stats.streakDays Day Active Streak` and `stats.tasksCompletedTotal Tasks Completed`.
+- **Double-Award Inspection on main.ts:385**:
+  - `main.ts:385` directly calls `userStatsRepository.addExperience(25)` when clicking "Complete Task" on the floating alarm toast.
+  - Notice that it calls `taskRepository.toggleTaskCompletion(...)` directly without going through `FocusOrbit` or `TaskList` handlers. Therefore, it does **NOT** call `incrementTaskCount()`. There is no double-award in `main.ts:385`, but `tasksCompletedTotal` was previously not incremented from that toast path (only XP was). Storage types and underlying adapters remain unmodified.
 
 ### Microphone Auto-Start & Audio Bleed Audit Findings
 1. **Mic Starts & Restarts without User Gesture**:
