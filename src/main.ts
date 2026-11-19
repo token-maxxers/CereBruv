@@ -584,7 +584,6 @@ async function mountApp(user: AuthUser) {
     e.stopPropagation();
     const nowMuted = voiceService.toggleMute();
     renderVoiceButtonState();
-    syncSettingsPopoverUI();
     if (!nowMuted) {
       const subText = document.querySelector('#mascot-subspeech')?.textContent || 'Voice active, Bruv.';
       voiceService.speak(subText, true);
