@@ -184,7 +184,6 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const period = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 === 0 ? 12 : h % 12;
     const time12 = `${h12}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} ${period}`;
-    const time24 = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     centerLiveClock.textContent = time12;
     const targetDate = new Date(selectedDate + 'T00:00:00');
     centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
