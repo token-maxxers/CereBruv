@@ -667,44 +667,37 @@ html, body {
   gap: var(--spacing-3);
 }
 
-/* Floating Action Button (+ Add Task) */
-.fab-btn {
-  position: fixed;
-  bottom: 76px;
-  right: calc(50% - (var(--max-width-mobile) / 2) + var(--spacing-4));
-  width: 52px;
-  height: 52px;
+/* Center Bottom-Nav Brain-Lens Camera Button */
+.nav-lens-btn {
+  width: 54px;
+  height: 54px;
   border-radius: var(--radius-full);
   background: var(--color-red-primary);
-  color: #FFFFFF;
-  border: none;
-  box-shadow: 0 4px 14px var(--color-red-glow);
+  border: 4px solid var(--bg-primary);
+  box-shadow: 0 6px 18px var(--color-red-glow);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 90;
-  transition: transform var(--transition-fast), background var(--transition-fast);
+  transform: translateY(-13px);
+  flex-shrink: 0;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-theme);
 }
 
-@media (max-width: 440px) {
-  .fab-btn {
-    right: var(--spacing-4);
-  }
-}
-
-.fab-btn:hover {
-  transform: scale(1.05);
+.nav-lens-btn:hover {
   background: var(--color-red-deep);
+  transform: translateY(-15px) scale(1.04);
 }
 
-.fab-btn svg {
-  width: 24px;
-  height: 24px;
-  stroke: #FFFFFF;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.nav-lens-btn:active {
+  transform: translateY(-11px) scale(0.94);
+}
+
+.nav-lens-btn img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  display: block;
 }
 
 /* Bottom Navigation */

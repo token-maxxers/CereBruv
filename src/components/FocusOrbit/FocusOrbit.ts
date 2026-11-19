@@ -138,6 +138,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
         <div style="display: flex; align-items: center; gap: 6px;">
           <span id="next-task-time-pill" style="font-size: 0.7rem; font-weight: 600; color: var(--color-black-muted);"></span>
           <span class="pill-badge orbit-status-tag" id="orbit-workload-badge" style="font-size: 0.62rem; padding: 2px 8px;">OPEN</span>
+          <button type="button" id="orbit-add-task-btn" class="pill-badge" style="font-size: 0.62rem; padding: 2px 9px; background: var(--color-red-primary); color: #FFFFFF; border-color: var(--color-red-primary);">+ Add</button>
         </div>
       </div>
       <div id="next-task-body" style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-black-dominant);">
@@ -305,6 +306,9 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
   prevDayBtn.addEventListener('click', () => changeDay(-1));
   nextDayBtn.addEventListener('click', () => changeDay(1));
+  container.querySelector('#orbit-add-task-btn')?.addEventListener('click', () => {
+    onOpenTaskForm(selectedDate);
+  });
   jumpTodayBtn.addEventListener('click', () => {
     selectedDate = getTodayString();
     const t = new Date(selectedDate + 'T00:00:00');

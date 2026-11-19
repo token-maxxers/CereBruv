@@ -1,5 +1,6 @@
 import mascotImg from './assets/mascot.png';
 import brandWordmarkImg from './assets/cerebruv-wordmark.png';
+import brainLensImg from './assets/cerebruv-lens.png';
 import mascotTalk1Img from './assets/CerebruvTalk-1.png';
 import mascotTalk2Img from './assets/CerebruvTalk-2.png';
 import mascotListenImg from './assets/CerebruvListen.png';
@@ -103,14 +104,6 @@ async function mountApp(user: AuthUser) {
       <div id="view-container"></div>
     </main>
 
-    <!-- Floating Action Button (+ Add Task) -->
-    <button class="fab-btn" id="fab-add-task" title="Add New Task">
-      <svg viewBox="0 0 24 24">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-    </button>
-
     <!-- Bottom Navigation Bar -->
     <nav class="bottom-nav">
       <button class="nav-item active" data-tab="orbit">
@@ -127,6 +120,10 @@ async function mountApp(user: AuthUser) {
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         <span>Reminders</span>
+      </button>
+
+      <button type="button" class="nav-lens-btn" id="nav-camera-lens" title="Brain-Lens Camera Capture (QR, OCR & AI)" aria-label="Open Brain-Lens Camera">
+        <img src="${brainLensImg}" alt="Brain-Lens Camera" />
       </button>
 
       <button class="nav-item" data-tab="graph">
@@ -171,9 +168,13 @@ async function mountApp(user: AuthUser) {
   qcMount.appendChild(renderQuickCapture(() => currentSelectedDate));
 
   // Mount Floating Action Button
-  const fabBtn = document.querySelector('#fab-add-task')!;
-  fabBtn.addEventListener('click', () => {
-    taskFormModal.open(currentSelectedDate);
+  // Center Brain-Lens Camera Button
+  document.querySelector('#nav-camera-lens')?.addEventListener('click', () => {
+    const bannerEl = document.querySelector<HTMLElement>('#mascot-banner');
+    if (bannerEl && bannerEl.style.display === 'none') {
+      switchTab('orbit');
+    }
+    window.dispatchEvent(new CustomEvent('cerebruv-open-camera'));
   });
 
   // Top Navbar 1-Tap Theme Toggle (Clucky Light <-> Obsidian Neural Glass)
@@ -334,9 +335,7 @@ async function mountApp(user: AuthUser) {
 
     const isProfileOrSettings = tab === 'cloud' || tab === 'settings';
     const bannerEl = document.querySelector<HTMLElement>('#mascot-banner');
-    const fabEl = document.querySelector<HTMLElement>('#fab-add-task');
     if (bannerEl) bannerEl.style.display = isProfileOrSettings ? 'none' : 'flex';
-    if (fabEl) fabEl.style.display = isProfileOrSettings ? 'none' : 'flex';
 
     viewContainer.innerHTML = '';
 

@@ -1194,6 +1194,18 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
     );
   });
 
+  window.addEventListener('cerebruv-open-camera', () => {
+    photoSourceMenu.style.display = 'none';
+    openLiveCameraModal(
+      (capturedFile) => {
+        processUploadedScreenshot(capturedFile);
+      },
+      () => {
+        fileInput.click();
+      }
+    );
+  });
+
   document.addEventListener('click', (e) => {
     const target = e.target as Node;
     if (
