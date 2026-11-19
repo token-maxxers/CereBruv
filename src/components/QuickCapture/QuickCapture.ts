@@ -66,7 +66,7 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
         </button>
 
         <!-- 2-Option Chooser Menu: Upload Image vs Live Camera Capture -->
-        <div id="photo-source-menu" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; width: 220px; background: #FAF7F2; border: 1.5px solid var(--border-medium); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 6px; z-index: 40; flex-direction: column; gap: 4px;">
+        <div id="photo-source-menu" style="display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 228px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14); padding: 6px; z-index: 60; flex-direction: column; gap: 4px;">
           <button type="button" id="menu-upload-photo-btn" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); color: var(--color-black-dominant); font-family: inherit; font-size: 0.72rem; font-weight: 700; text-align: left; cursor: pointer;">
             <svg viewBox="0 0 24 24" width="15" height="15" stroke="var(--color-red-primary)" fill="none" stroke-width="2.2" style="flex-shrink: 0;">
               <rect x="3" y="3" width="18" height="18" rx="2"></rect>
@@ -94,22 +94,19 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       <input type="file" id="photo-file-input" accept="image/*" style="display: none;" />
     </div>
 
-    <!-- Simultaneous Predictive + Step-by-Step Syntax Guide Bar -->
-    <div id="live-syntax-guide-bar" style="display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--bg-surface-elevated); border: 1px solid var(--border-medium); font-size: 0.7rem; color: var(--color-black-dominant);">
-      <!-- Step-by-Step Syntax Progression Row -->
-      <div id="live-syntax-steps" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;"></div>
+    <!-- Clean Predictive Command & Step Bar -->
+    <div id="live-syntax-guide-bar" style="display: none; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); font-size: 0.72rem; color: var(--color-black-dominant);">
+      <!-- Minimal Step Pills -->
+      <div id="live-syntax-steps" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"></div>
 
-      <!-- Template & Next Instruction Row -->
+      <!-- Clean Single-Line Prompt Hint -->
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-        <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
-          <span style="font-weight: 800; color: var(--color-red-primary); text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em;">GUIDE:</span>
-          <code id="live-syntax-template" style="font-weight: 700; color: var(--color-black-dominant); font-family: inherit;">Remind me to [Task] at [Time]</code>
-        </div>
-        <span id="live-syntax-next" style="font-size: 0.65rem; font-weight: 700; color: var(--color-red-primary);"></span>
+        <span id="live-syntax-next" style="font-size: 0.72rem; font-weight: 600; color: var(--color-black-muted);"></span>
+        <code id="live-syntax-template" style="display: none;"></code>
       </div>
 
-      <!-- 1-Tap Predictive Autocomplete Chips Row -->
-      <div id="live-prediction-row" style="display: none; align-items: center; gap: 5px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--border-subtle);"></div>
+      <!-- 1-Tap Quick Command Chips -->
+      <div id="live-prediction-row" style="display: none; align-items: center; gap: 6px; flex-wrap: wrap;"></div>
     </div>
 
     <!-- In-App Voice Command Rules & Voice Settings Guide (Strictly No Fake/Demo Data) -->
@@ -341,31 +338,27 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       inputEl.placeholder = "Tap CereBruv above to speak, or type 'Add [Task] at [Time]'";
     }
 
-    // 2. Render Step-by-Step Syntax Guide Progression
+    // 2. Render Clean Step Pills
     if (hint.steps && hint.steps.length > 0) {
       liveSyntaxSteps.style.display = 'flex';
       liveSyntaxSteps.innerHTML = hint.steps
-        .map((step, idx) => {
+        .map((step) => {
           const isDone = step.status === 'done';
           const isActive = step.status === 'active';
           const bg = isDone
             ? 'rgba(16, 185, 129, 0.14)'
             : isActive
               ? 'var(--color-red-primary)'
-              : 'rgba(18, 18, 22, 0.06)';
+              : 'var(--bg-surface)';
           const col = isDone
-            ? '#047857'
+            ? '#059669'
             : isActive
               ? '#FFFFFF'
               : 'var(--color-black-muted)';
-          const arrow = idx < hint.steps.length - 1
-            ? `<span style="color: var(--color-black-faint); font-size: 0.6rem;">→</span>`
-            : '';
           return `
-            <span style="padding: 2px 7px; border-radius: 999px; background: ${bg}; color: ${col}; font-size: 0.62rem; font-weight: ${isActive || isDone ? '800' : '600'};">
-              ${isActive ? '⬅ ' : ''}${step.label}
+            <span style="padding: 3px 9px; border-radius: 999px; background: ${bg}; color: ${col}; font-size: 0.65rem; font-weight: ${isActive || isDone ? '800' : '600'};">
+              ${step.label}
             </span>
-            ${arrow}
           `;
         })
         .join('');
@@ -373,26 +366,25 @@ export function renderQuickCapture(getSelectedDate?: () => string): HTMLElement 
       liveSyntaxSteps.style.display = 'none';
     }
 
-    // 3. Render 1-Tap Predictive Autocomplete Chips
+    // 3. Render 1-Tap Predictive Chips
     if (hint.predictions && hint.predictions.length > 0) {
       livePredictionRow.style.display = 'flex';
-      livePredictionRow.innerHTML = `
-        <span style="font-size: 0.6rem; font-weight: 800; color: var(--color-black-muted); text-transform: uppercase;">PREDICT:</span>
-      `;
+      livePredictionRow.innerHTML = '';
       hint.predictions.forEach((pred, index) => {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.style.cssText = `
-          padding: 3px 9px;
+          padding: 5px 11px;
           border-radius: 999px;
-          border: 1px solid ${index === 0 ? 'var(--color-red-primary)' : 'var(--border-medium)'};
-          background: ${index === 0 ? 'rgba(229, 46, 46, 0.12)' : 'var(--bg-surface)'};
+          border: 1px solid ${index === 0 ? 'rgba(229, 46, 46, 0.35)' : 'var(--border-subtle)'};
+          background: ${index === 0 ? 'var(--color-red-subtle)' : 'var(--bg-surface)'};
           color: ${index === 0 ? 'var(--color-red-primary)' : 'var(--color-black-dominant)'};
-          font-size: 0.65rem;
+          font-size: 0.68rem;
           font-weight: 700;
           cursor: pointer;
+          transition: transform 0.12s ease, background 0.15s ease;
         `;
-        chip.textContent = index === 0 ? `${pred.label} ↹` : pred.label;
+        chip.textContent = pred.label;
         chip.addEventListener('mousedown', (e) => {
           e.preventDefault(); // Keep input focused
           applyPredictionChip(pred.insertText, pred.replaceInput);
