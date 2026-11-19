@@ -651,7 +651,7 @@ async function mountApp(user: AuthUser) {
     } else if (tab === 'graph') {
       viewContainer.appendChild(
         renderDotGraph({
-          onConvertNoteToTask: (draftTask) => taskFormModal.open(currentSelectedDate, draftTask),
+          onConvertNoteToTask: (draftTask) => taskFormModal.open(currentSelectedDate, draftTask as any),
           onJumpToOrbit: (dateStr) => {
             if (dateStr) {
               currentSelectedDate = dateStr;
