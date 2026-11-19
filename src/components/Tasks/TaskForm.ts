@@ -52,18 +52,18 @@ export function renderTaskFormModal(): {
           />
         </div>
 
-        <!-- Time Mode Segmented Switcher (Duration Block vs One-Time vs Timeless) -->
+        <!-- Time Mode Segmented Switcher (Timed vs Deadline vs Note) -->
         <div class="form-group">
           <label class="form-label">Timing Type</label>
-          <div style="display: flex; gap: 6px; padding: 4px; background: var(--bg-surface-elevated); border: 1px solid var(--border-medium); border-radius: var(--radius-sm);" id="time-mode-switcher">
-            <button type="button" class="pill-badge time-mode-btn active" data-mode="duration" style="flex: 1; justify-content: center; font-size: 0.68rem;">
-              Duration Block (Orbit)
+          <div style="display: flex; gap: 6px; padding: 4px; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-full);" id="time-mode-switcher">
+            <button type="button" class="pill-badge time-mode-btn active" data-mode="duration" style="flex: 1; justify-content: center; font-size: 0.72rem;">
+              Timed
             </button>
-            <button type="button" class="pill-badge time-mode-btn" data-mode="one-time" style="flex: 1; justify-content: center; font-size: 0.68rem;">
-              One-Time (Deadline)
+            <button type="button" class="pill-badge time-mode-btn" data-mode="one-time" style="flex: 1; justify-content: center; font-size: 0.72rem;">
+              Deadline
             </button>
-            <button type="button" class="pill-badge time-mode-btn" data-mode="none" style="flex: 1; justify-content: center; font-size: 0.68rem;">
-              Timeless (Idea / Note)
+            <button type="button" class="pill-badge time-mode-btn" data-mode="none" style="flex: 1; justify-content: center; font-size: 0.72rem;">
+              Note
             </button>
           </div>
         </div>

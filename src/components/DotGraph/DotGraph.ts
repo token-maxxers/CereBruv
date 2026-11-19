@@ -22,11 +22,23 @@ export function renderDotGraph(options: DotGraphOptions = {}): HTMLElement {
   container.innerHTML = `
     <div class="section-header" style="margin-bottom: var(--spacing-2); flex-wrap: wrap; gap: 8px;">
       <h2 class="section-title">Mind Graph</h2>
-      <div style="display: flex; gap: 4px; flex-wrap: wrap;" id="graph-filter-group">
-        <button class="pill-badge active" data-filter="all" style="cursor: pointer; font-size: 0.65rem;">ALL</button>
-        <button class="pill-badge" data-filter="task" style="cursor: pointer; font-size: 0.65rem;">REMINDERS</button>
-        <button class="pill-badge" data-filter="note" style="cursor: pointer; font-size: 0.65rem;">NOTES</button>
-        <button class="pill-badge" data-filter="tag" style="cursor: pointer; font-size: 0.65rem;">TOPICS</button>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px;" id="graph-filter-group">
+        <button class="pill-badge filter-pill-wrap active" data-filter="all">
+          All
+          <span class="pill-corner-badge" id="graph-count-all">0</span>
+        </button>
+        <button class="pill-badge filter-pill-wrap" data-filter="task">
+          Reminders
+          <span class="pill-corner-badge" id="graph-count-task">0</span>
+        </button>
+        <button class="pill-badge filter-pill-wrap" data-filter="note">
+          Notes
+          <span class="pill-corner-badge" id="graph-count-note">0</span>
+        </button>
+        <button class="pill-badge filter-pill-wrap" data-filter="tag">
+          Topics
+          <span class="pill-corner-badge" id="graph-count-tag">0</span>
+        </button>
       </div>
     </div>
 
@@ -78,17 +90,17 @@ export function renderDotGraph(options: DotGraphOptions = {}): HTMLElement {
 
     <!-- Graph Legend -->
     <div style="display: flex; align-items: center; justify-content: space-around; margin-top: var(--spacing-3); padding-top: var(--spacing-2); border-top: 1px solid var(--border-subtle); font-size: var(--font-size-xs); font-weight: 600;">
-      <div style="display: flex; align-items: center; gap: 4px;">
+      <div style="display: flex; align-items: center; gap: 5px;">
         <span style="width: 8px; height: 8px; border-radius: 50%; background: #E52E2E; display: inline-block;"></span>
-        <span>Tasks</span>
+        <span>Reminders</span>
       </div>
-      <div style="display: flex; align-items: center; gap: 4px;">
+      <div style="display: flex; align-items: center; gap: 5px;">
         <span style="width: 8px; height: 8px; border-radius: 50%; background: #38BDF8; display: inline-block;"></span>
         <span>Notes</span>
       </div>
-      <div style="display: flex; align-items: center; gap: 4px;">
+      <div style="display: flex; align-items: center; gap: 5px;">
         <span style="width: 8px; height: 8px; border-radius: 50%; background: #0D9488; display: inline-block;"></span>
-        <span>Categories</span>
+        <span>Topics</span>
       </div>
     </div>
   `;
@@ -266,7 +278,7 @@ export function renderDotGraph(options: DotGraphOptions = {}): HTMLElement {
         label: task.title,
         type: 'task',
         radius: task.urgency === 'high' ? 8 : 6,
-        color: task.timeMode === 'duration' ? '#0D9488' : task.timeMode === 'one-time' ? '#D97706' : '#E52E2E',
+        color: '#E52E2E',
         photoUrl: task.photoUrl,
         links: mergeSavedLinks(task.links, extractLinksFromText(task.notes || '')),
         eventGroupId: task.eventGroupId,
@@ -391,6 +403,15 @@ export function renderDotGraph(options: DotGraphOptions = {}): HTMLElement {
 
     nodes = newNodes;
     links = newLinks;
+
+    const countAllEl = container.querySelector('#graph-count-all');
+    const countTaskEl = container.querySelector('#graph-count-task');
+    const countNoteEl = container.querySelector('#graph-count-note');
+    const countTagEl = container.querySelector('#graph-count-tag');
+    if (countAllEl) countAllEl.textContent = String(newNodes.length);
+    if (countTaskEl) countTaskEl.textContent = String(newNodes.filter(n => n.type === 'task').length);
+    if (countNoteEl) countNoteEl.textContent = String(newNodes.filter(n => n.type === 'note').length);
+    if (countTagEl) countTagEl.textContent = String(newNodes.filter(n => n.type === 'tag').length);
   }
 
   function resizeCanvas() {
