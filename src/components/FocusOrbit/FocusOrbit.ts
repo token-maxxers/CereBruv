@@ -15,6 +15,7 @@ import {
   CATEGORY_COLORS,
 } from './orbitCalculator';
 import type { OrbitArcSegment, Task } from '../../types/task';
+import brainFrameImg from '../../assets/cerebruv-brain-frame.png';
 
 export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task) => void): HTMLElement {
   const container = document.createElement('div');
@@ -84,14 +85,18 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       <div style="position: relative; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center;">
         <canvas id="focus-orbit-canvas" width="280" height="280" style="width: 280px; height: 280px; cursor: pointer;"></canvas>
 
-        <!-- Center Hub Information (With Real-Time Live Clock) -->
+        <!-- Center Hub Information (Brain-Clock + Compact Stats) -->
         <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px; gap: 1px;">
-          <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(229, 46, 46, 0.1); border: 1px solid rgba(229, 46, 46, 0.25); padding: 2px 9px; border-radius: 999px; margin-bottom: 1px;">
-            <span style="font-size: 0.68rem; font-weight: 800; color: var(--color-red-primary); font-variant-numeric: tabular-nums;" id="center-live-clock">--:--:--</span>
+          <div class="orbit-brain-clock">
+            <img src="${brainFrameImg}" class="orbit-brain-frame" alt="" aria-hidden="true" />
+            <span class="orbit-brain-time" id="center-live-clock">--:--</span>
           </div>
-          <div style="font-size: 0.62rem; font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.03em;" id="center-month-day"></div>
-          <div style="font-size: 1.2rem; font-weight: 800; color: var(--color-black-dominant); line-height: 1.05;" id="center-busy-hours">0h</div>
-          <div style="font-size: 0.65rem; color: var(--color-black-muted); font-weight: 600;" id="center-free-time">Free: 16h</div>
+          <div style="font-family: var(--font-family-display); font-size: 0.92rem; font-weight: 900; color: var(--color-black-dominant); line-height: 1.05; margin-top: 1px;" id="center-busy-hours">0h</div>
+          <div style="display: flex; align-items: center; gap: 3px; font-size: 0.56rem; color: var(--color-black-muted); font-weight: 700;">
+            <span id="center-month-day"></span>
+            <span>&bull;</span>
+            <span id="center-free-time">Free: 16h</span>
+          </div>
         </div>
 
         <!-- Interactive Arc Popover Card -->
@@ -180,10 +185,9 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const now = new Date();
     const h = now.getHours();
     const m = now.getMinutes();
-    const s = now.getSeconds();
     const period = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 === 0 ? 12 : h % 12;
-    const time12 = `${h12}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} ${period}`;
+    const time12 = `${h12}:${String(m).padStart(2, '0')} ${period}`;
     centerLiveClock.textContent = time12;
     const targetDate = new Date(selectedDate + 'T00:00:00');
     centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;

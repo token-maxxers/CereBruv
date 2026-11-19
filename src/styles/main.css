@@ -1176,6 +1176,46 @@ html, body {
   color: var(--color-red-primary);
 }
 
+/* Focus Orbit Brain-Clock Center Hub (Layout A) */
+.orbit-brain-clock {
+  position: relative;
+  width: 82px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.orbit-brain-frame {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* Tint black silhouette to CereBruv red & drop white background */
+  filter: brightness(0) saturate(100%) invert(24%) sepia(92%) saturate(4200%) hue-rotate(353deg) brightness(96%);
+  mix-blend-mode: multiply;
+}
+
+[data-theme="obsidian"] .orbit-brain-frame {
+  filter: invert(1);
+  mix-blend-mode: screen;
+}
+
+.orbit-brain-time {
+  position: absolute;
+  top: 57%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-family-display);
+  font-size: 0.56rem;
+  font-weight: 900;
+  color: var(--color-black-dominant);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+}
+
 .siri-wave-bars {
   display: none;
   align-items: center;
