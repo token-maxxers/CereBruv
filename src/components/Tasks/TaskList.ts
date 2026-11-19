@@ -152,28 +152,40 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
       day: 'numeric',
     });
     const headerTitle = isToday
-      ? `Today's Reminders (${sortedTasks.length})`
-      : `${dateFormatted} Reminders (${sortedTasks.length})`;
+      ? 'Reminders'
+      : `${dateFormatted} Reminders`;
+
+    const allCount = combinedList.length;
+    const durationCount = combinedList.filter(t => resolveReminderTimeMode(t) === 'duration').length;
+    const oneTimeCount = combinedList.filter(t => resolveReminderTimeMode(t) === 'one-time').length;
+    const notesCount = combinedList.filter(t => resolveReminderTimeMode(t) === 'none').length;
 
     container.innerHTML = `
-      <div class="section-header" style="margin-bottom: 6px;">
-        <h2 class="section-title">${headerTitle}</h2>
-        <button class="section-action" id="header-add-task-btn">+ New Reminder</button>
+      <div class="section-header" style="margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h2 class="section-title">${headerTitle}</h2>
+          <span class="count-badge-amber">${sortedTasks.length}</span>
+        </div>
+        <button class="pill-badge" id="header-add-task-btn" style="background: var(--color-red-primary); color: #FFFFFF; border-color: var(--color-red-primary); padding: 5px 14px; font-size: 0.72rem;">+ Add</button>
       </div>
 
-      <!-- Clean Timing Filter Pills (Turns Red when clicked) -->
-      <div style="display: flex; gap: 5px; overflow-x: auto; padding-bottom: 6px; margin-bottom: var(--spacing-2);" id="reminders-filter-bar">
-        <button type="button" class="pill-badge ${currentFilter === 'all' ? 'active' : ''}" data-filt="all" style="font-size: 0.65rem;">
-          ALL (${combinedList.length})
+      <!-- Clean Timing Filter Pills with Corner Count Badges -->
+      <div style="display: flex; gap: 8px; overflow-x: auto; padding: 8px 6px 6px 2px; margin-bottom: var(--spacing-2);" id="reminders-filter-bar">
+        <button type="button" class="pill-badge filter-pill-wrap ${currentFilter === 'all' ? 'active' : ''}" data-filt="all">
+          All
+          <span class="pill-corner-badge">${allCount}</span>
         </button>
-        <button type="button" class="pill-badge ${currentFilter === 'duration' ? 'active' : ''}" data-filt="duration" style="font-size: 0.65rem;">
-          DURATION BLOCKS (${combinedList.filter(t => resolveReminderTimeMode(t) === 'duration').length})
+        <button type="button" class="pill-badge filter-pill-wrap ${currentFilter === 'duration' ? 'active' : ''}" data-filt="duration">
+          Timed
+          <span class="pill-corner-badge">${durationCount}</span>
         </button>
-        <button type="button" class="pill-badge ${currentFilter === 'one-time' ? 'active' : ''}" data-filt="one-time" style="font-size: 0.65rem;">
-          ONE-TIME / DEADLINES (${combinedList.filter(t => resolveReminderTimeMode(t) === 'one-time').length})
+        <button type="button" class="pill-badge filter-pill-wrap ${currentFilter === 'one-time' ? 'active' : ''}" data-filt="one-time">
+          Deadlines
+          <span class="pill-corner-badge">${oneTimeCount}</span>
         </button>
-        <button type="button" class="pill-badge ${currentFilter === 'timeless' ? 'active' : ''}" data-filt="timeless" style="font-size: 0.65rem;">
-          TIMELESS NOTES (${combinedList.filter(t => resolveReminderTimeMode(t) === 'none').length})
+        <button type="button" class="pill-badge filter-pill-wrap ${currentFilter === 'timeless' ? 'active' : ''}" data-filt="timeless">
+          Notes
+          <span class="pill-corner-badge">${notesCount}</span>
         </button>
       </div>
 
@@ -181,7 +193,7 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
         sortedTasks.length === 0
           ? `<div class="empty-state">
                <h3 class="empty-state-title">No reminders in this view</h3>
-               <p class="empty-state-sub">Tap "+ New Reminder", scan a photo, or say "Remind me..."</p>
+               <p class="empty-state-sub">Tap "+ Add", scan a photo, or say "Remind me..."</p>
              </div>`
           : `<div class="task-list" id="task-items-container"></div>`
       }
