@@ -20,9 +20,9 @@
   --border-focus: #E52E2E;              /* Input active focus */
   --border-dark: #171717;               /* Bold accent border */
 
-  /* Typography */
-  --font-family-display: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Typography (Hinnual brand + Rubik/Nunito square-rounded geometric fallback) */
+  --font-family-display: 'Hinnual', 'Rubik', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family-base: 'Hinnual', 'Rubik', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-family-mono: 'SF Mono', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 
   /* Font Sizes */

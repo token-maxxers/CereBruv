@@ -30,28 +30,42 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
   // Default to today in local YYYY-MM-DD
   let selectedDate = formatLocalDate();
+  let viewMode: 'orbit' | 'month' = 'orbit';
+  let calendarYear = new Date(selectedDate + 'T00:00:00').getFullYear();
+  let calendarMonth = new Date(selectedDate + 'T00:00:00').getMonth();
 
   container.innerHTML = `
-    <!-- Top Date & Navigation Strip (Matching Image 1) -->
+    <!-- Top Date & Navigation Strip -->
     <div style="display: flex; flex-direction: column; gap: var(--spacing-2); margin-bottom: var(--spacing-3);">
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button id="prev-day-btn" class="icon-btn" style="width: 26px; height: 26px;" title="Previous Day">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+          <button id="prev-day-btn" class="icon-btn" style="width: 26px; height: 26px;" title="Previous">
             <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
           </button>
-          <h2 style="font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); cursor: pointer;" id="orbit-full-date"></h2>
-          <button id="next-day-btn" class="icon-btn" style="width: 26px; height: 26px;" title="Next Day">
+          <h2 style="font-family: var(--font-family-display); font-size: var(--font-size-base); font-weight: 800; color: var(--color-black-dominant); cursor: pointer; white-space: nowrap;" id="orbit-full-date"></h2>
+          <button id="next-day-btn" class="icon-btn" style="width: 26px; height: 26px;" title="Next">
             <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </button>
         </div>
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <button id="jump-today-btn" class="pill-badge" style="cursor: pointer; display: none; font-size: 0.65rem;">TODAY</button>
-          <span class="pill-badge" id="orbit-workload-badge" style="font-size: 0.7rem;">CALCULATING...</span>
+        <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
+          <button id="jump-today-btn" class="pill-badge" style="cursor: pointer; display: none; font-size: 0.65rem; padding: 4px 8px;">TODAY</button>
+          <div class="orbit-view-switch" role="tablist" aria-label="Schedule view">
+            <button type="button" id="view-btn-orbit" class="orbit-view-btn active" role="tab" aria-selected="true">Orbit</button>
+            <button type="button" id="view-btn-month" class="orbit-view-btn" role="tab" aria-selected="false">Month</button>
+          </div>
         </div>
       </div>
 
-      <!-- Weekly Day & Date Strip (Image 1: S M T W T F S + dates 25, 26, 27...) -->
+      <!-- Weekly Day & Date Strip (Visible in Orbit mode) -->
       <div id="weekly-strip" style="display: flex; justify-content: space-between; gap: 4px; padding: 4px 0;"></div>
+    </div>
+
+    <!-- Month Calendar Grid (Visible in Month mode) -->
+    <div id="month-calendar-wrap" class="month-calendar-wrap" style="display: none;">
+      <div class="month-weekdays">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div id="month-grid" class="month-grid"></div>
     </div>
 
     <!-- 24-Hour Circular Dial Canvas Container -->
@@ -115,13 +129,16 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       </div>
     </div>
 
-    <!-- Realistic Next Task Card (Matching Image 1 spec) -->
-    <div id="realistic-next-task-container" style="margin-top: var(--spacing-3); background: var(--bg-surface-elevated); border: 1px solid var(--border-medium); border-left: 4px solid var(--color-red-primary); border-radius: var(--radius-md); padding: var(--spacing-3);">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+    <!-- Realistic Next Task Card -->
+    <div id="realistic-next-task-container" style="margin-top: var(--spacing-3); background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-left: 4px solid var(--color-red-primary); border-radius: var(--radius-md); padding: var(--spacing-3);">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; gap: 6px;">
         <span style="font-size: 0.7rem; font-weight: 800; color: var(--color-red-primary); letter-spacing: 0.05em; text-transform: uppercase;">
           Realistic Next Task
         </span>
-        <span id="next-task-time-pill" style="font-size: 0.7rem; font-weight: 600; color: var(--color-black-muted);"></span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span id="next-task-time-pill" style="font-size: 0.7rem; font-weight: 600; color: var(--color-black-muted);"></span>
+          <span class="pill-badge orbit-status-tag" id="orbit-workload-badge" style="font-size: 0.62rem; padding: 2px 8px;">OPEN</span>
+        </div>
       </div>
       <div id="next-task-body" style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-black-dominant);">
         No tasks queued.
@@ -177,6 +194,10 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const nextTaskRationale = container.querySelector<HTMLElement>('#next-task-rationale')!;
   const nextTaskLinks = container.querySelector<HTMLDivElement>('#next-task-links')!;
   const weeklyStrip = container.querySelector<HTMLElement>('#weekly-strip')!;
+  const viewBtnOrbit = container.querySelector<HTMLButtonElement>('#view-btn-orbit')!;
+  const viewBtnMonth = container.querySelector<HTMLButtonElement>('#view-btn-month')!;
+  const monthCalendarWrap = container.querySelector<HTMLDivElement>('#month-calendar-wrap')!;
+  const monthGrid = container.querySelector<HTMLDivElement>('#month-grid')!;
 
   const arcPopover = container.querySelector<HTMLDivElement>('#orbit-arc-popover')!;
   const popoverCategoryBadge = container.querySelector<HTMLElement>('#popover-category-badge')!;
@@ -261,9 +282,23 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   }
 
   function changeDay(deltaDays: number) {
+    if (viewMode === 'month') {
+      calendarMonth += deltaDays;
+      if (calendarMonth < 0) {
+        calendarMonth = 11;
+        calendarYear -= 1;
+      } else if (calendarMonth > 11) {
+        calendarMonth = 0;
+        calendarYear += 1;
+      }
+      drawOrbit();
+      return;
+    }
     const current = new Date(selectedDate + 'T00:00:00');
     current.setDate(current.getDate() + deltaDays);
     selectedDate = formatLocalDate(current);
+    calendarYear = current.getFullYear();
+    calendarMonth = current.getMonth();
     eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
     drawOrbit();
   }
@@ -272,9 +307,37 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   nextDayBtn.addEventListener('click', () => changeDay(1));
   jumpTodayBtn.addEventListener('click', () => {
     selectedDate = getTodayString();
+    const t = new Date(selectedDate + 'T00:00:00');
+    calendarYear = t.getFullYear();
+    calendarMonth = t.getMonth();
     eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
     drawOrbit();
   });
+
+  function setViewMode(mode: 'orbit' | 'month') {
+    viewMode = mode;
+    viewBtnOrbit.classList.toggle('active', mode === 'orbit');
+    viewBtnOrbit.setAttribute('aria-selected', mode === 'orbit' ? 'true' : 'false');
+    viewBtnMonth.classList.toggle('active', mode === 'month');
+    viewBtnMonth.setAttribute('aria-selected', mode === 'month' ? 'true' : 'false');
+
+    if (mode === 'month') {
+      const sel = new Date(selectedDate + 'T00:00:00');
+      calendarYear = sel.getFullYear();
+      calendarMonth = sel.getMonth();
+      weeklyStrip.style.display = 'none';
+      dialRegion.style.display = 'none';
+      monthCalendarWrap.style.display = 'block';
+    } else {
+      weeklyStrip.style.display = 'flex';
+      dialRegion.style.display = 'flex';
+      monthCalendarWrap.style.display = 'none';
+    }
+    drawOrbit();
+  }
+
+  viewBtnOrbit.addEventListener('click', () => setViewMode('orbit'));
+  viewBtnMonth.addEventListener('click', () => setViewMode('month'));
 
   async function drawOrbit() {
     if (isFirstOrbitLoad) {
@@ -313,7 +376,12 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const currentFraction = isToday ? now.getHours() + now.getMinutes() / 60 : 0;
 
     // Set date & live clock labels
-    fullDateEl.textContent = targetDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    if (viewMode === 'month') {
+      fullDateEl.textContent = new Date(calendarYear, calendarMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      renderMonthGrid(allTasks);
+    } else {
+      fullDateEl.textContent = targetDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    }
     updateLiveDigitalClock();
 
     // Render Weekly Strip with dots for tasks
@@ -501,6 +569,70 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     } else {
       c.strokeStyle = seg.color;
       c.stroke();
+    }
+  }
+
+  function renderMonthGrid(allTasks: Task[]) {
+    monthGrid.innerHTML = '';
+    const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+    const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    const todayStr = getTodayString();
+    const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
+    const trackColor = isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.08)';
+    const r = 14;
+    const circ = 2 * Math.PI * r;
+
+    for (let i = 0; i < firstDay; i++) {
+      const emptyCell = document.createElement('div');
+      emptyCell.className = 'month-cell is-empty';
+      monthGrid.appendChild(emptyCell);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const mStr = String(calendarMonth + 1).padStart(2, '0');
+      const dStr = String(day).padStart(2, '0');
+      const dateStr = `${calendarYear}-${mStr}-${dStr}`;
+      const isSelected = dateStr === selectedDate;
+      const isToday = dateStr === todayStr;
+
+      const dayTasks = allTasks.filter(t => t.date === dateStr);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = `month-cell${isSelected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}`;
+      cell.title = dayTasks.length > 0 ? `${dayTasks.length} task(s) on ${dateStr} (double-tap for Orbit)` : `${dateStr} (double-tap for Orbit)`;
+
+      // Build Micro-Orbit SVG arcs from task categories on this day
+      let arcsHtml = `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${trackColor}" stroke-width="2.5" />`;
+      if (dayTasks.length > 0) {
+        const sliceCount = Math.min(dayTasks.length, 4);
+        const gap = sliceCount > 1 ? 3.5 : 0;
+        const arcLen = Math.max(4, (circ / sliceCount) - gap);
+        for (let idx = 0; idx < sliceCount; idx++) {
+          const t = dayTasks[idx];
+          const color = t.completed ? '#9CA3AF' : (CATEGORY_COLORS[t.category] || '#E52E2E');
+          const offset = -(idx * (circ / sliceCount));
+          arcsHtml += `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${color}" stroke-width="2.75" stroke-linecap="round" stroke-dasharray="${arcLen.toFixed(2)} ${circ.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" />`;
+        }
+      }
+
+      cell.innerHTML = `
+        <div class="micro-orbit-ring">
+          <svg class="micro-orbit-svg" viewBox="0 0 34 34" aria-hidden="true">${arcsHtml}</svg>
+          <span class="micro-orbit-num">${day}</span>
+        </div>
+      `;
+
+      cell.addEventListener('click', () => {
+        if (selectedDate === dateStr) {
+          setViewMode('orbit');
+          return;
+        }
+        selectedDate = dateStr;
+        eventBus.emit(AppEvents.DATE_SELECTED, selectedDate);
+        drawOrbit();
+      });
+
+      monthGrid.appendChild(cell);
     }
   }
 

@@ -913,6 +913,138 @@ html, body {
   transform: rotate(22deg) scale(0.92);
 }
 
+/* Orbit / Month Switcher & Micro-Orbit Calendar Grid */
+.orbit-view-switch {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-full);
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border-subtle);
+}
+
+.orbit-view-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-black-muted);
+  font-family: var(--font-family-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.orbit-view-btn.active {
+  background: var(--bg-surface);
+  color: var(--color-black-dominant);
+  box-shadow: var(--shadow-subtle);
+}
+
+.orbit-status-tag {
+  cursor: default !important;
+  pointer-events: none;
+}
+
+.month-calendar-wrap {
+  width: 100%;
+  animation: card-rise 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.month-weekdays span {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+  letter-spacing: 0.04em;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.month-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.month-cell:hover:not(.is-empty) {
+  background: var(--bg-surface-elevated);
+}
+
+.month-cell:active:not(.is-empty) {
+  transform: scale(0.92);
+}
+
+.month-cell.is-empty {
+  cursor: default;
+  pointer-events: none;
+}
+
+.micro-orbit-ring {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.micro-orbit-svg {
+  position: absolute;
+  inset: 0;
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+
+.micro-orbit-num {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-family-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--color-black-dominant);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.month-cell.is-today .micro-orbit-num {
+  color: var(--color-red-primary);
+  font-weight: 900;
+}
+
+.month-cell.is-selected .micro-orbit-num {
+  background: var(--color-red-primary);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px var(--color-red-glow);
+}
+
 .siri-wave-bars {
   display: none;
   align-items: center;
