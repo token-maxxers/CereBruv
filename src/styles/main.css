@@ -1202,12 +1202,13 @@ html, body {
 
 .orbit-brain-time {
   position: absolute;
-  top: 63%;
-  left: 49.5%;
+  top: 60%;
+  left: 48.5%;
   transform: translate(-50%, -50%);
   font-family: var(--font-family-display);
   font-size: 0.68rem;
   font-weight: 900;
+  line-height: 1;
   color: var(--color-black-dominant);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
