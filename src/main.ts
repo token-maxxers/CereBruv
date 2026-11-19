@@ -649,7 +649,18 @@ async function mountApp(user: AuthUser) {
         )
       );
     } else if (tab === 'graph') {
-      viewContainer.appendChild(renderDotGraph());
+      viewContainer.appendChild(
+        renderDotGraph({
+          onConvertNoteToTask: (draftTask) => taskFormModal.open(currentSelectedDate, draftTask),
+          onJumpToOrbit: (dateStr) => {
+            if (dateStr) {
+              currentSelectedDate = dateStr;
+              eventBus.emit(AppEvents.DATE_SELECTED, dateStr);
+            }
+            switchTab('orbit');
+          },
+        })
+      );
     } else if (tab === 'cloud') {
       viewContainer.appendChild(
         renderCloudView({

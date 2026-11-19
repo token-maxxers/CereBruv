@@ -1,4 +1,4 @@
-import { taskRepository, noteRepository } from '../../services/storage';
+import { taskRepository, noteRepository, userStatsRepository } from '../../services/storage';
 import { eventBus, AppEvents } from '../../services/events';
 import {
   extractLinksFromText,
@@ -7,21 +7,22 @@ import {
   renderSavedLinksHtml,
 } from '../../utils/imageUtils';
 import type { GraphNode, GraphLink } from '../../types/note';
+import type { Task } from '../../types/task';
 
-export function renderDotGraph(): HTMLElement {
+export interface DotGraphOptions {
+  onConvertNoteToTask?: (draftTask: Partial<Task>) => void;
+  onJumpToOrbit?: (date?: string) => void;
+}
+
+export function renderDotGraph(options: DotGraphOptions = {}): HTMLElement {
   const container = document.createElement('div');
   container.className = 'card-section';
   container.style.padding = 'var(--spacing-3)';
 
   container.innerHTML = `
-    <div class="section-header" style="margin-bottom: var(--spacing-2);">
-      <div>
-        <h2 class="section-title">Mind Graph</h2>
-        <span style="font-size: var(--font-size-xs); color: var(--color-black-muted);">
-          Obsidian-style knowledge & task network
-        </span>
-      </div>
-      <div style="display: flex; gap: 4px;" id="graph-filter-group">
+    <div class="section-header" style="margin-bottom: var(--spacing-2); flex-wrap: wrap; gap: 8px;">
+      <h2 class="section-title">Mind Graph</h2>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;" id="graph-filter-group">
         <button class="pill-badge active" data-filter="all" style="cursor: pointer; font-size: 0.65rem;">ALL</button>
         <button class="pill-badge" data-filter="task" style="cursor: pointer; font-size: 0.65rem;">REMINDERS</button>
         <button class="pill-badge" data-filter="note" style="cursor: pointer; font-size: 0.65rem;">NOTES</button>
@@ -29,37 +30,48 @@ export function renderDotGraph(): HTMLElement {
       </div>
     </div>
 
+    <!-- Inline Quick Search -->
+    <div style="margin-bottom: var(--spacing-2);">
+      <input id="graph-search-input" type="search" class="form-input" placeholder="Search nodes, topics, or keywords to spotlight..." style="padding: 7px 12px; font-size: 0.78rem; border-radius: var(--radius-full);" />
+    </div>
+
     <!-- Graph Canvas Container -->
-    <div style="position: relative; width: 100%; height: 320px; background: #16161C; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-medium); box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+    <div id="graph-canvas-wrap" style="position: relative; width: 100%; height: 340px; background: var(--bg-surface-elevated); border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-subtle);">
       <canvas id="dot-graph-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
 
       <!-- Empty State Overlay if 0 items -->
-      <div id="graph-empty-overlay" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; text-align: center; color: #FAF7F2; padding: var(--spacing-4);">
-        <div style="font-size: var(--font-size-base); font-weight: 700;">No Graph Nodes Yet</div>
-        <div style="font-size: var(--font-size-xs); color: #BDB2A1; margin-top: 4px;">Add tasks or quick notes to see your personal knowledge network grow.</div>
+      <div id="graph-empty-overlay" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; text-align: center; color: var(--color-black-dominant); padding: var(--spacing-4);">
+        <div style="font-size: var(--font-size-base); font-weight: 800;">No Graph Nodes Yet</div>
+        <div style="font-size: var(--font-size-xs); color: var(--color-black-muted); margin-top: 4px;">Add tasks or quick notes to see your personal knowledge network grow.</div>
       </div>
 
       <!-- Zoom / Center & Clear Controls Overlay -->
       <div style="position: absolute; bottom: 8px; right: 8px; display: flex; gap: 6px;">
-        <button id="graph-clear-all-btn" class="pill-badge" style="background: rgba(229,46,46,0.18); color: #FCA5A5; border-color: rgba(229,46,46,0.4); cursor: pointer; font-size: 0.65rem;">
+        <button id="graph-clear-all-btn" class="pill-badge" style="background: var(--color-red-subtle); color: var(--color-red-primary); border-color: rgba(229,46,46,0.28); cursor: pointer; font-size: 0.65rem;">
           Clear All
         </button>
-        <button id="graph-reset-btn" class="pill-badge" style="background: rgba(32,32,40,0.8); color: #F5EFEB; border-color: rgba(255,255,255,0.15); cursor: pointer; font-size: 0.65rem;">
+        <button id="graph-reset-btn" class="pill-badge" style="background: var(--bg-surface); color: var(--color-black-dominant); border-color: var(--border-subtle); cursor: pointer; font-size: 0.65rem;">
           Center
         </button>
       </div>
 
-      <!-- Selected Node Inspector Modal / Overlay -->
-      <div id="node-inspector" style="display: none; position: absolute; top: 8px; left: 8px; right: 8px; background: rgba(26,26,34,0.92); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15); border-radius: var(--radius-sm); padding: var(--spacing-2) var(--spacing-3); color: #F5EFEB; z-index: 10;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span id="inspector-badge" style="font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;"></span>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button id="inspector-photo-btn" style="display: none; background: #38BDF8; border: none; color: #121216; cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 2px 7px; border-radius: 4px;">SCREENSHOT</button>
-            <button id="inspector-delete" style="display: none; background: #E52E2E; border: none; color: #FFFFFF; cursor: pointer; font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 4px;">DELETE</button>
-            <button id="inspector-close" style="background: none; border: none; color: #BDB2A1; cursor: pointer; font-size: 1rem; line-height: 1;">&times;</button>
+      <!-- Actionable Selected Node Inspector Overlay -->
+      <div id="node-inspector" style="display: none; position: absolute; top: 8px; left: 8px; right: 8px; background: var(--bg-surface); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 10px 12px; color: var(--color-black-dominant); box-shadow: var(--shadow-card); z-index: 10;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="inspector-badge" style="font-size: 0.62rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; text-transform: uppercase;"></span>
+            <span id="inspector-meta" style="font-size: 0.65rem; font-weight: 700; color: var(--color-black-muted);"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+            <button id="inspector-complete-btn" style="display: none; background: var(--color-black-dominant); border: none; color: var(--bg-surface); cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;">Complete</button>
+            <button id="inspector-orbit-btn" style="display: none; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); color: var(--color-black-dominant); cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;">Orbit</button>
+            <button id="inspector-convert-btn" style="display: none; background: var(--color-red-primary); border: none; color: #FFFFFF; cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;">+ Task</button>
+            <button id="inspector-photo-btn" style="display: none; background: #0284C7; border: none; color: #FFFFFF; cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;">Photo</button>
+            <button id="inspector-delete" style="display: none; background: var(--color-red-subtle); border: none; color: var(--color-red-primary); cursor: pointer; font-size: 0.62rem; font-weight: 800; padding: 3px 8px; border-radius: 999px;">Delete</button>
+            <button id="inspector-close" style="background: none; border: none; color: var(--color-black-muted); cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 2px;">&times;</button>
           </div>
         </div>
-        <div id="inspector-title" style="font-size: var(--font-size-sm); font-weight: 700; margin-top: 2px;"></div>
+        <div id="inspector-title" style="font-family: var(--font-family-display); font-size: var(--font-size-sm); font-weight: 800; margin-top: 4px; line-height: 1.3;"></div>
         <div id="inspector-links"></div>
       </div>
     </div>
@@ -87,14 +99,62 @@ export function renderDotGraph(): HTMLElement {
   const inspector = container.querySelector<HTMLElement>('#node-inspector')!;
   const inspectorBadge = container.querySelector<HTMLElement>('#inspector-badge')!;
   const inspectorTitle = container.querySelector<HTMLElement>('#inspector-title')!;
+  const inspectorMeta = container.querySelector<HTMLElement>('#inspector-meta')!;
   const inspectorLinks = container.querySelector<HTMLDivElement>('#inspector-links')!;
+  const inspectorCompleteBtn = container.querySelector<HTMLButtonElement>('#inspector-complete-btn')!;
+  const inspectorOrbitBtn = container.querySelector<HTMLButtonElement>('#inspector-orbit-btn')!;
+  const inspectorConvertBtn = container.querySelector<HTMLButtonElement>('#inspector-convert-btn')!;
   const inspectorPhotoBtn = container.querySelector<HTMLButtonElement>('#inspector-photo-btn')!;
   const inspectorDelete = container.querySelector<HTMLButtonElement>('#inspector-delete')!;
   const inspectorClose = container.querySelector<HTMLButtonElement>('#inspector-close')!;
   const resetBtn = container.querySelector<HTMLButtonElement>('#graph-reset-btn')!;
   const clearAllBtn = container.querySelector<HTMLButtonElement>('#graph-clear-all-btn')!;
+  const searchInput = container.querySelector<HTMLInputElement>('#graph-search-input')!;
 
   let selectedNode: GraphNode | null = null;
+  let searchQuery = '';
+  const taskMap = new Map<string, Task>();
+  const noteMap = new Map<string, { content: string; category: string }>();
+  const degreeMap = new Map<string, number>();
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+  });
+
+  inspectorCompleteBtn.addEventListener('click', async () => {
+    if (!selectedNode || selectedNode.type !== 'task') return;
+    const taskId = selectedNode.id.replace('node_task_', '');
+    const updated = await taskRepository.toggleTaskCompletion(taskId);
+    if (updated.completed) {
+      const stats = await userStatsRepository.incrementTaskCount();
+      eventBus.emit(AppEvents.STATS_UPDATED, stats);
+    } else if (userStatsRepository.decrementTaskCount) {
+      const stats = await userStatsRepository.decrementTaskCount();
+      eventBus.emit(AppEvents.STATS_UPDATED, stats);
+    }
+    eventBus.emit(AppEvents.TASK_COMPLETED, updated);
+    await buildGraphData();
+    inspectorCompleteBtn.textContent = updated.completed ? 'Reopen' : 'Done';
+  });
+
+  inspectorOrbitBtn.addEventListener('click', () => {
+    if (!selectedNode || selectedNode.type !== 'task') return;
+    const taskId = selectedNode.id.replace('node_task_', '');
+    const task = taskMap.get(taskId);
+    options.onJumpToOrbit?.(task?.date);
+  });
+
+  inspectorConvertBtn.addEventListener('click', () => {
+    if (!selectedNode || selectedNode.type !== 'note') return;
+    const noteId = selectedNode.id.replace('node_note_', '');
+    const note = noteMap.get(noteId);
+    if (!note) return;
+    options.onConvertNoteToTask?.({
+      title: note.content.length > 60 ? note.content.slice(0, 57) + '...' : note.content,
+      notes: note.content,
+      category: (note.category as Task['category']) || 'personal',
+    });
+  });
 
   inspectorClose.addEventListener('click', () => {
     inspector.style.display = 'none';
@@ -162,6 +222,11 @@ export function renderDotGraph(): HTMLElement {
 
     const newNodes: GraphNode[] = [];
     const newLinks: GraphLink[] = [];
+    taskMap.clear();
+    noteMap.clear();
+    degreeMap.clear();
+    tasks.forEach(t => taskMap.set(t.id, t));
+    notes.forEach(n => noteMap.set(n.id, { content: n.content, category: (n.tags && n.tags[0]) || n.category || 'personal' }));
 
     // ONLY create category topic nodes that actually exist in the user's tasks or tagged thoughts
     const usedCategories = new Set<string>();
@@ -275,6 +340,32 @@ export function renderDotGraph(): HTMLElement {
           });
         }
       });
+    });
+
+    // Cross-link Tasks <-> Tasks and Notes <-> Notes sharing significant keywords (Brain Synapses)
+    const contentNodes = newNodes.filter(n => n.type === 'task' || n.type === 'note');
+    for (let i = 0; i < contentNodes.length; i++) {
+      for (let j = i + 1; j < contentNodes.length; j++) {
+        const a = contentNodes[i];
+        const b = contentNodes[j];
+        if (a.type === 'note' && b.type === 'task') continue; // already linked above
+        if (a.type === 'task' && b.type === 'note') continue;
+        const kwA = a.keywords || [];
+        const kwB = b.keywords || [];
+        if (kwA.some(k => kwB.includes(k))) {
+          newLinks.push({ sourceId: a.id, targetId: b.id, weight: 2, kind: 'event' });
+        }
+      }
+    }
+
+    // Compute connection degree for importance sizing
+    newLinks.forEach(l => {
+      degreeMap.set(l.sourceId, (degreeMap.get(l.sourceId) || 0) + 1);
+      degreeMap.set(l.targetId, (degreeMap.get(l.targetId) || 0) + 1);
+    });
+    newNodes.forEach(n => {
+      const deg = degreeMap.get(n.id) || 0;
+      n.radius = n.radius + Math.min(4, deg * 0.7);
     });
 
     // Toggle empty overlay
@@ -401,7 +492,18 @@ export function renderDotGraph(): HTMLElement {
 
     stepPhysics(width, height);
 
+    const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
     ctx.clearRect(0, 0, width, height);
+
+    // Theme-matched background & subtle constellation dot-grid
+    ctx.fillStyle = isDark ? '#0D0E14' : '#F6F6F9';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.055)';
+    for (let gx = 16; gx < width; gx += 22) {
+      for (let gy = 16; gy < height; gy += 22) {
+        ctx.fillRect(gx, gy, 1.4, 1.4);
+      }
+    }
 
     const visibleNodes = nodes.filter(n => {
       if (activeFilter === 'all') return true;
@@ -409,25 +511,57 @@ export function renderDotGraph(): HTMLElement {
     });
     const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
 
-    // Draw Links
-    links.forEach(link => {
+    // Spotlight neighbors for selected node or search query
+    const spotlightIds = new Set<string>();
+    const hasSearch = searchQuery.length > 0;
+    if (hasSearch) {
+      visibleNodes.forEach(n => {
+        if (n.label.toLowerCase().includes(searchQuery) || (n.keywords || []).some(k => k.includes(searchQuery))) {
+          spotlightIds.add(n.id);
+        }
+      });
+    } else if (selectedNode) {
+      spotlightIds.add(selectedNode.id);
+      links.forEach(l => {
+        if (l.sourceId === selectedNode!.id) spotlightIds.add(l.targetId);
+        if (l.targetId === selectedNode!.id) spotlightIds.add(l.sourceId);
+      });
+    }
+    const spotlightActive = hasSearch || selectedNode !== null;
+    const nowSec = performance.now() * 0.0008;
+
+    // Draw Links (+ animated pulse particles along spotlight/synapse edges)
+    links.forEach((link, idx) => {
       if (visibleNodeIds.has(link.sourceId) && visibleNodeIds.has(link.targetId)) {
         const source = nodes.find(n => n.id === link.sourceId);
         const target = nodes.find(n => n.id === link.targetId);
         if (source && target && source.x && source.y && target.x && target.y) {
           const isEventLink = link.kind === 'event';
+          const isLit = !spotlightActive || (spotlightIds.has(link.sourceId) && spotlightIds.has(link.targetId));
+          ctx.save();
+          ctx.globalAlpha = isLit ? 1 : 0.14;
           ctx.beginPath();
           ctx.moveTo(source.x, source.y);
           ctx.lineTo(target.x, target.y);
-          ctx.lineWidth = isEventLink ? 2 : 1;
-          ctx.strokeStyle = isEventLink ? 'rgba(56, 189, 248, 0.65)' : 'rgba(255, 255, 255, 0.15)';
-          if (isEventLink) {
-            ctx.setLineDash([4, 4]);
-          } else {
-            ctx.setLineDash([]);
-          }
+          ctx.lineWidth = isEventLink ? 2 : (isLit && spotlightActive ? 1.8 : 1.1);
+          ctx.strokeStyle = isEventLink
+            ? (isDark ? 'rgba(56, 189, 248, 0.72)' : 'rgba(2, 132, 199, 0.65)')
+            : (isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(23, 23, 23, 0.15)');
+          ctx.setLineDash(isEventLink ? [4, 4] : []);
           ctx.stroke();
           ctx.setLineDash([]);
+
+          // Traveling synapse pulse dot on active/synapse edges
+          if (isLit && (isEventLink || (spotlightActive && selectedNode))) {
+            const t = (nowSec + idx * 0.31) % 1;
+            const px = source.x + (target.x - source.x) * t;
+            const py = source.y + (target.y - source.y) * t;
+            ctx.beginPath();
+            ctx.arc(px, py, 2.3, 0, Math.PI * 2);
+            ctx.fillStyle = isEventLink ? '#38BDF8' : '#E52E2E';
+            ctx.fill();
+          }
+          ctx.restore();
         }
       }
     });
@@ -436,12 +570,26 @@ export function renderDotGraph(): HTMLElement {
     visibleNodes.forEach(node => {
       const x = node.x || 0;
       const y = node.y || 0;
+      const isLit = !spotlightActive || spotlightIds.has(node.id);
+      const isSelected = selectedNode?.id === node.id;
+
+      ctx.save();
+      ctx.globalAlpha = isLit ? 1 : 0.2;
 
       // Glow halo
       ctx.beginPath();
-      ctx.arc(x, y, node.radius + 4, 0, Math.PI * 2);
-      ctx.fillStyle = node.color + '26';
+      ctx.arc(x, y, node.radius + (isSelected ? 7 : 4), 0, Math.PI * 2);
+      ctx.fillStyle = node.color + (isSelected ? '44' : '26');
       ctx.fill();
+
+      // Selected ring
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(x, y, node.radius + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = isDark ? '#FFFFFF' : '#171717';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
 
       // Node Body
       ctx.beginPath();
@@ -450,11 +598,12 @@ export function renderDotGraph(): HTMLElement {
       ctx.fill();
 
       // Node Label
-      ctx.fillStyle = '#E5E7EB';
-      ctx.font = '600 9px -apple-system, sans-serif';
+      ctx.fillStyle = isDark ? '#E5E7EB' : '#171717';
+      ctx.font = isSelected ? '700 10px -apple-system, sans-serif' : '600 9px -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(node.label, x, y + node.radius + 3);
+      ctx.fillText(node.label, x, y + node.radius + 4);
+      ctx.restore();
     });
 
     requestAnimationFrame(draw);
@@ -490,14 +639,39 @@ export function renderDotGraph(): HTMLElement {
       selectedNode = node;
       isDragging = true;
 
+      const deg = degreeMap.get(node.id) || 0;
       inspector.style.display = 'block';
-      inspectorTitle.textContent = node.label;
       inspectorBadge.textContent = node.type;
       inspectorBadge.style.background = node.color;
       inspectorBadge.style.color = '#FFFFFF';
+      inspectorMeta.textContent = `${deg} link${deg === 1 ? '' : 's'}`;
+
+      if (node.type === 'task') {
+        const task = taskMap.get(node.id.replace('node_task_', ''));
+        inspectorTitle.textContent = node.label;
+        inspectorCompleteBtn.style.display = 'inline-block';
+        inspectorCompleteBtn.textContent = task?.completed ? 'Reopen' : 'Done';
+        inspectorOrbitBtn.style.display = 'inline-block';
+        inspectorConvertBtn.style.display = 'none';
+      } else if (node.type === 'note') {
+        const note = noteMap.get(node.id.replace('node_note_', ''));
+        inspectorTitle.textContent = note?.content || node.label;
+        inspectorCompleteBtn.style.display = 'none';
+        inspectorOrbitBtn.style.display = 'none';
+        inspectorConvertBtn.style.display = 'inline-block';
+      } else {
+        inspectorTitle.textContent = `${node.label} Cluster`;
+        inspectorCompleteBtn.style.display = 'none';
+        inspectorOrbitBtn.style.display = 'none';
+        inspectorConvertBtn.style.display = 'none';
+      }
+
       inspectorPhotoBtn.style.display = node.photoUrl ? 'inline-block' : 'none';
       inspectorDelete.style.display = node.type === 'task' || node.type === 'note' ? 'inline-block' : 'none';
       inspectorLinks.innerHTML = renderSavedLinksHtml(node.links, true);
+    } else if (!isDragging) {
+      selectedNode = null;
+      inspector.style.display = 'none';
     }
   }
 
