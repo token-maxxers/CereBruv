@@ -56,11 +56,12 @@
 }
 
 .auth-title {
+  font-family: var(--font-family-display);
   font-size: var(--font-size-2xl);
-  font-weight: 800;
+  font-weight: 900;
   color: var(--color-black-dominant);
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .auth-title span {
@@ -308,12 +309,13 @@
   background-color: var(--color-red-primary);
   color: #FFFFFF;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 12px;
+  border-radius: var(--radius-full);
+  padding: 12px 18px;
+  font-family: var(--font-family-display);
   font-size: var(--font-size-base);
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  min-height: 44px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -399,12 +401,13 @@
 /* Google Sign-in Button with hover/press */
 .auth-btn-google {
   background-color: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
   color: var(--color-black-dominant);
+  font-family: var(--font-family-display);
   font-size: var(--font-size-sm);
-  font-weight: 700;
-  min-height: 44px;
+  font-weight: 800;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;

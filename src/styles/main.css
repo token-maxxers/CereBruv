@@ -34,10 +34,10 @@ html, body {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
-  border-left: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
+  border-left: none;
+  border-right: none;
   position: relative;
-  padding-bottom: 90px; /* Space for bottom nav & FAB */
+  padding-bottom: 92px; /* Space for bottom nav & FAB */
 }
 
 /* App Header */
@@ -47,11 +47,13 @@ html, body {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
-  background-color: var(--bg-surface);
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 50;
-  box-shadow: var(--shadow-subtle);
+  box-shadow: none;
 }
 
 .brand-section {
@@ -74,8 +76,9 @@ html, body {
 }
 
 .brand-name {
+  font-family: var(--font-family-display);
   font-size: var(--font-size-xl);
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: -0.03em;
   color: var(--color-black-dominant);
   line-height: 1.1;
@@ -102,12 +105,13 @@ html, body {
   display: flex;
   align-items: center;
   gap: var(--spacing-1);
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: var(--radius-full);
   background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-medium);
+  border: 1px solid transparent;
+  font-family: var(--font-family-display);
   font-size: var(--font-size-xs);
-  font-weight: 700;
+  font-weight: 800;
   color: var(--color-black-soft);
   transition: all var(--transition-fast);
   cursor: pointer;
@@ -116,6 +120,10 @@ html, body {
 .pill-badge:hover {
   background: var(--bg-surface-hover);
   color: var(--color-black-dominant);
+}
+
+.pill-badge:active {
+  transform: scale(0.95);
 }
 
 .pill-badge.active,
@@ -157,9 +165,9 @@ html, body {
 
 .mascot-banner.expanded {
   padding: var(--spacing-5) var(--spacing-4) var(--spacing-4) var(--spacing-4);
-  background: linear-gradient(160deg, var(--bg-surface) 0%, #FAF0EC 100%);
-  border-color: rgba(229, 46, 46, 0.32);
-  box-shadow: 0 10px 28px rgba(229, 46, 46, 0.14);
+  background: var(--bg-surface);
+  border-color: rgba(229, 46, 46, 0.25);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
 }
 
 .mascot-banner.expanded .mascot-top-row {
@@ -225,13 +233,20 @@ html, body {
 /* Quick Capture Bar (Nested Inside Unified Mascot Card) */
 .quick-capture-container {
   margin: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 6px var(--spacing-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: 6px 8px 6px 14px;
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.quick-capture-container:focus-within {
+  background: var(--bg-surface);
+  border-color: var(--color-red-primary);
+  box-shadow: 0 0 0 3px var(--color-red-subtle);
 }
 
 .quick-capture-input {
@@ -315,10 +330,11 @@ html, body {
 }
 
 .section-title {
-  font-size: var(--font-size-base);
-  font-weight: 700;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: 900;
   color: var(--color-black-dominant);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
 }
 
 .section-action {
@@ -346,16 +362,16 @@ html, body {
   display: flex;
   align-items: center;
   gap: var(--spacing-3);
-  padding: var(--spacing-3);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  padding: 12px 14px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 
 .task-item:hover {
-  border-color: var(--border-medium);
-  box-shadow: var(--shadow-subtle);
+  background: #EFEFF2;
+  transform: translateY(-1px);
 }
 
 .task-item.completed {
@@ -470,14 +486,19 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 18px;
+  padding: 11px 20px;
+  font-family: var(--font-family-display);
   font-size: var(--font-size-sm);
-  font-weight: 700;
-  border-radius: var(--radius-md);
+  font-weight: 800;
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--transition-fast);
   border: 1px solid transparent;
   gap: var(--spacing-2);
+}
+
+.btn:active {
+  transform: scale(0.97);
 }
 
 .btn-primary {
@@ -492,7 +513,7 @@ html, body {
 .btn-secondary {
   background-color: var(--bg-surface-elevated);
   color: var(--color-black-dominant);
-  border-color: var(--border-medium);
+  border-color: transparent;
 }
 
 .btn-secondary:hover {
@@ -549,8 +570,10 @@ html, body {
 }
 
 .modal-title {
-  font-size: var(--font-size-lg);
-  font-weight: 800;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  font-weight: 900;
+  letter-spacing: -0.025em;
   color: var(--color-black-dominant);
 }
 
@@ -580,18 +603,19 @@ html, body {
 
 .form-input, .form-select, .form-textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 14px;
   background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-medium);
+  border: 1.5px solid transparent;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   color: var(--color-black-dominant);
   font-family: inherit;
   outline: none;
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .form-input:focus, .form-select:focus, .form-textarea:focus {
+  background: var(--bg-surface);
   border-color: var(--color-red-primary);
 }
 
@@ -649,15 +673,17 @@ html, body {
   transform: translateX(-50%);
   width: 100%;
   max-width: var(--max-width-mobile);
-  height: 64px;
-  background-color: var(--bg-surface);
+  height: 66px;
+  background-color: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-around;
   z-index: 100;
   padding: 0 var(--spacing-2);
-  box-shadow: 0 -2px 10px rgba(18, 18, 22, 0.05);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
 }
 
 .nav-item {
@@ -780,7 +806,7 @@ html, body {
 }
 
 .mascot-banner.expanded .siri-avatar-orb::after {
-  background: #FAF5F1;
+  background: var(--bg-surface);
 }
 
 /* Show & spin the circular light aura behind the logo when expanded, listening, speaking, or typing */
