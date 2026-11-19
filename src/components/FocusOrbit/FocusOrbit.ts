@@ -85,12 +85,13 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       <div style="position: relative; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center;">
         <canvas id="focus-orbit-canvas" width="280" height="280" style="width: 280px; height: 280px; cursor: pointer;"></canvas>
 
-        <!-- Center Hub Information (Full-Size Brain-Clock) -->
-        <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px;">
+        <!-- Center Hub Information (Full-Size Digital Brain-Clock) -->
+        <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px; gap: 1px;">
           <div class="orbit-brain-clock">
             <img src="${brainFrameImg}" class="orbit-brain-frame" alt="" aria-hidden="true" />
-            <span class="orbit-brain-time" id="center-live-clock">--:--:--</span>
+            <span class="orbit-brain-time" id="center-live-clock">--:--<span class="orbit-brain-sec">:--</span></span>
           </div>
+          <span class="orbit-brain-period" id="center-live-period">AM</span>
         </div>
 
         <!-- Interactive Arc Popover Card -->
@@ -163,6 +164,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const prevDayBtn = container.querySelector<HTMLButtonElement>('#prev-day-btn')!;
   const nextDayBtn = container.querySelector<HTMLButtonElement>('#next-day-btn')!;
   const centerLiveClock = container.querySelector<HTMLElement>('#center-live-clock')!;
+  const centerLivePeriod = container.querySelector<HTMLElement>('#center-live-period')!;
   const centerBusyHours = container.querySelector<HTMLElement>('#center-busy-hours')!;
   const centerFreeTime = container.querySelector<HTMLElement>('#center-free-time')!;
   const dialRegion = container.querySelector<HTMLElement>('#orbit-dial-region')!;
@@ -187,8 +189,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const s = now.getSeconds();
     const period = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 === 0 ? 12 : h % 12;
-    const time12 = `${h12}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} ${period}`;
-    centerLiveClock.textContent = time12;
+    centerLiveClock.innerHTML = `${h12}:${String(m).padStart(2, '0')}<span class="orbit-brain-sec">:${String(s).padStart(2, '0')}</span>`;
+    centerLivePeriod.textContent = period;
   }
   const nextTaskBody = container.querySelector<HTMLElement>('#next-task-body')!;
   const nextTaskTimePill = container.querySelector<HTMLElement>('#next-task-time-pill')!;

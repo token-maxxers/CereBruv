@@ -1179,8 +1179,8 @@ html, body {
 /* Focus Orbit Brain-Clock Center Hub (Layout B - Full Size) */
 .orbit-brain-clock {
   position: relative;
-  width: 110px;
-  height: 88px;
+  width: 108px;
+  height: 82px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1205,14 +1205,28 @@ html, body {
   top: 60%;
   left: 48.5%;
   transform: translate(-50%, -50%);
-  font-family: var(--font-family-display);
-  font-size: 0.62rem;
-  font-weight: 900;
+  font-family: 'Orbitron', var(--font-family-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
   line-height: 1;
   color: var(--color-black-dominant);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
+}
+
+.orbit-brain-sec {
+  color: var(--color-red-primary);
+}
+
+.orbit-brain-period {
+  font-family: 'Orbitron', var(--font-family-display), sans-serif;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin-top: -2px;
 }
 
 .siri-wave-bars {
