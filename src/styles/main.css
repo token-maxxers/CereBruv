@@ -38,7 +38,7 @@ html, body {
   border-left: none;
   border-right: none;
   position: relative;
-  padding-bottom: 92px; /* Space for bottom nav & FAB */
+  padding-bottom: 98px; /* Space for floating pill nav */
 }
 
 /* App Header */
@@ -898,9 +898,9 @@ html, body {
 }
 
 [data-theme="obsidian"] .bottom-nav {
-  background-color: rgba(13, 14, 20, 0.88);
-  border-top-color: var(--border-subtle);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+  background-color: rgba(20, 22, 30, 0.88);
+  border-color: var(--border-subtle);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 [data-theme="obsidian"] .mascot-banner::before {
