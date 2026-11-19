@@ -667,36 +667,49 @@ html, body {
   gap: var(--spacing-3);
 }
 
-/* Center Bottom-Nav Brain-Lens Camera Button */
-.nav-lens-btn {
-  width: 54px;
-  height: 54px;
-  border-radius: var(--radius-full);
-  background: var(--color-red-primary);
+/* Center Bottom-Nav Snap Camera Button */
+.nav-lens-item {
+  position: relative;
+  padding: 0 8px 6px;
+  gap: 2px;
+  color: var(--color-red-primary);
+  outline: none;
+}
+
+.nav-lens-item:focus-visible .nav-lens-circle {
+  box-shadow: 0 0 0 3px var(--color-red-glow), 0 8px 20px var(--color-red-glow);
+}
+
+.nav-lens-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #EC0B0B;
   border: 4px solid var(--bg-primary);
   box-shadow: 0 6px 18px var(--color-red-glow);
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transform: translateY(-13px);
+  transform: translateY(-10px);
   flex-shrink: 0;
-  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-theme);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-theme);
 }
 
-.nav-lens-btn:hover {
-  background: var(--color-red-deep);
-  transform: translateY(-15px) scale(1.04);
+.nav-lens-item:hover .nav-lens-circle {
+  transform: translateY(-12px) scale(1.05);
 }
 
-.nav-lens-btn:active {
-  transform: translateY(-11px) scale(0.94);
+.nav-lens-item:active .nav-lens-circle {
+  transform: translateY(-8px) scale(0.95);
 }
 
-.nav-lens-btn img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
+.nav-lens-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  transform: scale(1.12);
   display: block;
 }
 

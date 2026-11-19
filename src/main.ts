@@ -122,8 +122,11 @@ async function mountApp(user: AuthUser) {
         <span>Reminders</span>
       </button>
 
-      <button type="button" class="nav-lens-btn" id="nav-camera-lens" title="Brain-Lens Camera Capture (QR, OCR & AI)" aria-label="Open Brain-Lens Camera">
-        <img src="${brainLensImg}" alt="Brain-Lens Camera" />
+      <button type="button" class="nav-item nav-lens-item" id="nav-camera-lens" title="Snap — Camera Capture (QR, OCR & AI)" aria-label="Snap Camera">
+        <span class="nav-lens-circle">
+          <img src="${brainLensImg}" alt="Snap" />
+        </span>
+        <span>Snap</span>
       </button>
 
       <button class="nav-item" data-tab="graph">
