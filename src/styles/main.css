@@ -64,11 +64,18 @@ html, body {
 }
 
 .brand-logo {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-sm);
   object-fit: contain;
   flex-shrink: 0;
+}
+
+.brand-wordmark {
+  height: 24px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-titles {

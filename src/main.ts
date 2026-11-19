@@ -1,4 +1,5 @@
 import mascotImg from './assets/mascot.png';
+import brandWordmarkImg from './assets/cerebruv-wordmark.png';
 import mascotTalk1Img from './assets/CerebruvTalk-1.png';
 import mascotTalk2Img from './assets/CerebruvTalk-2.png';
 import mascotListenImg from './assets/CerebruvListen.png';
@@ -42,10 +43,7 @@ async function mountApp(user: AuthUser) {
     <header class="app-header">
       <div class="brand-section">
         <img src="${mascotImg}" alt="CereBruv Official Mascot" class="brand-logo" />
-        <div class="brand-titles">
-          <h1 class="brand-name">Cere<span>Bruv</span></h1>
-          <span class="brand-tagline">Think it through, CereBruv's got you</span>
-        </div>
+        <img src="${brandWordmarkImg}" alt="CereBruv" class="brand-wordmark" />
       </div>
       <div class="status-badge-group" style="position: relative;">
         <button class="icon-btn theme-toggle-btn" id="theme-toggle-btn" title="Switch Clucky Light / Obsidian Dark Mode" aria-label="Toggle theme" style="width: 30px; height: 30px;">
@@ -59,10 +57,6 @@ async function mountApp(user: AuthUser) {
             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
           </svg>
         </button>
-        <div class="pill-badge active-streak" id="streak-badge">
-          <span>STREAK</span>
-          <strong id="streak-count">0d</strong>
-        </div>
 
         <!-- Top Navbar Voice, Sound, Vibration & Popup Settings Popover -->
         <div class="header-settings-popover" id="header-settings-popover" style="display: none;">
