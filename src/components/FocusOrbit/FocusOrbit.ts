@@ -85,14 +85,12 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       <div style="position: relative; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center;">
         <canvas id="focus-orbit-canvas" width="280" height="280" style="width: 280px; height: 280px; cursor: pointer;"></canvas>
 
-        <!-- Center Hub Information (Brain-Clock + Compact Stats) -->
-        <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px; gap: 1px;">
+        <!-- Center Hub Information (Full-Size Brain-Clock) -->
+        <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px;">
           <div class="orbit-brain-clock">
             <img src="${brainFrameImg}" class="orbit-brain-frame" alt="" aria-hidden="true" />
-            <span class="orbit-brain-time" id="center-live-clock">--:--</span>
+            <span class="orbit-brain-time" id="center-live-clock">--:--:--</span>
           </div>
-          <div style="font-family: var(--font-family-display); font-size: 0.84rem; font-weight: 900; color: var(--color-black-dominant); line-height: 1.05; margin-top: 1px;" id="center-busy-hours">0h</div>
-          <div style="font-size: 0.58rem; color: var(--color-black-muted); font-weight: 700;" id="center-free-time">Free: 16h</div>
         </div>
 
         <!-- Interactive Arc Popover Card -->
@@ -126,6 +124,12 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Planned & Free Hours Strip Below Orbit -->
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px;">
+        <span class="pill-badge orbit-status-tag" id="center-busy-hours" style="font-size: 0.72rem; padding: 4px 12px; color: var(--color-black-dominant);">0.0h Planned</span>
+        <span class="pill-badge orbit-status-tag" id="center-free-time" style="font-size: 0.72rem; padding: 4px 12px; color: var(--color-black-muted);">Free: 16.0h</span>
       </div>
     </div>
 
@@ -180,9 +184,10 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const now = new Date();
     const h = now.getHours();
     const m = now.getMinutes();
+    const s = now.getSeconds();
     const period = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 === 0 ? 12 : h % 12;
-    const time12 = `${h12}:${String(m).padStart(2, '0')} ${period}`;
+    const time12 = `${h12}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} ${period}`;
     centerLiveClock.textContent = time12;
   }
   const nextTaskBody = container.querySelector<HTMLElement>('#next-task-body')!;
