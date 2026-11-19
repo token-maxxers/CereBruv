@@ -15,6 +15,7 @@ import {
   type User,
   type Unsubscribe
 } from 'firebase/auth';
+import type { FirebaseError } from 'firebase/app';
 import { auth } from '../firebase';
 
 export interface AuthUser {
@@ -109,15 +110,28 @@ export class AuthService {
       } catch (err: unknown) {
         const code = (err as { code?: string }).code;
         // If credential already belongs to an existing user, fall back to direct sign in with credential
-        if (code === 'auth/credential-already-in-use' && (err as any).credential) {
-          const credResult = await signInWithCredential(auth, (err as any).credential);
-          return {
-            uid: credResult.user.uid,
-            email: credResult.user.email,
-            displayName: credResult.user.displayName,
-            photoURL: credResult.user.photoURL,
-            isAnonymous: credResult.user.isAnonymous
-          };
+        const authCredential = GoogleAuthProvider.credentialFromError(err as FirebaseError) || (err as any).credential;
+        if (code === 'auth/credential-already-in-use') {
+          if (authCredential) {
+            const credResult = await signInWithCredential(auth, authCredential);
+            return {
+              uid: credResult.user.uid,
+              email: credResult.user.email,
+              displayName: credResult.user.displayName,
+              photoURL: credResult.user.photoURL,
+              isAnonymous: credResult.user.isAnonymous
+            };
+          } else {
+            // If credential cannot be extracted from error, fall back to normal Google sign-in
+            const directResult = await signInWithPopup(auth, provider);
+            return {
+              uid: directResult.user.uid,
+              email: directResult.user.email,
+              displayName: directResult.user.displayName,
+              photoURL: directResult.user.photoURL,
+              isAnonymous: directResult.user.isAnonymous
+            };
+          }
         }
         // If popup blocked in installed PWA/mobile, fall back to redirect
         if (code === 'auth/popup-blocked') {
