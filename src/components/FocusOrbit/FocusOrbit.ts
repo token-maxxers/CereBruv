@@ -451,37 +451,57 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
     const centerX = size / 2;
     const centerY = size / 2;
-    const dialRadius = 90;
-    const arcLineWidth = 15;
+    const dialRadius = 96;
+    const arcLineWidth = 14;
     const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
 
-    // 0. Outer Red-Tinted Clock Bezel Orbit (contains 24h numbers outside main track)
+    // 0. Outer Crimson-Tinted Clock Bezel (Typical 12-hour clock numbers: 12, 1..11)
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 118, 0, Math.PI * 2);
-    ctx.lineWidth = 24;
+    ctx.arc(centerX, centerY, 121, 0, Math.PI * 2);
+    ctx.lineWidth = 20;
     ctx.strokeStyle = isDark ? 'rgba(255, 59, 59, 0.08)' : 'rgba(229, 46, 46, 0.06)';
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 130, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, 131, 0, Math.PI * 2);
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = isDark ? 'rgba(255, 59, 59, 0.28)' : 'rgba(229, 46, 46, 0.22)';
     ctx.stroke();
 
-    // 1. Base Circular Track
+    for (let h12 = 0; h12 < 12; h12++) {
+      const angle = (h12 / 12) * Math.PI * 2 - Math.PI / 2;
+      const isQuarter = h12 % 3 === 0;
+      const label12 = h12 === 0 ? '12' : String(h12);
+      const outerTextR = 121;
+      const ox = centerX + Math.cos(angle) * outerTextR;
+      const oy = centerY + Math.sin(angle) * outerTextR;
+      ctx.fillStyle = isQuarter
+        ? '#E52E2E'
+        : isDark
+          ? '#D1D5DB'
+          : '#45444C';
+      ctx.font = isQuarter
+        ? '800 10px -apple-system, sans-serif'
+        : '700 8.5px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label12, ox, oy);
+    }
+
+    // 1. Base 24h Circular Track
     ctx.beginPath();
     ctx.arc(centerX, centerY, dialRadius, 0, Math.PI * 2);
     ctx.lineWidth = arcLineWidth;
     ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.10)' : '#E5E5EA';
     ctx.stroke();
 
-    // 2. Full 24-Hour Clock Ticks & Hour Numbers (0 through 23) inside Outer Bezel Orbit
+    // 2. Inner 24-Hour Clock Ticks & Numbers (0 through 23)
     for (let h = 0; h < 24; h++) {
       const angle = (h / 24) * Math.PI * 2 - Math.PI / 2;
       const isCardinal = h % 6 === 0;
       const isThreeHour = h % 3 === 0;
-      const innerR = 102;
-      const outerR = isCardinal ? 108 : isThreeHour ? 106.5 : 105;
+      const innerR = isCardinal ? 84 : isThreeHour ? 85 : 86;
+      const outerR = 89;
 
       const x1 = centerX + Math.cos(angle) * innerR;
       const y1 = centerY + Math.sin(angle) * innerR;
@@ -491,28 +511,24 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.lineWidth = isCardinal ? 2 : isThreeHour ? 1.4 : 1;
-      ctx.strokeStyle = isCardinal
-        ? '#E52E2E'
-        : isDark
-          ? (isThreeHour ? '#9CA3AF' : '#4B5563')
-          : (isThreeHour ? '#6E6E73' : '#C7C7CC');
+      ctx.lineWidth = isCardinal ? 1.8 : isThreeHour ? 1.3 : 1;
+      ctx.strokeStyle = isDark
+        ? (isCardinal ? '#F5F5F7' : isThreeHour ? '#9CA3AF' : '#4B5563')
+        : (isCardinal ? '#171717' : isThreeHour ? '#6E6E73' : '#C7C7CC');
       ctx.stroke();
 
-      // Render every hour number (0 - 23) cleanly inside outer bezel orbit
-      const textR = 119;
+      // Inner 24h numbers (0 - 23)
+      const textR = 76;
       const tx = centerX + Math.cos(angle) * textR;
       const ty = centerY + Math.sin(angle) * textR;
-      ctx.fillStyle = isCardinal
-        ? '#E52E2E'
-        : isDark
-          ? (isThreeHour ? '#D1D5DB' : '#6B7280')
-          : (isThreeHour ? '#45444C' : '#9CA3AF');
+      ctx.fillStyle = isDark
+        ? (isCardinal ? '#F5F5F7' : isThreeHour ? '#9CA3AF' : '#6B7280')
+        : (isCardinal ? '#171717' : isThreeHour ? '#6E6E73' : '#A1A1A6');
       ctx.font = isCardinal
-        ? '800 9.5px -apple-system, sans-serif'
+        ? '800 8.5px -apple-system, sans-serif'
         : isThreeHour
-          ? '700 8px -apple-system, sans-serif'
-          : '600 7.2px -apple-system, sans-serif';
+          ? '700 7.2px -apple-system, sans-serif'
+          : '600 6.5px -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(h), tx, ty);
@@ -801,8 +817,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const dy = y - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Check if user clicked on the circular dial track (radius 90 ± 20px)
-    if (dist >= 70 && dist <= 110) {
+    // Check if user clicked on the circular dial track (radius 96 ± 20px)
+    if (dist >= 76 && dist <= 116) {
       let angle = Math.atan2(dy, dx) + Math.PI / 2;
       if (angle < 0) angle += Math.PI * 2;
       const clickedHour = (angle / (Math.PI * 2)) * 24;
