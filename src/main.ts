@@ -16,6 +16,7 @@ import { renderQuickCapture } from './components/QuickCapture/QuickCapture';
 import { renderTaskFormModal } from './components/Tasks/TaskForm';
 import { renderTaskList } from './components/Tasks/TaskList';
 import { renderCloudView } from './components/Cloud/CloudView';
+import { renderSettingsView } from './components/Settings/SettingsView';
 import { renderFocusOrbit } from './components/FocusOrbit/FocusOrbit';
 import { sortTasksSmartly, timeStringToFractionalHour } from './components/FocusOrbit/orbitCalculator';
 import { renderDotGraph } from './components/DotGraph/DotGraph';
@@ -37,6 +38,18 @@ async function mountApp(user: AuthUser) {
     console.warn('Migration check skipped:', err);
   });
 
+  const savedCustomName = localStorage.getItem('cerebruv_custom_display_name') || '';
+  const navDisplayName = savedCustomName || user.displayName || user.email || (user.isAnonymous ? 'Guest' : 'User');
+  const navInitials = navDisplayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join('') || 'U';
+  const navProfileAvatarHtml = user.photoURL
+    ? `<img src="${user.photoURL}" alt="${navDisplayName}" class="nav-avatar-img" />`
+    : `<span class="nav-avatar-initials">${navInitials}</span>`;
+
   appContainer.innerHTML = `
   <div class="mobile-container">
     <!-- Header -->
@@ -51,116 +64,6 @@ async function mountApp(user: AuthUser) {
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
           </svg>
         </button>
-        <button class="icon-btn" id="notif-bell-btn" title="Voice, Sound & Alarm Settings" style="width: 30px; height: 30px;">
-          <svg viewBox="0 0 24 24" width="15" height="15">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-        </button>
-
-        <!-- Top Navbar Voice, Sound, Vibration & Popup Settings Popover -->
-        <div class="header-settings-popover" id="header-settings-popover" style="display: none;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-            <span style="font-size: 11px; font-weight: 800; color: var(--color-red-primary); letter-spacing: 0.05em;">CEREBRUV ASSISTANT SETTINGS</span>
-            <button type="button" id="close-header-settings" style="background: none; border: none; font-size: 15px; font-weight: 800; color: var(--color-black-muted); cursor: pointer;">&times;</button>
-          </div>
-
-          <label class="settings-toggle-row">
-            <div>
-              <strong>Talkative Voice Mode</strong>
-              <span>Speak confirmations, 1h/30m reminders & alarms</span>
-            </div>
-            <input type="checkbox" id="pref-voice-talkative" />
-          </label>
-
-          <label class="settings-toggle-row">
-            <div>
-              <strong>Alarm & Action Chimes</strong>
-              <span>Synthesized sound effects on reminders & XP</span>
-            </div>
-            <input type="checkbox" id="pref-sound-chime" />
-          </label>
-
-          <label class="settings-toggle-row">
-            <div>
-              <strong>Vibrate & Haptic Pulse</strong>
-              <span>Device vibration + visual shake on alarms</span>
-            </div>
-            <input type="checkbox" id="pref-vibrate" />
-          </label>
-
-          <label class="settings-toggle-row">
-            <div>
-              <strong>Notification Popups</strong>
-              <span>In-app alarm banner + background OS alerts</span>
-            </div>
-            <input type="checkbox" id="pref-popups" />
-          </label>
-
-          <div style="display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
-            <button type="button" id="test-alarm-popup-btn" style="flex: 1; padding: 7px 10px; border-radius: 999px; border: none; background: var(--color-red-primary); color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
-              Test Alarm & Voice
-            </button>
-            <button type="button" id="req-os-notif-btn" style="padding: 7px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-cream); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
-              Allow OS Alerts
-            </button>
-          </div>
-
-          <!-- Permissions Status & Direct Controls Section -->
-          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
-            <div style="font-size: 11px; font-weight: 800; color: var(--color-red-primary); letter-spacing: 0.05em; margin-bottom: 8px;">
-              SYSTEM PERMISSIONS
-            </div>
-
-            <!-- Notifications Perm Item -->
-            <div class="permission-item-row" style="margin-bottom: 8px; font-size: 11px;">
-              <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div>
-                  <strong style="color: var(--color-black-dominant); display: block;">Notifications</strong>
-                  <span id="perm-status-notif" style="color: var(--color-black-muted); font-size: 10px;">Checking...</span>
-                </div>
-                <button type="button" id="perm-btn-notif" class="pill-badge" style="display: none; cursor: pointer; font-size: 10px; padding: 3px 8px; background: var(--color-red-primary); color: #FAF7F2; border: none;">
-                  Enable
-                </button>
-              </div>
-              <div id="perm-guide-notif" style="display: none; margin-top: 4px; font-size: 10px; color: var(--color-red-primary); line-height: 1.3;">
-                Notifications are blocked. Tap the tune/padlock icon in the address bar &rarr; Site settings &rarr; Allow notifications.
-              </div>
-            </div>
-
-            <!-- Microphone Perm Item -->
-            <div class="permission-item-row" style="margin-bottom: 8px; font-size: 11px;">
-              <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div>
-                  <strong style="color: var(--color-black-dominant); display: block;">Microphone</strong>
-                  <span id="perm-status-mic" style="color: var(--color-black-muted); font-size: 10px;">Checking...</span>
-                </div>
-                <button type="button" id="perm-btn-mic" class="pill-badge" style="display: none; cursor: pointer; font-size: 10px; padding: 3px 8px; background: var(--color-red-primary); color: #FAF7F2; border: none;">
-                  Enable
-                </button>
-              </div>
-              <div id="perm-guide-mic" style="display: none; margin-top: 4px; font-size: 10px; color: var(--color-red-primary); line-height: 1.3;">
-                Microphone is blocked. Tap the tune/padlock icon in the address bar &rarr; Site settings &rarr; Allow microphone.
-              </div>
-            </div>
-
-            <!-- Camera Perm Item -->
-            <div class="permission-item-row" style="font-size: 11px;">
-              <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div>
-                  <strong style="color: var(--color-black-dominant); display: block;">Camera</strong>
-                  <span id="perm-status-cam" style="color: var(--color-black-muted); font-size: 10px;">Checking...</span>
-                </div>
-                <button type="button" id="perm-btn-cam" class="pill-badge" style="display: none; cursor: pointer; font-size: 10px; padding: 3px 8px; background: var(--color-red-primary); color: #FAF7F2; border: none;">
-                  Enable
-                </button>
-              </div>
-              <div id="perm-guide-cam" style="display: none; margin-top: 4px; font-size: 10px; color: var(--color-red-primary); line-height: 1.3;">
-                Camera is blocked. Tap the tune/padlock icon in the address bar &rarr; Site settings &rarr; Allow camera.
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </header>
 
@@ -239,11 +142,8 @@ async function mountApp(user: AuthUser) {
       </button>
 
       <button class="nav-item" data-tab="cloud">
-        <svg class="nav-icon" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-        <span>Cloud</span>
+        ${navProfileAvatarHtml}
+        <span>Profile</span>
       </button>
     </nav>
   </div>
@@ -304,212 +204,9 @@ async function mountApp(user: AuthUser) {
     applyTheme(current === 'obsidian' ? 'clucky' : 'obsidian');
   });
 
-  // Top Navbar Voice, Sound, Vibration & Popup Settings Popover + In-App Alarm Toast
-  const bellBtn = document.querySelector<HTMLButtonElement>('#notif-bell-btn')!;
-  const settingsPopover = document.querySelector<HTMLDivElement>('#header-settings-popover')!;
-  const closeSettingsBtn = document.querySelector<HTMLButtonElement>('#close-header-settings')!;
-  const prefVoiceCheckbox = document.querySelector<HTMLInputElement>('#pref-voice-talkative')!;
-  const prefSoundCheckbox = document.querySelector<HTMLInputElement>('#pref-sound-chime')!;
-  const prefVibrateCheckbox = document.querySelector<HTMLInputElement>('#pref-vibrate')!;
-  const prefPopupsCheckbox = document.querySelector<HTMLInputElement>('#pref-popups')!;
-  const testAlarmBtn = document.querySelector<HTMLButtonElement>('#test-alarm-popup-btn')!;
-  const reqOsNotifBtn = document.querySelector<HTMLButtonElement>('#req-os-notif-btn')!;
+  // In-App Alarm Toast Container & Voice Sync
   const alarmToastContainer = document.querySelector<HTMLDivElement>('#alarm-toast-container')!;
-
-  function syncSettingsPopoverUI() {
-    const prefs = notificationService.getPreferences();
-    const isMuted = voiceService.isMuted();
-    prefVoiceCheckbox.checked = !isMuted;
-    prefSoundCheckbox.checked = prefs.soundChime;
-    prefVibrateCheckbox.checked = prefs.vibrateEnabled;
-    prefPopupsCheckbox.checked = prefs.popupEnabled;
-    bellBtn.style.color = (!isMuted || prefs.soundChime || prefs.popupEnabled)
-      ? 'var(--color-red-primary)'
-      : 'var(--color-black-faint)';
-  }
-
-  // Sync initial voice mute state with saved preferences
   voiceService.setMuted(notificationService.getPreferences().voiceMuted);
-  syncSettingsPopoverUI();
-
-  bellBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const isOpen = settingsPopover.style.display !== 'none';
-    settingsPopover.style.display = isOpen ? 'none' : 'block';
-    syncSettingsPopoverUI();
-  });
-
-  closeSettingsBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    settingsPopover.style.display = 'none';
-  });
-
-  document.addEventListener('click', (e) => {
-    const target = e.target as Node;
-    if (settingsPopover.style.display !== 'none' && !settingsPopover.contains(target) && !bellBtn.contains(target)) {
-      settingsPopover.style.display = 'none';
-    }
-  });
-
-  prefVoiceCheckbox.addEventListener('change', () => {
-    const shouldMute = !prefVoiceCheckbox.checked;
-    voiceService.setMuted(shouldMute);
-    renderVoiceButtonState();
-    syncSettingsPopoverUI();
-    if (!shouldMute) {
-      voiceService.speak('Talkative voice mode enabled, Bruv! I will voice out your confirmations, reminders, and alarms.', true);
-    }
-  });
-
-  prefSoundCheckbox.addEventListener('change', () => {
-    notificationService.updatePreferences({ soundChime: prefSoundCheckbox.checked });
-    syncSettingsPopoverUI();
-    if (prefSoundCheckbox.checked) {
-      notificationService.playAlarmChime('reminder');
-    }
-  });
-
-  prefVibrateCheckbox.addEventListener('change', () => {
-    notificationService.updatePreferences({ vibrateEnabled: prefVibrateCheckbox.checked });
-    syncSettingsPopoverUI();
-    if (prefVibrateCheckbox.checked) {
-      notificationService.triggerVibration([120, 60, 120]);
-    }
-  });
-
-  prefPopupsCheckbox.addEventListener('change', async () => {
-    notificationService.updatePreferences({ popupEnabled: prefPopupsCheckbox.checked });
-    syncSettingsPopoverUI();
-    if (prefPopupsCheckbox.checked) {
-      await notificationService.requestPermission();
-    }
-  });
-
-  reqOsNotifBtn.addEventListener('click', async () => {
-    const granted = await notificationService.requestPermission();
-    if (granted) {
-      reqOsNotifBtn.textContent = 'OS Alerts Active';
-      notificationService.showNotification(
-        'CereBruv Background Alerts Active',
-        'Your 1-hour, 30-minute, and start-time alarms are synced!',
-        true
-      );
-    } else {
-      alert('Browser notifications are blocked. Allow notifications in your browser site settings to receive background alerts.');
-    }
-  });
-
-  // System Permissions Status & Action Handlers
-  const permStatusNotif = document.querySelector<HTMLSpanElement>('#perm-status-notif')!;
-  const permBtnNotif = document.querySelector<HTMLButtonElement>('#perm-btn-notif')!;
-  const permGuideNotif = document.querySelector<HTMLDivElement>('#perm-guide-notif')!;
-
-  const permStatusMic = document.querySelector<HTMLSpanElement>('#perm-status-mic')!;
-  const permBtnMic = document.querySelector<HTMLButtonElement>('#perm-btn-mic')!;
-  const permGuideMic = document.querySelector<HTMLDivElement>('#perm-guide-mic')!;
-
-  const permStatusCam = document.querySelector<HTMLSpanElement>('#perm-status-cam')!;
-  const permBtnCam = document.querySelector<HTMLButtonElement>('#perm-btn-cam')!;
-  const permGuideCam = document.querySelector<HTMLDivElement>('#perm-guide-cam')!;
-
-  type PermState = 'granted' | 'denied' | 'prompt' | 'unknown';
-
-  function applyPermUI(
-    state: PermState,
-    statusEl: HTMLSpanElement,
-    btnEl: HTMLButtonElement,
-    guideEl: HTMLDivElement
-  ) {
-    if (state === 'granted') {
-      statusEl.textContent = '✓ Granted';
-      statusEl.style.color = '#059669';
-      btnEl.style.display = 'none';
-      guideEl.style.display = 'none';
-    } else if (state === 'denied') {
-      statusEl.textContent = '✕ Denied (Blocked)';
-      statusEl.style.color = 'var(--color-red-primary)';
-      btnEl.style.display = 'none';
-      guideEl.style.display = 'block';
-    } else if (state === 'prompt') {
-      statusEl.textContent = 'Not asked';
-      statusEl.style.color = 'var(--color-black-muted)';
-      btnEl.style.display = 'inline-block';
-      btnEl.textContent = 'Request';
-      guideEl.style.display = 'none';
-    } else {
-      statusEl.textContent = 'Unknown';
-      statusEl.style.color = 'var(--color-black-muted)';
-      btnEl.style.display = 'inline-block';
-      btnEl.textContent = 'Check';
-      guideEl.style.display = 'none';
-    }
-  }
-
-  async function updatePermissionsDashboard() {
-    // 1. Notifications
-    let notifState: PermState = 'unknown';
-    if (typeof Notification !== 'undefined') {
-      if (Notification.permission === 'granted') notifState = 'granted';
-      else if (Notification.permission === 'denied') notifState = 'denied';
-      else if (Notification.permission === 'default') notifState = 'prompt';
-    }
-    applyPermUI(notifState, permStatusNotif, permBtnNotif, permGuideNotif);
-
-    // 2. Microphone
-    let micState: PermState = 'unknown';
-    if (navigator?.permissions?.query) {
-      try {
-        const queryRes = await navigator.permissions.query({ name: 'microphone' as any });
-        micState = queryRes.state as PermState;
-        queryRes.onchange = () => updatePermissionsDashboard();
-      } catch {
-        micState = 'unknown';
-      }
-    }
-    applyPermUI(micState, permStatusMic, permBtnMic, permGuideMic);
-
-    // 3. Camera
-    let camState: PermState = 'unknown';
-    if (navigator?.permissions?.query) {
-      try {
-        const queryRes = await navigator.permissions.query({ name: 'camera' as any });
-        camState = queryRes.state as PermState;
-        queryRes.onchange = () => updatePermissionsDashboard();
-      } catch {
-        camState = 'unknown';
-      }
-    }
-    applyPermUI(camState, permStatusCam, permBtnCam, permGuideCam);
-  }
-
-  permBtnNotif.addEventListener('click', async () => {
-    await notificationService.requestPermission();
-    await updatePermissionsDashboard();
-  });
-
-  permBtnMic.addEventListener('click', async () => {
-    if (navigator?.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch {}
-    }
-    await updatePermissionsDashboard();
-  });
-
-  permBtnCam.addEventListener('click', async () => {
-    if (navigator?.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch {}
-    }
-    await updatePermissionsDashboard();
-  });
-
-  bellBtn.addEventListener('click', () => {
-    updatePermissionsDashboard();
-  });
 
   function showAlarmPopupToast(payload: AlarmPopupPayload) {
     if (!notificationService.getPreferences().popupEnabled) return;
@@ -595,8 +292,7 @@ async function mountApp(user: AuthUser) {
     });
   }
 
-  testAlarmBtn.addEventListener('click', () => {
-    settingsPopover.style.display = 'none';
+  function triggerDemoAlarm() {
     notificationService.playAlarmChime('start');
     notificationService.triggerVibration([200, 100, 200]);
     const demoPayload: AlarmPopupPayload = {
@@ -625,15 +321,22 @@ async function mountApp(user: AuthUser) {
       subspeech: demoPayload.spokenText
     });
     voiceService.speak(demoPayload.spokenText);
-  });
+  }
 
   // View Router
   const viewContainer = document.querySelector('#view-container')!;
 
   function switchTab(tab: string) {
+    const navTab = tab === 'settings' ? 'cloud' : tab;
     document.querySelectorAll('.nav-item').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === navTab);
     });
+
+    const isProfileOrSettings = tab === 'cloud' || tab === 'settings';
+    const bannerEl = document.querySelector<HTMLElement>('#mascot-banner');
+    const fabEl = document.querySelector<HTMLElement>('#fab-add-task');
+    if (bannerEl) bannerEl.style.display = isProfileOrSettings ? 'none' : 'flex';
+    if (fabEl) fabEl.style.display = isProfileOrSettings ? 'none' : 'flex';
 
     viewContainer.innerHTML = '';
 
@@ -664,12 +367,22 @@ async function mountApp(user: AuthUser) {
     } else if (tab === 'cloud') {
       viewContainer.appendChild(
         renderCloudView({
+          onOpenSettings: () => switchTab('settings'),
           onUpgradeGuest: () => {
             showAuth(true); // Open in link mode so UID is retained
           },
           onSignOut: () => {
             showAuth(false);
           }
+        })
+      );
+    } else if (tab === 'settings') {
+      viewContainer.appendChild(
+        renderSettingsView({
+          onBack: () => switchTab('cloud'),
+          onTestAlarm: () => triggerDemoAlarm(),
+          onVoiceStateChange: () => renderVoiceButtonState(),
+          onToggleTheme: (mode) => applyTheme(mode),
         })
       );
     }

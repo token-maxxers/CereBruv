@@ -1052,6 +1052,105 @@ html, body {
   box-shadow: 0 2px 8px var(--color-red-glow);
 }
 
+/* Bottom Nav Profile Avatar / Initials Badge */
+.nav-avatar-img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--border-medium);
+  transition: border-color var(--transition-fast);
+}
+
+.nav-avatar-initials {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-surface-elevated);
+  border: 1.5px solid var(--border-medium);
+  color: var(--color-black-dominant);
+  font-family: var(--font-family-display);
+  font-size: 0.62rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-item.active .nav-avatar-img {
+  border-color: var(--color-red-primary);
+}
+
+.nav-item.active .nav-avatar-initials {
+  border-color: var(--color-red-primary);
+  background: var(--color-red-primary);
+  color: #FFFFFF;
+}
+
+/* Option A: 14-Day Momentum Pulse Capsules & Mini Orbit Rings */
+.momentum-grid {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 4px;
+  align-items: end;
+}
+
+.momentum-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.momentum-day:hover,
+.momentum-day.selected {
+  background: var(--bg-surface);
+}
+
+.momentum-day:active {
+  transform: scale(0.94);
+}
+
+.momentum-bar-track {
+  width: 100%;
+  max-width: 12px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 2px;
+}
+
+.momentum-bar-fill {
+  width: 100%;
+  border-radius: var(--radius-full);
+  transition: height 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.momentum-ring {
+  width: 13px;
+  height: 13px;
+}
+
+.momentum-letter {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+}
+
+.momentum-day.is-today .momentum-letter {
+  color: var(--color-red-primary);
+}
+
 .siri-wave-bars {
   display: none;
   align-items: center;
