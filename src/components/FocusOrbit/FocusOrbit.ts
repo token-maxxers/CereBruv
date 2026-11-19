@@ -91,12 +91,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
             <img src="${brainFrameImg}" class="orbit-brain-frame" alt="" aria-hidden="true" />
             <span class="orbit-brain-time" id="center-live-clock">--:--</span>
           </div>
-          <div style="font-family: var(--font-family-display); font-size: 0.92rem; font-weight: 900; color: var(--color-black-dominant); line-height: 1.05; margin-top: 1px;" id="center-busy-hours">0h</div>
-          <div style="display: flex; align-items: center; gap: 3px; font-size: 0.56rem; color: var(--color-black-muted); font-weight: 700;">
-            <span id="center-month-day"></span>
-            <span>&bull;</span>
-            <span id="center-free-time">Free: 16h</span>
-          </div>
+          <div style="font-family: var(--font-family-display); font-size: 0.84rem; font-weight: 900; color: var(--color-black-dominant); line-height: 1.05; margin-top: 1px;" id="center-busy-hours">0h</div>
+          <div style="font-size: 0.58rem; color: var(--color-black-muted); font-weight: 700;" id="center-free-time">Free: 16h</div>
         </div>
 
         <!-- Interactive Arc Popover Card -->
@@ -163,7 +159,6 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
   const prevDayBtn = container.querySelector<HTMLButtonElement>('#prev-day-btn')!;
   const nextDayBtn = container.querySelector<HTMLButtonElement>('#next-day-btn')!;
   const centerLiveClock = container.querySelector<HTMLElement>('#center-live-clock')!;
-  const centerMonthDay = container.querySelector<HTMLElement>('#center-month-day')!;
   const centerBusyHours = container.querySelector<HTMLElement>('#center-busy-hours')!;
   const centerFreeTime = container.querySelector<HTMLElement>('#center-free-time')!;
   const dialRegion = container.querySelector<HTMLElement>('#orbit-dial-region')!;
@@ -189,8 +184,6 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const h12 = h % 12 === 0 ? 12 : h % 12;
     const time12 = `${h12}:${String(m).padStart(2, '0')} ${period}`;
     centerLiveClock.textContent = time12;
-    const targetDate = new Date(selectedDate + 'T00:00:00');
-    centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
   }
   const nextTaskBody = container.querySelector<HTMLElement>('#next-task-body')!;
   const nextTaskTimePill = container.querySelector<HTMLElement>('#next-task-time-pill')!;
