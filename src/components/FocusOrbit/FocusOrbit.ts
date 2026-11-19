@@ -50,7 +50,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
         <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
           <button id="jump-today-btn" class="pill-badge" style="cursor: pointer; display: none; font-size: 0.65rem; padding: 4px 8px;">TODAY</button>
           <div class="orbit-view-switch" role="tablist" aria-label="Schedule view">
-            <button type="button" id="view-btn-orbit" class="orbit-view-btn active" role="tab" aria-selected="true">Orbit</button>
+            <button type="button" id="view-btn-orbit" class="orbit-view-btn active" role="tab" aria-selected="true">Day</button>
             <button type="button" id="view-btn-month" class="orbit-view-btn" role="tab" aria-selected="false">Month</button>
           </div>
         </div>
@@ -86,8 +86,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
         <!-- Center Hub Information (With Real-Time Live Clock) -->
         <div style="position: absolute; width: 132px; height: 132px; border-radius: var(--radius-full); background: var(--bg-surface); box-shadow: var(--shadow-card); border: 1.5px solid var(--border-medium); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; padding: 6px; gap: 1px;">
-          <div style="display: inline-flex; align-items: center; gap: 4px; background: rgba(229, 46, 46, 0.1); border: 1px solid rgba(229, 46, 46, 0.25); padding: 2px 7px; border-radius: 999px; margin-bottom: 1px;">
-            <span style="width: 5px; height: 5px; border-radius: 50%; background: var(--color-red-primary);"></span>
+          <div style="display: inline-flex; align-items: center; justify-content: center; background: rgba(229, 46, 46, 0.1); border: 1px solid rgba(229, 46, 46, 0.25); padding: 2px 9px; border-radius: 999px; margin-bottom: 1px;">
             <span style="font-size: 0.68rem; font-weight: 800; color: var(--color-red-primary); font-variant-numeric: tabular-nums;" id="center-live-clock">--:--:--</span>
           </div>
           <div style="font-size: 0.62rem; font-weight: 700; color: var(--color-black-muted); letter-spacing: 0.03em;" id="center-month-day"></div>
@@ -129,11 +128,11 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       </div>
     </div>
 
-    <!-- Realistic Next Task Card -->
-    <div id="realistic-next-task-container" style="margin-top: var(--spacing-3); background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-left: 4px solid var(--color-red-primary); border-radius: var(--radius-md); padding: var(--spacing-3);">
+    <!-- Next Task Card -->
+    <div id="realistic-next-task-container" style="margin-top: var(--spacing-3); background: var(--color-red-subtle); border: 1px solid rgba(229, 46, 46, 0.16); border-left: 4px solid var(--color-red-primary); border-radius: var(--radius-md); padding: var(--spacing-3);">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; gap: 6px;">
         <span style="font-size: 0.7rem; font-weight: 800; color: var(--color-red-primary); letter-spacing: 0.05em; text-transform: uppercase;">
-          Realistic Next Task
+          Next Task
         </span>
         <div style="display: flex; align-items: center; gap: 6px;">
           <span id="next-task-time-pill" style="font-size: 0.7rem; font-weight: 600; color: var(--color-black-muted);"></span>
@@ -188,7 +187,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const time24 = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     centerLiveClock.textContent = time12;
     const targetDate = new Date(selectedDate + 'T00:00:00');
-    centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()} • ${time24}`;
+    centerMonthDay.textContent = `${targetDate.getMonth() + 1}/${targetDate.getDate()}`;
   }
   const nextTaskBody = container.querySelector<HTMLElement>('#next-task-body')!;
   const nextTaskTimePill = container.querySelector<HTMLElement>('#next-task-time-pill')!;
@@ -384,7 +383,9 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       fullDateEl.textContent = new Date(calendarYear, calendarMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
       renderMonthGrid(allTasks);
     } else {
-      fullDateEl.textContent = targetDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      const weekday = targetDate.toLocaleDateString(undefined, { weekday: 'short' });
+      const dateRest = targetDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      fullDateEl.innerHTML = `<span style="color: var(--color-red-primary);">${weekday}</span>, ${dateRest}`;
     }
     updateLiveDigitalClock();
 
@@ -451,9 +452,22 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
 
     const centerX = size / 2;
     const centerY = size / 2;
-    const dialRadius = 108;
-    const arcLineWidth = 17;
+    const dialRadius = 90;
+    const arcLineWidth = 15;
     const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
+
+    // 0. Outer Red-Tinted Clock Bezel Orbit (contains 24h numbers outside main track)
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 118, 0, Math.PI * 2);
+    ctx.lineWidth = 24;
+    ctx.strokeStyle = isDark ? 'rgba(255, 59, 59, 0.08)' : 'rgba(229, 46, 46, 0.06)';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 130, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = isDark ? 'rgba(255, 59, 59, 0.28)' : 'rgba(229, 46, 46, 0.22)';
+    ctx.stroke();
 
     // 1. Base Circular Track
     ctx.beginPath();
@@ -462,13 +476,13 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.10)' : '#E5E5EA';
     ctx.stroke();
 
-    // 2. Full 24-Hour Clock Ticks & Hour Numbers (0 through 23)
+    // 2. Full 24-Hour Clock Ticks & Hour Numbers (0 through 23) inside Outer Bezel Orbit
     for (let h = 0; h < 24; h++) {
       const angle = (h / 24) * Math.PI * 2 - Math.PI / 2;
       const isCardinal = h % 6 === 0;
       const isThreeHour = h % 3 === 0;
-      const innerR = isCardinal ? dialRadius - 15 : isThreeHour ? dialRadius - 13.5 : dialRadius - 12;
-      const outerR = dialRadius - 9;
+      const innerR = 102;
+      const outerR = isCardinal ? 108 : isThreeHour ? 106.5 : 105;
 
       const x1 = centerX + Math.cos(angle) * innerR;
       const y1 = centerY + Math.sin(angle) * innerR;
@@ -479,18 +493,22 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.lineWidth = isCardinal ? 2 : isThreeHour ? 1.4 : 1;
-      ctx.strokeStyle = isDark
-        ? (isCardinal ? '#F5F5F7' : isThreeHour ? '#9CA3AF' : '#4B5563')
-        : (isCardinal ? '#171717' : isThreeHour ? '#6E6E73' : '#C7C7CC');
+      ctx.strokeStyle = isCardinal
+        ? '#E52E2E'
+        : isDark
+          ? (isThreeHour ? '#9CA3AF' : '#4B5563')
+          : (isThreeHour ? '#6E6E73' : '#C7C7CC');
       ctx.stroke();
 
-      // Render every hour number (0 - 23) around the clock ring
-      const textR = dialRadius - 24;
+      // Render every hour number (0 - 23) cleanly inside outer bezel orbit
+      const textR = 119;
       const tx = centerX + Math.cos(angle) * textR;
       const ty = centerY + Math.sin(angle) * textR;
-      ctx.fillStyle = isDark
-        ? (isCardinal ? '#F5F5F7' : isThreeHour ? '#9CA3AF' : '#6B7280')
-        : (isCardinal ? '#171717' : isThreeHour ? '#6E6E73' : '#A1A1A6');
+      ctx.fillStyle = isCardinal
+        ? '#E52E2E'
+        : isDark
+          ? (isThreeHour ? '#D1D5DB' : '#6B7280')
+          : (isThreeHour ? '#45444C' : '#9CA3AF');
       ctx.font = isCardinal
         ? '800 9.5px -apple-system, sans-serif'
         : isThreeHour
@@ -784,8 +802,8 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const dy = y - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Check if user clicked on the circular dial track (radius 108 ± 22px)
-    if (dist >= 84 && dist <= 130) {
+    // Check if user clicked on the circular dial track (radius 90 ± 20px)
+    if (dist >= 70 && dist <= 110) {
       let angle = Math.atan2(dy, dx) + Math.PI / 2;
       if (angle < 0) angle += Math.PI * 2;
       const clickedHour = (angle / (Math.PI * 2)) * 24;
