@@ -38,7 +38,7 @@ html, body {
   border-left: none;
   border-right: none;
   position: relative;
-  padding-bottom: 98px; /* Space for floating pill nav */
+  padding-bottom: 16px;
 }
 
 /* App Header */
@@ -731,10 +731,9 @@ html, body {
 
 /* Floating Pill Bottom Navigation */
 .bottom-nav {
-  position: fixed;
+  position: sticky;
   bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  margin: 12px auto 0;
   width: calc(100% - 28px);
   max-width: calc(var(--max-width-mobile) - 28px);
   height: 66px;
