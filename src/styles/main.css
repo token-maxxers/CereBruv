@@ -680,58 +680,76 @@ html, body {
   box-shadow: 0 0 0 3px var(--color-red-glow), 0 8px 20px var(--color-red-glow);
 }
 
+/* Center Bottom-Nav Snap Camera Button */
+.nav-lens-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  gap: 2px;
+  color: var(--color-red-primary);
+  font-size: 0.66rem;
+  font-weight: 800;
+  outline: none;
+}
+
+.nav-lens-item:focus-visible .nav-lens-circle {
+  box-shadow: 0 0 0 3px var(--color-red-glow), 0 6px 16px var(--color-red-glow);
+}
+
 .nav-lens-circle {
-  width: 60px;
-  height: 60px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   overflow: hidden;
+  padding: 7px;
   background: #EC0B0B;
-  border: 4px solid var(--bg-primary);
-  box-shadow: 0 6px 18px var(--color-red-glow);
+  box-shadow: 0 4px 14px var(--color-red-glow);
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: translateY(-10px);
   flex-shrink: 0;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-theme);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .nav-lens-item:hover .nav-lens-circle {
-  transform: translateY(-12px) scale(1.05);
+  transform: scale(1.06);
 }
 
 .nav-lens-item:active .nav-lens-circle {
-  transform: translateY(-8px) scale(0.95);
+  transform: scale(0.94);
 }
 
 .nav-lens-circle img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-  transform: scale(1.12);
+  object-fit: contain;
   display: block;
 }
 
-/* Bottom Navigation */
+/* Floating Pill Bottom Navigation */
 .bottom-nav {
   position: fixed;
-  bottom: 0;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
-  width: 100%;
-  max-width: var(--max-width-mobile);
+  width: calc(100% - 28px);
+  max-width: calc(var(--max-width-mobile) - 28px);
   height: 66px;
-  background-color: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border-subtle);
+  background-color: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: space-around;
   z-index: 100;
-  padding: 0 var(--spacing-2);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  padding: 0 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.09);
+  transition: background-color var(--transition-theme), border-color var(--transition-theme);
 }
 
 .nav-item {
@@ -739,15 +757,15 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   background: none;
   border: none;
   color: var(--color-black-faint);
-  font-size: var(--font-size-xs);
+  font-size: 0.66rem;
   font-weight: 700;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  border-radius: var(--radius-full);
   transition: all var(--transition-fast);
 }
 
@@ -757,6 +775,7 @@ html, body {
 
 .nav-item.active {
   color: var(--color-red-primary);
+  background: var(--bg-surface-elevated);
 }
 
 .nav-item.active .nav-icon {
