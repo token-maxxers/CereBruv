@@ -381,12 +381,13 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const centerY = size / 2;
     const dialRadius = 108;
     const arcLineWidth = 17;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
 
     // 1. Base Circular Track
     ctx.beginPath();
     ctx.arc(centerX, centerY, dialRadius, 0, Math.PI * 2);
     ctx.lineWidth = arcLineWidth;
-    ctx.strokeStyle = '#EAE2D5';
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.10)' : '#E5E5EA';
     ctx.stroke();
 
     // 2. Full 24-Hour Clock Ticks & Hour Numbers (0 through 23)
@@ -406,14 +407,18 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.lineWidth = isCardinal ? 2 : isThreeHour ? 1.4 : 1;
-      ctx.strokeStyle = isCardinal ? '#121216' : isThreeHour ? '#5E5D67' : '#B6ADA0';
+      ctx.strokeStyle = isDark
+        ? (isCardinal ? '#F5F5F7' : isThreeHour ? '#9CA3AF' : '#4B5563')
+        : (isCardinal ? '#171717' : isThreeHour ? '#6E6E73' : '#C7C7CC');
       ctx.stroke();
 
       // Render every hour number (0 - 23) around the clock ring
       const textR = dialRadius - 24;
       const tx = centerX + Math.cos(angle) * textR;
       const ty = centerY + Math.sin(angle) * textR;
-      ctx.fillStyle = isCardinal ? '#121216' : isThreeHour ? '#45444C' : '#857E73';
+      ctx.fillStyle = isDark
+        ? (isCardinal ? '#F5F5F7' : isThreeHour ? '#9CA3AF' : '#6B7280')
+        : (isCardinal ? '#171717' : isThreeHour ? '#6E6E73' : '#A1A1A6');
       ctx.font = isCardinal
         ? '800 9.5px -apple-system, sans-serif'
         : isThreeHour
@@ -489,7 +494,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     c.lineCap = 'round';
 
     if (seg.completed) {
-      c.strokeStyle = '#A89F91';
+      c.strokeStyle = document.documentElement.getAttribute('data-theme') === 'obsidian' ? '#6B7280' : '#A89F91';
       c.globalAlpha = 0.4;
       c.stroke();
       c.globalAlpha = 1.0;
@@ -677,6 +682,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       drawOrbit();
     }
   });
+  window.addEventListener('cerebruv-theme-change', () => drawOrbit());
 
   // Real-time 1-second live clock ticker + 15-second orbit needle redraw & midnight rollover
   let lastKnownToday = getTodayString();

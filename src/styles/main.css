@@ -17,6 +17,7 @@ html, body {
   line-height: 1.5;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background-color var(--transition-theme), color var(--transition-theme);
 }
 
 #app {
@@ -137,6 +138,7 @@ html, body {
 /* Unified Mascot & Command Hub Card */
 .mascot-banner {
   position: relative;
+  overflow: hidden;
   margin: var(--spacing-3) var(--spacing-4);
   padding: var(--spacing-3) var(--spacing-4);
   background-color: var(--bg-surface);
@@ -150,8 +152,24 @@ html, body {
   transition:
     padding 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.38s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.38s ease,
+    background var(--transition-theme),
     border-color 0.38s ease;
+}
+
+.mascot-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 70% at 50% -10%, rgba(229, 46, 46, 0.08), transparent 65%);
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.38s ease;
+}
+
+.mascot-banner.expanded::before,
+.mascot-banner.siri-active::before {
+  background: radial-gradient(120% 80% at 50% -5%, rgba(229, 46, 46, 0.14), rgba(245, 158, 11, 0.06) 45%, transparent 72%);
+  opacity: 1;
 }
 
 .mascot-top-row {
@@ -166,8 +184,8 @@ html, body {
 .mascot-banner.expanded {
   padding: var(--spacing-5) var(--spacing-4) var(--spacing-4) var(--spacing-4);
   background: var(--bg-surface);
-  border-color: rgba(229, 46, 46, 0.25);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+  border-color: var(--border-subtle);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.07);
 }
 
 .mascot-banner.expanded .mascot-top-row {
@@ -220,14 +238,17 @@ html, body {
 }
 
 .mascot-banner.expanded .mascot-speech strong {
-  color: var(--color-red-primary);
-  font-size: var(--font-size-base);
+  font-family: var(--font-family-display);
+  color: var(--color-black-dominant);
+  font-size: var(--font-size-lg);
+  font-weight: 900;
+  letter-spacing: -0.02em;
 }
 
 .mascot-banner.expanded .mascot-speech span {
-  color: var(--color-red-primary);
-  opacity: 0.88;
-  font-weight: 600;
+  color: var(--color-black-muted);
+  opacity: 1;
+  font-weight: 500;
 }
 
 /* Quick Capture Bar (Nested Inside Unified Mascot Card) */
@@ -320,6 +341,19 @@ html, body {
   border-radius: var(--radius-lg);
   padding: var(--spacing-4);
   box-shadow: var(--shadow-card);
+  transition: background-color var(--transition-theme), border-color var(--transition-theme), box-shadow var(--transition-theme);
+  animation: card-rise 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .section-header {
@@ -370,7 +404,7 @@ html, body {
 }
 
 .task-item:hover {
-  background: #EFEFF2;
+  background: var(--bg-surface-hover);
   transform: translateY(-1px);
 }
 
@@ -725,7 +759,7 @@ html, body {
   stroke-linejoin: round;
 }
 
-/* CereBruv Siri-Style Avatar Voice Orb (Rotating Halo Strictly Behind Logo) */
+/* CereBruv Seamless Neural Aura Orb (No Hard Circle Cutout) */
 .siri-avatar-orb {
   position: relative;
   width: 58px;
@@ -753,13 +787,14 @@ html, body {
   object-fit: contain;
   position: relative;
   z-index: 3;
+  filter: drop-shadow(0 6px 14px rgba(229, 46, 46, 0.16));
   transition:
     width 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     height 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.25s ease;
 }
 
-/* When container is expanded, avatar centers and grows larger */
+/* When container is expanded, avatar centers, grows, and gently floats */
 .mascot-banner.expanded .siri-avatar-orb {
   width: 96px;
   height: 96px;
@@ -768,53 +803,48 @@ html, body {
 .mascot-banner.expanded .siri-avatar-orb img {
   width: 78px;
   height: 78px;
+  animation: mascot-float 3.4s ease-in-out infinite;
 }
 
-/* Layer 1 (z-index: 1): Rotating Conic Light Halo Strictly in the Back */
+@keyframes mascot-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Layer 1 (z-index: 1): Seamless Radial-Masked Coral-Amber Mesh Aura */
 .siri-avatar-orb::before {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -24px;
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
-    #E52E2E 0deg,
-    #F59E0B 70deg,
-    #FDE68A 130deg,
-    #EC4899 200deg,
-    #6366F1 275deg,
-    #FB7185 325deg,
-    #E52E2E 360deg
+    rgba(229, 46, 46, 0.42) 0deg,
+    rgba(245, 158, 11, 0.34) 90deg,
+    rgba(251, 113, 133, 0.36) 180deg,
+    rgba(249, 115, 22, 0.30) 270deg,
+    rgba(229, 46, 46, 0.42) 360deg
   );
-  filter: blur(10px);
+  filter: blur(22px);
+  -webkit-mask-image: radial-gradient(circle, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.45) 42%, transparent 72%);
+  mask-image: radial-gradient(circle, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.45) 42%, transparent 72%);
   opacity: 0;
   pointer-events: none;
   z-index: 1;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.4s ease;
 }
 
-/* Layer 2 (z-index: 2): Solid Cream Inner Shield so NO light or hue bleeds in front of the logo */
+/* No solid ::after cutout — mascot floats directly in the seamless glow */
 .siri-avatar-orb::after {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  background: var(--bg-surface);
-  pointer-events: none;
-  z-index: 2;
-  transition: background 0.35s ease;
+  display: none;
 }
 
-.mascot-banner.expanded .siri-avatar-orb::after {
-  background: var(--bg-surface);
-}
-
-/* Show & spin the circular light aura behind the logo when expanded, listening, speaking, or typing */
+/* Show & spin the seamless light aura behind the logo when expanded, listening, or speaking */
 .mascot-banner.expanded .siri-avatar-orb::before,
 .siri-avatar-orb.listening::before,
 .siri-avatar-orb.speaking::before {
-  opacity: 0.85;
-  animation: siri-orbit-spin 2.4s linear infinite;
+  opacity: 0.9;
+  animation: siri-orbit-spin 4s linear infinite;
 }
 
 .siri-avatar-orb.listening {
@@ -843,8 +873,44 @@ html, body {
 }
 
 .mascot-banner.siri-active {
-  background: linear-gradient(160deg, var(--bg-surface) 0%, #FAF3EE 100%);
-  box-shadow: 0 8px 26px rgba(229, 46, 46, 0.14);
+  background: var(--bg-surface);
+  box-shadow: 0 12px 32px rgba(229, 46, 46, 0.16);
+}
+
+/* Obsidian Dark Glass Overrides */
+[data-theme="obsidian"] .app-header {
+  background-color: rgba(13, 14, 20, 0.82);
+  border-bottom-color: var(--border-subtle);
+}
+
+[data-theme="obsidian"] .bottom-nav {
+  background-color: rgba(13, 14, 20, 0.88);
+  border-top-color: var(--border-subtle);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="obsidian"] .mascot-banner::before {
+  background: radial-gradient(120% 80% at 50% -10%, rgba(255, 59, 59, 0.18), transparent 68%);
+}
+
+[data-theme="obsidian"] .mascot-banner.expanded {
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.6), 0 0 28px rgba(255, 59, 59, 0.12);
+}
+
+[data-theme="obsidian"] .tag-study { background: rgba(99, 102, 241, 0.22); color: #A5B4FC; }
+[data-theme="obsidian"] .tag-work { background: rgba(20, 184, 166, 0.22); color: #5EEAD4; }
+[data-theme="obsidian"] .tag-personal { background: rgba(249, 115, 22, 0.22); color: #FDBA74; }
+[data-theme="obsidian"] .tag-event { background: rgba(236, 72, 153, 0.22); color: #F9A8D4; }
+[data-theme="obsidian"] .tag-rest { background: rgba(168, 85, 247, 0.22); color: #D8B4FE; }
+
+.theme-toggle-btn {
+  width: 30px;
+  height: 30px;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.theme-toggle-btn:active {
+  transform: rotate(22deg) scale(0.92);
 }
 
 .siri-wave-bars {

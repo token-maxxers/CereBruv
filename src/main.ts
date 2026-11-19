@@ -48,6 +48,11 @@ async function mountApp(user: AuthUser) {
         </div>
       </div>
       <div class="status-badge-group" style="position: relative;">
+        <button class="icon-btn theme-toggle-btn" id="theme-toggle-btn" title="Switch Clucky Light / Obsidian Dark Mode" aria-label="Toggle theme" style="width: 30px; height: 30px;">
+          <svg id="theme-toggle-icon" viewBox="0 0 24 24" width="15" height="15">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
         <button class="icon-btn" id="notif-bell-btn" title="Voice, Sound & Alarm Settings" style="width: 30px; height: 30px;">
           <svg viewBox="0 0 24 24" width="15" height="15">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -275,6 +280,34 @@ async function mountApp(user: AuthUser) {
   const fabBtn = document.querySelector('#fab-add-task')!;
   fabBtn.addEventListener('click', () => {
     taskFormModal.open(currentSelectedDate);
+  });
+
+  // Top Navbar 1-Tap Theme Toggle (Clucky Light <-> Obsidian Neural Glass)
+  const themeToggleBtn = document.querySelector<HTMLButtonElement>('#theme-toggle-btn')!;
+  const themeToggleIcon = document.querySelector<SVGElement>('#theme-toggle-icon')!;
+
+  function applyTheme(mode: 'clucky' | 'obsidian') {
+    if (mode === 'obsidian') {
+      document.documentElement.setAttribute('data-theme', 'obsidian');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0B0C10');
+      themeToggleIcon.innerHTML = `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
+      themeToggleBtn.style.color = '#FBBF24';
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#EDEDED');
+      themeToggleIcon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+      themeToggleBtn.style.color = 'var(--color-black-soft)';
+    }
+    localStorage.setItem('cerebruv_theme', mode);
+    window.dispatchEvent(new CustomEvent('cerebruv-theme-change', { detail: { mode } }));
+  }
+
+  const savedTheme = localStorage.getItem('cerebruv_theme') === 'obsidian' ? 'obsidian' : 'clucky';
+  applyTheme(savedTheme);
+
+  themeToggleBtn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') === 'obsidian' ? 'obsidian' : 'clucky';
+    applyTheme(current === 'obsidian' ? 'clucky' : 'obsidian');
   });
 
   // Top Navbar Voice, Sound, Vibration & Popup Settings Popover + In-App Alarm Toast

@@ -56,7 +56,36 @@
   /* Transitions */
   --transition-fast: 0.16s cubic-bezier(0.22, 1, 0.36, 1);
   --transition-normal: 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-theme: 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Layout */
   --max-width-mobile: 440px;
+}
+
+/* ==========================================================================
+   Obsidian Neural Glass Mode (1-Tap Header Toggle)
+   ========================================================================== */
+[data-theme="obsidian"] {
+  --bg-primary: #0B0C10;
+  --bg-surface: rgba(20, 22, 30, 0.88);
+  --bg-surface-elevated: rgba(31, 34, 46, 0.92);
+  --bg-surface-hover: rgba(44, 48, 64, 0.96);
+
+  --color-red-primary: #FF3B3B;
+  --color-red-deep: #DC2626;
+  --color-red-glow: rgba(255, 59, 59, 0.32);
+  --color-red-subtle: rgba(255, 59, 59, 0.12);
+
+  --color-black-dominant: #F5F5F7;
+  --color-black-soft: #D1D5DB;
+  --color-black-muted: #9CA3AF;
+  --color-black-faint: #6B7280;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.15);
+  --border-focus: #FF3B3B;
+  --border-dark: #F5F5F7;
+
+  --shadow-subtle: 0 2px 10px rgba(0, 0, 0, 0.38);
+  --shadow-card: 0 12px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
