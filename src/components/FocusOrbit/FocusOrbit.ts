@@ -455,38 +455,56 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const arcLineWidth = 14;
     const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
 
-    // 0. Outer Crimson-Tinted Clock Bezel (Typical 12-hour clock numbers: 12, 1..11)
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 121, 0, Math.PI * 2);
-    ctx.lineWidth = 20;
-    ctx.strokeStyle = isDark ? 'rgba(255, 59, 59, 0.08)' : 'rgba(229, 46, 46, 0.06)';
-    ctx.stroke();
+    // 0. Outer Day-Phase Bezel (Night / Morning / Afternoon / Evening) aligned with 24h ring
+    const phases = [
+      { label: 'NIGHT', startH: 0, endH: 6, color: isDark ? 'rgba(148, 163, 184, 0.10)' : 'rgba(100, 116, 139, 0.08)', textColor: isDark ? '#94A3B8' : '#64748B', flip: false },
+      { label: 'MORNING', startH: 6, endH: 12, color: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.09)', textColor: isDark ? '#FBBF24' : '#B45309', flip: true },
+      { label: 'AFTERNOON', startH: 12, endH: 18, color: isDark ? 'rgba(255, 59, 59, 0.12)' : 'rgba(229, 46, 46, 0.08)', textColor: isDark ? '#FB7185' : '#E52E2E', flip: true },
+      { label: 'EVENING', startH: 18, endH: 24, color: isDark ? 'rgba(99, 102, 241, 0.14)' : 'rgba(99, 102, 241, 0.08)', textColor: isDark ? '#A5B4FC' : '#4F46E5', flip: false },
+    ];
 
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 131, 0, Math.PI * 2);
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = isDark ? 'rgba(255, 59, 59, 0.28)' : 'rgba(229, 46, 46, 0.22)';
-    ctx.stroke();
+    const bezelR = 121;
+    phases.forEach((p) => {
+      const aStart = (p.startH / 24) * Math.PI * 2 - Math.PI / 2 + 0.03;
+      const aEnd = (p.endH / 24) * Math.PI * 2 - Math.PI / 2 - 0.03;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, bezelR, aStart, aEnd);
+      ctx.lineWidth = 20;
+      ctx.lineCap = 'butt';
+      ctx.strokeStyle = p.color;
+      ctx.stroke();
 
-    for (let h12 = 0; h12 < 12; h12++) {
-      const angle = (h12 / 12) * Math.PI * 2 - Math.PI / 2;
-      const isQuarter = h12 % 3 === 0;
-      const label12 = h12 === 0 ? '12' : String(h12);
-      const outerTextR = 121;
-      const ox = centerX + Math.cos(angle) * outerTextR;
-      const oy = centerY + Math.sin(angle) * outerTextR;
-      ctx.fillStyle = isQuarter
-        ? '#E52E2E'
-        : isDark
-          ? '#D1D5DB'
-          : '#45444C';
-      ctx.font = isQuarter
-        ? '800 10px -apple-system, sans-serif'
-        : '700 8.5px -apple-system, sans-serif';
+      // Draw curved phase label centered along its 6h arc
+      const chars = p.label.split('');
+      const midAngle = ((p.startH + p.endH) / 2 / 24) * Math.PI * 2 - Math.PI / 2;
+      const stepAngle = 0.072;
+      const ordered = p.flip ? [...chars].reverse() : chars;
+      const totalSpan = (ordered.length - 1) * stepAngle;
+
+      ctx.save();
+      ctx.font = '800 7.5px -apple-system, sans-serif';
+      ctx.fillStyle = p.textColor;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label12, ox, oy);
-    }
+      ordered.forEach((ch, idx) => {
+        const charAngle = midAngle - totalSpan / 2 + idx * stepAngle;
+        const cxChar = centerX + Math.cos(charAngle) * bezelR;
+        const cyChar = centerY + Math.sin(charAngle) * bezelR;
+        ctx.save();
+        ctx.translate(cxChar, cyChar);
+        ctx.rotate(charAngle + (p.flip ? -Math.PI / 2 : Math.PI / 2));
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+      });
+      ctx.restore();
+    });
+
+    // Subtle outer rim border
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 131, 0, Math.PI * 2);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.07)';
+    ctx.stroke();
 
     // 1. Base 24h Circular Track
     ctx.beginPath();
@@ -565,16 +583,6 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       ctx.arc(centerX + Math.cos(currentAngle) * needleR, centerY + Math.sin(currentAngle) * needleR, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = '#E52E2E';
       ctx.fill();
-
-      // Draw live time label next to needle tip so user can see exact time on the ring
-      const tipX = centerX + Math.cos(currentAngle) * (needleR + 13);
-      const tipY = centerY + Math.sin(currentAngle) * (needleR + 13);
-      const nowTime24 = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      ctx.font = '800 8.5px -apple-system, sans-serif';
-      ctx.fillStyle = '#E52E2E';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(nowTime24, Math.max(18, Math.min(size - 18, tipX)), Math.max(10, Math.min(size - 10, tipY)));
     }
   }
 
