@@ -18,6 +18,14 @@ export interface SavedLink {
   kind: 'qr' | 'url' | 'email';
 }
 
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -34,6 +42,7 @@ export interface Task {
   notes?: string;
   photoUrl?: string;
   links?: SavedLink[];
+  attachments?: TaskAttachment[];
   createdAt: number; // Unix timestamp
   updatedAt: number;
 }

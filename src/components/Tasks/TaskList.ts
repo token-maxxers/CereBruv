@@ -254,6 +254,12 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
     const el = document.createElement('div');
     el.className = `task-item ${task.completed ? 'completed' : ''}`;
     el.id = `task-item-${task.id}`;
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, input, .task-checkbox')) return;
+      onOpenForm(task.date, task);
+    });
 
     const isNoteItem = task.id.startsWith('note_as_task_');
     const realNoteId = isNoteItem ? task.id.replace('note_as_task_', '') : null;
