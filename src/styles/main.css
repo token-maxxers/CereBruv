@@ -780,7 +780,7 @@ html, body {
 
 .nav-item.active {
   color: var(--color-red-primary);
-  background: var(--bg-surface-elevated);
+  background: transparent;
 }
 
 .nav-item.active .nav-icon {
