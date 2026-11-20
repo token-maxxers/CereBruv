@@ -348,6 +348,12 @@ html, body {
   gap: var(--spacing-4);
 }
 
+.tab-panel-keepalive {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
 /* Section Cards */
 .card-section {
   background-color: var(--bg-surface);

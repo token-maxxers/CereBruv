@@ -873,6 +873,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       clearInterval(liveClockTimer);
       return;
     }
+    if (container.offsetParent === null) return; // Pause 1s tick when tab is hidden
     updateLiveDigitalClock();
     const now = new Date();
     const currentToday = getTodayString();

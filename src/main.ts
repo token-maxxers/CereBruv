@@ -359,9 +359,9 @@ async function mountApp(user: AuthUser) {
   let activeTabName = 'orbit';
 
   const markDataTabsDirty = () => {
-    ['orbit', 'tasks', 'thoughts', 'graph', 'cloud'].forEach(t => {
-      if (t !== activeTabName) dirtyTabs.add(t);
-    });
+    // Orbit, Tasks, Thoughts, and Graph already self-update via eventBus without rebuilding DOM;
+    // only Profile ('cloud') needs a dirty rebuild on data/stats changes.
+    if (activeTabName !== 'cloud') dirtyTabs.add('cloud');
   };
 
   [
@@ -442,7 +442,7 @@ async function mountApp(user: AuthUser) {
     if (bannerEl) bannerEl.style.display = isProfileOrSettings ? 'none' : 'flex';
 
     tabPanels.forEach((p, key) => {
-      p.style.display = key === tab ? 'block' : 'none';
+      p.style.display = key === tab ? 'flex' : 'none';
     });
 
     let panel = tabPanels.get(tab);

@@ -445,6 +445,7 @@ export function renderTaskList(onOpenForm: (date?: string, editTask?: Task) => v
   eventBus.on(AppEvents.TASK_DELETED, () => loadTasks());
   eventBus.on(AppEvents.NOTE_CREATED, () => loadTasks());
   eventBus.on(AppEvents.NOTE_UPDATED, () => loadTasks());
+  eventBus.on(AppEvents.NOTE_DELETED, () => loadTasks());
   eventBus.on(AppEvents.DATE_SELECTED, (newDate: string) => {
     if (newDate) {
       activeDate = newDate;
