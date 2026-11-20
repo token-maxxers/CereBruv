@@ -17,6 +17,7 @@ html, body {
   line-height: 1.5;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background-color var(--transition-theme), color var(--transition-theme);
 }
 
 #app {
@@ -34,10 +35,10 @@ html, body {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
-  border-left: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
+  border-left: none;
+  border-right: none;
   position: relative;
-  padding-bottom: 90px; /* Space for bottom nav & FAB */
+  padding-bottom: 16px;
 }
 
 /* App Header */
@@ -47,11 +48,13 @@ html, body {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-subtle);
-  background-color: var(--bg-surface);
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 50;
-  box-shadow: var(--shadow-subtle);
+  box-shadow: none;
 }
 
 .brand-section {
@@ -61,11 +64,18 @@ html, body {
 }
 
 .brand-logo {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-sm);
   object-fit: contain;
   flex-shrink: 0;
+}
+
+.brand-wordmark {
+  height: 24px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .brand-titles {
@@ -74,8 +84,9 @@ html, body {
 }
 
 .brand-name {
+  font-family: var(--font-family-display);
   font-size: var(--font-size-xl);
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: -0.03em;
   color: var(--color-black-dominant);
   line-height: 1.1;
@@ -102,12 +113,13 @@ html, body {
   display: flex;
   align-items: center;
   gap: var(--spacing-1);
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: var(--radius-full);
   background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-medium);
+  border: 1px solid transparent;
+  font-family: var(--font-family-display);
   font-size: var(--font-size-xs);
-  font-weight: 700;
+  font-weight: 800;
   color: var(--color-black-soft);
   transition: all var(--transition-fast);
   cursor: pointer;
@@ -116,6 +128,10 @@ html, body {
 .pill-badge:hover {
   background: var(--bg-surface-hover);
   color: var(--color-black-dominant);
+}
+
+.pill-badge:active {
+  transform: scale(0.95);
 }
 
 .pill-badge.active,
@@ -129,7 +145,7 @@ html, body {
 /* Unified Mascot & Command Hub Card */
 .mascot-banner {
   position: relative;
-  margin: var(--spacing-3) var(--spacing-4);
+  margin: var(--spacing-4) var(--spacing-4) 0;
   padding: var(--spacing-3) var(--spacing-4);
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -142,8 +158,26 @@ html, body {
   transition:
     padding 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.38s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.38s ease,
+    background var(--transition-theme),
     border-color 0.38s ease;
+}
+
+.mascot-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background: radial-gradient(120% 70% at 50% -10%, rgba(229, 46, 46, 0.08), transparent 65%);
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.38s ease;
+}
+
+.mascot-banner.expanded::before,
+.mascot-banner.siri-active::before {
+  background: radial-gradient(120% 80% at 50% -5%, rgba(229, 46, 46, 0.14), rgba(245, 158, 11, 0.06) 45%, transparent 72%);
+  opacity: 1;
 }
 
 .mascot-top-row {
@@ -157,9 +191,9 @@ html, body {
 
 .mascot-banner.expanded {
   padding: var(--spacing-5) var(--spacing-4) var(--spacing-4) var(--spacing-4);
-  background: linear-gradient(160deg, var(--bg-surface) 0%, #FAF0EC 100%);
-  border-color: rgba(229, 46, 46, 0.32);
-  box-shadow: 0 10px 28px rgba(229, 46, 46, 0.14);
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.07);
 }
 
 .mascot-banner.expanded .mascot-top-row {
@@ -212,26 +246,36 @@ html, body {
 }
 
 .mascot-banner.expanded .mascot-speech strong {
-  color: var(--color-red-primary);
-  font-size: var(--font-size-base);
+  font-family: var(--font-family-display);
+  color: var(--color-black-dominant);
+  font-size: var(--font-size-lg);
+  font-weight: 900;
+  letter-spacing: -0.02em;
 }
 
 .mascot-banner.expanded .mascot-speech span {
-  color: var(--color-red-primary);
-  opacity: 0.88;
-  font-weight: 600;
+  color: var(--color-black-muted);
+  opacity: 1;
+  font-weight: 500;
 }
 
 /* Quick Capture Bar (Nested Inside Unified Mascot Card) */
 .quick-capture-container {
   margin: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 6px var(--spacing-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: 6px 8px 6px 14px;
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.quick-capture-container:focus-within {
+  background: var(--bg-surface);
+  border-color: var(--color-red-primary);
+  box-shadow: 0 0 0 3px var(--color-red-subtle);
 }
 
 .quick-capture-input {
@@ -292,7 +336,19 @@ html, body {
 /* Content Area */
 .main-content {
   flex: 1;
-  padding: 0 var(--spacing-4) var(--spacing-4) var(--spacing-4);
+  padding: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+#view-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.tab-panel-keepalive {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-4);
@@ -305,6 +361,19 @@ html, body {
   border-radius: var(--radius-lg);
   padding: var(--spacing-4);
   box-shadow: var(--shadow-card);
+  transition: background-color var(--transition-theme), border-color var(--transition-theme), box-shadow var(--transition-theme);
+  animation: card-rise 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .section-header {
@@ -315,10 +384,11 @@ html, body {
 }
 
 .section-title {
-  font-size: var(--font-size-base);
-  font-weight: 700;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: 900;
   color: var(--color-black-dominant);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.025em;
 }
 
 .section-action {
@@ -346,16 +416,16 @@ html, body {
   display: flex;
   align-items: center;
   gap: var(--spacing-3);
-  padding: var(--spacing-3);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  padding: 12px 14px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 
 .task-item:hover {
-  border-color: var(--border-medium);
-  box-shadow: var(--shadow-subtle);
+  background: var(--bg-surface-hover);
+  transform: translateY(-1px);
 }
 
 .task-item.completed {
@@ -470,14 +540,19 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 18px;
+  padding: 11px 20px;
+  font-family: var(--font-family-display);
   font-size: var(--font-size-sm);
-  font-weight: 700;
-  border-radius: var(--radius-md);
+  font-weight: 800;
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--transition-fast);
   border: 1px solid transparent;
   gap: var(--spacing-2);
+}
+
+.btn:active {
+  transform: scale(0.97);
 }
 
 .btn-primary {
@@ -492,7 +567,7 @@ html, body {
 .btn-secondary {
   background-color: var(--bg-surface-elevated);
   color: var(--color-black-dominant);
-  border-color: var(--border-medium);
+  border-color: transparent;
 }
 
 .btn-secondary:hover {
@@ -549,8 +624,10 @@ html, body {
 }
 
 .modal-title {
-  font-size: var(--font-size-lg);
-  font-weight: 800;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  font-weight: 900;
+  letter-spacing: -0.025em;
   color: var(--color-black-dominant);
 }
 
@@ -580,18 +657,19 @@ html, body {
 
 .form-input, .form-select, .form-textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 14px;
   background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-medium);
+  border: 1.5px solid transparent;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   color: var(--color-black-dominant);
   font-family: inherit;
   outline: none;
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .form-input:focus, .form-select:focus, .form-textarea:focus {
+  background: var(--bg-surface);
   border-color: var(--color-red-primary);
 }
 
@@ -601,63 +679,88 @@ html, body {
   gap: var(--spacing-3);
 }
 
-/* Floating Action Button (+ Add Task) */
-.fab-btn {
-  position: fixed;
-  bottom: 76px;
-  right: calc(50% - (var(--max-width-mobile) / 2) + var(--spacing-4));
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-full);
-  background: var(--color-red-primary);
-  color: #FFFFFF;
-  border: none;
+/* Center Bottom-Nav Snap Camera Button */
+.nav-lens-item {
+  position: relative;
+  padding: 0 8px 6px;
+  gap: 2px;
+  color: var(--color-red-primary);
+  outline: none;
+}
+
+.nav-lens-item:focus-visible .nav-lens-circle {
+  box-shadow: 0 0 0 3px var(--color-red-glow), 0 8px 20px var(--color-red-glow);
+}
+
+/* Center Bottom-Nav Snap Camera Button */
+.nav-lens-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  gap: 2px;
+  color: var(--color-red-primary);
+  font-size: 0.66rem;
+  font-weight: 800;
+  outline: none;
+}
+
+.nav-lens-item:focus-visible .nav-lens-circle {
+  box-shadow: 0 0 0 3px var(--color-red-glow), 0 6px 16px var(--color-red-glow);
+}
+
+.nav-lens-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  padding: 7px;
+  background: #EC0B0B;
   box-shadow: 0 4px 14px var(--color-red-glow);
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  z-index: 90;
-  transition: transform var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-@media (max-width: 440px) {
-  .fab-btn {
-    right: var(--spacing-4);
-  }
+.nav-lens-item:hover .nav-lens-circle {
+  transform: scale(1.06);
 }
 
-.fab-btn:hover {
-  transform: scale(1.05);
-  background: var(--color-red-deep);
+.nav-lens-item:active .nav-lens-circle {
+  transform: scale(0.94);
 }
 
-.fab-btn svg {
-  width: 24px;
-  height: 24px;
-  stroke: #FFFFFF;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* Bottom Navigation */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+.nav-lens-circle img {
   width: 100%;
-  max-width: var(--max-width-mobile);
-  height: 64px;
-  background-color: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Floating Pill Bottom Navigation */
+.bottom-nav {
+  position: sticky;
+  bottom: 14px;
+  margin: 12px auto 0;
+  width: calc(100% - 28px);
+  max-width: calc(var(--max-width-mobile) - 28px);
+  height: 66px;
+  background-color: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: space-around;
   z-index: 100;
-  padding: 0 var(--spacing-2);
-  box-shadow: 0 -2px 10px rgba(18, 18, 22, 0.05);
+  padding: 0 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.09);
+  transition: background-color var(--transition-theme), border-color var(--transition-theme);
 }
 
 .nav-item {
@@ -665,15 +768,15 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   background: none;
   border: none;
   color: var(--color-black-faint);
-  font-size: var(--font-size-xs);
+  font-size: 0.66rem;
   font-weight: 700;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  border-radius: var(--radius-full);
   transition: all var(--transition-fast);
 }
 
@@ -683,6 +786,7 @@ html, body {
 
 .nav-item.active {
   color: var(--color-red-primary);
+  background: transparent;
 }
 
 .nav-item.active .nav-icon {
@@ -699,7 +803,7 @@ html, body {
   stroke-linejoin: round;
 }
 
-/* CereBruv Siri-Style Avatar Voice Orb (Rotating Halo Strictly Behind Logo) */
+/* CereBruv Seamless Neural Aura Orb (No Hard Circle Cutout) */
 .siri-avatar-orb {
   position: relative;
   width: 58px;
@@ -727,13 +831,14 @@ html, body {
   object-fit: contain;
   position: relative;
   z-index: 3;
+  filter: drop-shadow(0 6px 14px rgba(229, 46, 46, 0.16));
   transition:
     width 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     height 0.38s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.25s ease;
 }
 
-/* When container is expanded, avatar centers and grows larger */
+/* When container is expanded, avatar centers, grows, and gently floats */
 .mascot-banner.expanded .siri-avatar-orb {
   width: 96px;
   height: 96px;
@@ -742,53 +847,48 @@ html, body {
 .mascot-banner.expanded .siri-avatar-orb img {
   width: 78px;
   height: 78px;
+  animation: mascot-float 3.4s ease-in-out infinite;
 }
 
-/* Layer 1 (z-index: 1): Rotating Conic Light Halo Strictly in the Back */
+@keyframes mascot-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Layer 1 (z-index: 1): Seamless Radial-Masked Coral-Amber Mesh Aura */
 .siri-avatar-orb::before {
   content: '';
   position: absolute;
-  inset: -6px;
+  inset: -24px;
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
-    #E52E2E 0deg,
-    #F59E0B 70deg,
-    #FDE68A 130deg,
-    #EC4899 200deg,
-    #6366F1 275deg,
-    #FB7185 325deg,
-    #E52E2E 360deg
+    rgba(229, 46, 46, 0.42) 0deg,
+    rgba(245, 158, 11, 0.34) 90deg,
+    rgba(251, 113, 133, 0.36) 180deg,
+    rgba(249, 115, 22, 0.30) 270deg,
+    rgba(229, 46, 46, 0.42) 360deg
   );
-  filter: blur(10px);
+  filter: blur(22px);
+  -webkit-mask-image: radial-gradient(circle, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.45) 42%, transparent 72%);
+  mask-image: radial-gradient(circle, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.45) 42%, transparent 72%);
   opacity: 0;
   pointer-events: none;
   z-index: 1;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.4s ease;
 }
 
-/* Layer 2 (z-index: 2): Solid Cream Inner Shield so NO light or hue bleeds in front of the logo */
+/* No solid ::after cutout — mascot floats directly in the seamless glow */
 .siri-avatar-orb::after {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  background: var(--bg-surface);
-  pointer-events: none;
-  z-index: 2;
-  transition: background 0.35s ease;
+  display: none;
 }
 
-.mascot-banner.expanded .siri-avatar-orb::after {
-  background: #FAF5F1;
-}
-
-/* Show & spin the circular light aura behind the logo when expanded, listening, speaking, or typing */
+/* Show & spin the seamless light aura behind the logo when expanded, listening, or speaking */
 .mascot-banner.expanded .siri-avatar-orb::before,
 .siri-avatar-orb.listening::before,
 .siri-avatar-orb.speaking::before {
-  opacity: 0.85;
-  animation: siri-orbit-spin 2.4s linear infinite;
+  opacity: 0.9;
+  animation: siri-orbit-spin 4s linear infinite;
 }
 
 .siri-avatar-orb.listening {
@@ -817,8 +917,493 @@ html, body {
 }
 
 .mascot-banner.siri-active {
-  background: linear-gradient(160deg, var(--bg-surface) 0%, #FAF3EE 100%);
-  box-shadow: 0 8px 26px rgba(229, 46, 46, 0.14);
+  background: var(--bg-surface);
+  box-shadow: 0 12px 32px rgba(229, 46, 46, 0.16);
+}
+
+/* Obsidian Dark Glass Overrides */
+[data-theme="obsidian"] .app-header {
+  background-color: rgba(13, 14, 20, 0.82);
+  border-bottom-color: var(--border-subtle);
+}
+
+[data-theme="obsidian"] .bottom-nav {
+  background-color: rgba(20, 22, 30, 0.88);
+  border-color: var(--border-subtle);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme="obsidian"] .mascot-banner::before {
+  background: radial-gradient(120% 80% at 50% -10%, rgba(255, 59, 59, 0.18), transparent 68%);
+}
+
+[data-theme="obsidian"] .mascot-banner.expanded {
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.6), 0 0 28px rgba(255, 59, 59, 0.12);
+}
+
+[data-theme="obsidian"] .tag-study { background: rgba(99, 102, 241, 0.22); color: #A5B4FC; }
+[data-theme="obsidian"] .tag-work { background: rgba(20, 184, 166, 0.22); color: #5EEAD4; }
+[data-theme="obsidian"] .tag-personal { background: rgba(249, 115, 22, 0.22); color: #FDBA74; }
+[data-theme="obsidian"] .tag-event { background: rgba(236, 72, 153, 0.22); color: #F9A8D4; }
+[data-theme="obsidian"] .tag-rest { background: rgba(168, 85, 247, 0.22); color: #D8B4FE; }
+
+.theme-toggle-btn {
+  width: 30px;
+  height: 30px;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.theme-toggle-btn:active {
+  transform: rotate(22deg) scale(0.92);
+}
+
+/* Orbit / Month Switcher & Micro-Orbit Calendar Grid */
+.orbit-view-switch {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-full);
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border-subtle);
+}
+
+.orbit-view-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-black-muted);
+  font-family: var(--font-family-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.orbit-view-btn.active {
+  background: var(--bg-surface);
+  color: var(--color-black-dominant);
+  box-shadow: var(--shadow-subtle);
+}
+
+.orbit-status-tag {
+  cursor: default !important;
+  pointer-events: none;
+}
+
+.month-calendar-wrap {
+  width: 100%;
+  animation: card-rise 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.month-weekdays span {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+  letter-spacing: 0.04em;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.month-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.month-cell:hover:not(.is-empty) {
+  background: var(--bg-surface-elevated);
+}
+
+.month-cell:active:not(.is-empty) {
+  transform: scale(0.92);
+}
+
+.month-cell.is-empty {
+  cursor: default;
+  pointer-events: none;
+}
+
+.micro-orbit-ring {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.micro-orbit-svg {
+  position: absolute;
+  inset: 0;
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+
+.micro-orbit-num {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-family-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--color-black-dominant);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.month-cell.is-today .micro-orbit-num {
+  color: var(--color-red-primary);
+  font-weight: 900;
+}
+
+.month-cell.is-selected .micro-orbit-num {
+  background: var(--color-red-primary);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px var(--color-red-glow);
+}
+
+/* Bottom Nav Profile Avatar / Initials Badge */
+.nav-avatar-img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--border-medium);
+  transition: border-color var(--transition-fast);
+}
+
+.nav-avatar-initials {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-surface-elevated);
+  border: 1.5px solid var(--border-medium);
+  color: var(--color-black-dominant);
+  font-family: var(--font-family-display);
+  font-size: 0.62rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-item.active .nav-avatar-img {
+  border-color: var(--color-red-primary);
+}
+
+.nav-item.active .nav-avatar-initials {
+  border-color: var(--color-red-primary);
+  background: var(--color-red-primary);
+  color: #FFFFFF;
+}
+
+/* Option A: 14-Day Momentum Pulse Capsules & Mini Orbit Rings */
+.momentum-grid {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 4px;
+  align-items: end;
+}
+
+.momentum-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.momentum-day:hover,
+.momentum-day.selected {
+  background: var(--bg-surface);
+}
+
+.momentum-day:active {
+  transform: scale(0.94);
+}
+
+.momentum-bar-track {
+  width: 100%;
+  max-width: 12px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 2px;
+}
+
+.momentum-bar-fill {
+  width: 100%;
+  border-radius: var(--radius-full);
+  transition: height 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.momentum-ring {
+  width: 13px;
+  height: 13px;
+}
+
+.momentum-letter {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+}
+
+.momentum-day.is-today .momentum-letter {
+  color: var(--color-red-primary);
+}
+
+/* Focus Orbit Brain-Clock Center Hub (Layout B - Full Size) */
+.orbit-brain-clock {
+  position: relative;
+  width: 108px;
+  height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.orbit-brain-frame {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  mix-blend-mode: multiply;
+}
+
+[data-theme="obsidian"] .orbit-brain-frame {
+  filter: invert(1);
+  mix-blend-mode: screen;
+}
+
+.orbit-brain-time {
+  position: absolute;
+  top: 60%;
+  left: 51%;
+  transform: translate(-50%, -50%);
+  font-family: 'Orbitron', var(--font-family-mono), monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-black-dominant);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+}
+
+.orbit-brain-sec {
+  color: var(--color-red-primary);
+}
+
+.orbit-brain-period {
+  font-family: 'Orbitron', var(--font-family-display), sans-serif;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin-top: -2px;
+}
+
+/* Reminders Yellow-Orange Count Circles */
+.count-badge-amber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #F59E0B;
+  color: #FFFFFF;
+  font-family: var(--font-family-display);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.filter-pill-wrap {
+  position: relative;
+  overflow: visible !important;
+  flex-shrink: 0;
+  padding: 6px 14px !important;
+  font-size: 0.72rem !important;
+}
+
+.pill-corner-badge {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #F59E0B;
+  color: #FFFFFF;
+  border: 2px solid var(--bg-surface);
+  font-family: var(--font-family-display);
+  font-size: 0.6rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Unified Full-Screen Obsidian/Notion-Style Note & Reminder Page */
+.note-page-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 18, 22, 0.35);
+  backdrop-filter: blur(4px);
+  z-index: 220;
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s ease;
+}
+
+.note-page-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.note-page-sheet {
+  width: 100%;
+  max-width: var(--max-width-mobile);
+  height: 100%;
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(24px);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color var(--transition-theme);
+}
+
+.note-page-backdrop.open .note-page-sheet {
+  transform: translateY(0);
+}
+
+.note-page-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.note-page-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.note-page-title {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-family-display);
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: var(--color-black-dominant);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.note-page-title::placeholder {
+  color: var(--color-black-faint);
+}
+
+.note-page-editor {
+  width: 100%;
+  min-height: 150px;
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  font-family: var(--font-family-base);
+  font-size: 0.94rem;
+  line-height: 1.6;
+  color: var(--color-black-dominant);
+}
+
+.note-page-editor::placeholder {
+  color: var(--color-black-faint);
+}
+
+.note-page-format-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.note-attachment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.note-attachment-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-black-dominant);
+  max-width: 100%;
 }
 
 .siri-wave-bars {
@@ -1017,6 +1602,151 @@ html, body {
   .skeleton {
     opacity: 0.8 !important;
   }
+}
+
+/* Profile Focus Map (Month & Year Heatmap) */
+.focus-heatmap-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.focus-heatmap-weekday {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--color-black-muted);
+  padding-bottom: 2px;
+}
+
+.focus-heatmap-cell {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family-display);
+  font-size: 0.65rem;
+  font-weight: 800;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.focus-heatmap-cell.month-cell {
+  aspect-ratio: 1 / 1;
+  min-height: 28px;
+}
+
+.focus-heatmap-cell.year-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+
+.focus-heatmap-cell:hover {
+  transform: scale(1.1);
+  border-color: var(--color-red-primary);
+}
+
+.focus-heatmap-cell.selected {
+  border-color: var(--color-black-dominant);
+  box-shadow: 0 0 0 1.5px var(--color-black-dominant);
+}
+
+.focus-heatmap-cell.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--color-red-primary);
+}
+
+.focus-heatmap-cell.lvl-0 {
+  background: var(--bg-surface);
+  color: var(--color-black-faint);
+}
+
+.focus-heatmap-cell.lvl-1 {
+  background: rgba(229, 46, 46, 0.22);
+  color: var(--color-black-dominant);
+}
+
+.focus-heatmap-cell.lvl-2 {
+  background: rgba(229, 46, 46, 0.46);
+  color: #FFFFFF;
+}
+
+.focus-heatmap-cell.lvl-3 {
+  background: rgba(229, 46, 46, 0.76);
+  color: #FFFFFF;
+}
+
+.focus-heatmap-cell.lvl-4 {
+  background: var(--color-red-primary);
+  color: #FFFFFF;
+}
+
+.focus-heatmap-year-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.focus-heatmap-year-months {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 11px;
+  gap: 3px;
+  margin-bottom: 4px;
+  padding-left: 20px;
+}
+
+.focus-heatmap-year-month-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--color-black-muted);
+  white-space: nowrap;
+}
+
+.focus-heatmap-year-body {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.focus-heatmap-year-days {
+  display: grid;
+  grid-template-rows: repeat(7, 11px);
+  gap: 3px;
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: var(--color-black-faint);
+  width: 16px;
+  flex-shrink: 0;
+  line-height: 11px;
+}
+
+.focus-heatmap-year-grid {
+  display: grid;
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-flow: column;
+  grid-auto-columns: 11px;
+  gap: 3px;
+}
+
+.focus-heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--color-black-muted);
+}
+
+.focus-heatmap-legend-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
 }
 
 

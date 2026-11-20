@@ -1,9 +1,11 @@
 import type {
+  NotificationStyle,
   ReminderBodyFormat,
   ReminderChecklistItem,
   ReminderTimeMode,
   SavedLink,
   Task,
+  TaskAttachment,
 } from '../../types/task';
 
 export interface CreateTaskDTO {
@@ -14,12 +16,14 @@ export interface CreateTaskDTO {
   durationMinutes: number; // 0 when no duration specified
   urgency: Task['urgency'];
   timeMode?: ReminderTimeMode;
+  notificationStyle?: NotificationStyle;
   bodyFormat?: ReminderBodyFormat;
   checklistItems?: ReminderChecklistItem[];
   eventGroupId?: string;
   notes?: string;
   photoUrl?: string;
   links?: SavedLink[];
+  attachments?: TaskAttachment[];
 }
 
 export interface ITaskRepository {

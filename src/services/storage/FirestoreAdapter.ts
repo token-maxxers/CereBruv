@@ -73,6 +73,10 @@ function stripUndefined<T extends Record<string, any>>(obj: T): T {
 }
 
 export class FirestoreTaskRepository implements ITaskRepository {
+  private cachedUid: string | null = null;
+  private cachedTasks: Task[] | null = null;
+  private inFlightTasksFetch: Promise<Task[]> | null = null;
+
   private getTodayString(): string {
     const d = new Date();
     const y = d.getFullYear();
@@ -85,23 +89,51 @@ export class FirestoreTaskRepository implements ITaskRepository {
     return collection(db, 'users', uid, 'tasks');
   }
 
+  private ensureCacheUid(uid: string): void {
+    if (this.cachedUid !== uid) {
+      this.cachedUid = uid;
+      this.cachedTasks = null;
+      this.inFlightTasksFetch = null;
+    }
+  }
+
   async getAllTasks(): Promise<Task[]> {
     const uid = getOptionalUid();
-    if (!uid) return localTaskFallback.getAllTasks();
-    try {
-      const snapshot = await getDocs(this.tasksCol(uid));
-      const today = this.getTodayString();
-      return snapshot.docs.map(d => {
-        const data = d.data() as Task;
-        return {
-          ...data,
-          id: d.id,
-          date: typeof data.date === 'string' ? data.date : today
-        };
-      });
-    } catch {
+    if (!uid) {
+      this.cachedUid = null;
+      this.cachedTasks = null;
       return localTaskFallback.getAllTasks();
     }
+    this.ensureCacheUid(uid);
+    if (this.cachedTasks) {
+      return [...this.cachedTasks];
+    }
+    if (this.inFlightTasksFetch) {
+      return (await this.inFlightTasksFetch).slice();
+    }
+
+    this.inFlightTasksFetch = (async () => {
+      try {
+        const snapshot = await getDocs(this.tasksCol(uid));
+        const today = this.getTodayString();
+        const tasks = snapshot.docs.map(d => {
+          const data = d.data() as Task;
+          return {
+            ...data,
+            id: d.id,
+            date: typeof data.date === 'string' ? data.date : today
+          };
+        });
+        this.cachedTasks = tasks;
+        return tasks;
+      } catch {
+        return localTaskFallback.getAllTasks();
+      } finally {
+        this.inFlightTasksFetch = null;
+      }
+    })();
+
+    return (await this.inFlightTasksFetch).slice();
   }
 
   async getTaskById(id: string): Promise<Task | null> {
@@ -141,17 +173,23 @@ export class FirestoreTaskRepository implements ITaskRepository {
       urgency: dto.urgency,
       completed: false,
       ...(dto.timeMode ? { timeMode: dto.timeMode } : {}),
+      ...(dto.notificationStyle ? { notificationStyle: dto.notificationStyle } : {}),
       ...(dto.bodyFormat ? { bodyFormat: dto.bodyFormat } : {}),
       ...(dto.checklistItems && dto.checklistItems.length > 0 ? { checklistItems: dto.checklistItems } : {}),
       ...(dto.eventGroupId ? { eventGroupId: dto.eventGroupId } : {}),
       ...(dto.notes && dto.notes.trim() ? { notes: dto.notes.trim() } : {}),
       ...(dto.photoUrl ? { photoUrl: dto.photoUrl } : {}),
       ...(dto.links && dto.links.length > 0 ? { links: dto.links } : {}),
+      ...(dto.attachments && dto.attachments.length > 0 ? { attachments: dto.attachments } : {}),
       createdAt: now,
       updatedAt: now
     };
 
     await commitFirestoreWrite(setDoc(taskRef, stripUndefined(newTask)));
+    this.ensureCacheUid(uid);
+    if (this.cachedTasks) {
+      this.cachedTasks = [...this.cachedTasks, newTask];
+    }
     return newTask;
   }
 
@@ -179,6 +217,10 @@ export class FirestoreTaskRepository implements ITaskRepository {
     };
 
     await commitFirestoreWrite(updateDoc(taskRef, cleanedUpdates));
+    this.ensureCacheUid(uid);
+    if (this.cachedTasks) {
+      this.cachedTasks = this.cachedTasks.map(t => (t.id === id ? updated : t));
+    }
     return updated;
   }
 
@@ -203,12 +245,17 @@ export class FirestoreTaskRepository implements ITaskRepository {
       })
     );
 
-    return {
+    const toggled: Task = {
       ...current,
       id,
       completed,
       updatedAt: now
     };
+    this.ensureCacheUid(uid);
+    if (this.cachedTasks) {
+      this.cachedTasks = this.cachedTasks.map(t => (t.id === id ? toggled : t));
+    }
+    return toggled;
   }
 
   async deleteTask(id: string): Promise<boolean> {
@@ -219,6 +266,10 @@ export class FirestoreTaskRepository implements ITaskRepository {
     const snap = await getDoc(taskRef);
     if (!snap.exists()) return false;
     await commitFirestoreWrite(deleteDoc(taskRef));
+    this.ensureCacheUid(uid);
+    if (this.cachedTasks) {
+      this.cachedTasks = this.cachedTasks.filter(t => t.id !== id);
+    }
     return true;
   }
 
@@ -232,28 +283,62 @@ export class FirestoreTaskRepository implements ITaskRepository {
       batch.delete(docSnap.ref);
     });
     await commitFirestoreWrite(batch.commit());
+    this.ensureCacheUid(uid);
+    this.cachedTasks = [];
   }
 }
 
 export class FirestoreNoteRepository implements INoteRepository {
+  private cachedUid: string | null = null;
+  private cachedNotes: QuickNote[] | null = null;
+  private inFlightNotesFetch: Promise<QuickNote[]> | null = null;
+
   private notesCol(uid: string) {
     return collection(db, 'users', uid, 'notes');
   }
 
+  private ensureCacheUid(uid: string): void {
+    if (this.cachedUid !== uid) {
+      this.cachedUid = uid;
+      this.cachedNotes = null;
+      this.inFlightNotesFetch = null;
+    }
+  }
+
   async getAllNotes(): Promise<QuickNote[]> {
     const uid = getOptionalUid();
-    if (!uid) return localNoteFallback.getAllNotes();
-    try {
-      const snap = await getDocs(this.notesCol(uid));
-      return snap.docs
-        .map(d => ({
-          ...(d.data() as QuickNote),
-          id: d.id
-        }))
-        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    } catch {
+    if (!uid) {
+      this.cachedUid = null;
+      this.cachedNotes = null;
       return localNoteFallback.getAllNotes();
     }
+    this.ensureCacheUid(uid);
+    if (this.cachedNotes) {
+      return [...this.cachedNotes];
+    }
+    if (this.inFlightNotesFetch) {
+      return (await this.inFlightNotesFetch).slice();
+    }
+
+    this.inFlightNotesFetch = (async () => {
+      try {
+        const snap = await getDocs(this.notesCol(uid));
+        const notes = snap.docs
+          .map(d => ({
+            ...(d.data() as QuickNote),
+            id: d.id
+          }))
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        this.cachedNotes = notes;
+        return notes;
+      } catch {
+        return localNoteFallback.getAllNotes();
+      } finally {
+        this.inFlightNotesFetch = null;
+      }
+    })();
+
+    return (await this.inFlightNotesFetch).slice();
   }
 
   async createNote(dto: CreateNoteDTO): Promise<QuickNote> {
@@ -281,6 +366,10 @@ export class FirestoreNoteRepository implements INoteRepository {
     };
 
     await commitFirestoreWrite(setDoc(noteRef, stripUndefined(newNote)));
+    this.ensureCacheUid(uid);
+    if (this.cachedNotes) {
+      this.cachedNotes = [newNote, ...this.cachedNotes];
+    }
     return newNote;
   }
 
@@ -296,11 +385,16 @@ export class FirestoreNoteRepository implements INoteRepository {
     const current = snap.data() as QuickNote;
     const cleanedUpdates = stripUndefined({ ...updates });
     await commitFirestoreWrite(updateDoc(noteRef, cleanedUpdates));
-    return {
+    const updated: QuickNote = {
       ...current,
       ...cleanedUpdates,
       id,
     };
+    this.ensureCacheUid(uid);
+    if (this.cachedNotes) {
+      this.cachedNotes = this.cachedNotes.map(n => (n.id === id ? updated : n));
+    }
+    return updated;
   }
 
   async deleteNote(id: string): Promise<boolean> {
@@ -311,6 +405,10 @@ export class FirestoreNoteRepository implements INoteRepository {
     const snap = await getDoc(noteRef);
     if (!snap.exists()) return false;
     await commitFirestoreWrite(deleteDoc(noteRef));
+    this.ensureCacheUid(uid);
+    if (this.cachedNotes) {
+      this.cachedNotes = this.cachedNotes.filter(n => n.id !== id);
+    }
     return true;
   }
 }

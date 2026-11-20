@@ -1,4 +1,5 @@
 import mascotImg from '../../assets/mascot.png';
+import brandLockupImg from '../../assets/cerebruv-brand-lockup.png';
 import { authService, type AuthUser } from '../../services/auth/AuthService';
 
 export interface AuthScreenOptions {
@@ -26,8 +27,7 @@ export function renderAuthScreen(options: AuthScreenOptions): HTMLElement {
       <!-- Top Brand Header -->
       <div class="auth-header">
         <img src="${mascotImg}" alt="CereBruv Mascot" class="auth-mascot" />
-        <h1 class="auth-title">Cere<span>Bruv</span></h1>
-        <p class="auth-tagline">Think it through, CereBruv's got you.</p>
+        <img src="${brandLockupImg}" alt="CereBruv — Think it through, CereBruv's got you." class="auth-brand-lockup" />
       </div>
 
       <!-- Offline Notice -->
