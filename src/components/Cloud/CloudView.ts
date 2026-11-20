@@ -12,13 +12,10 @@ export interface CloudViewOptions {
   onSignOut?: () => void;
 }
 
-/**
- * Renders Option A: 14-Day Momentum Pulse (Vertical Capsule Bars + Mini Orbit Rings).
- */
-function renderMomentumPulseHtml(
+function buildActivityHistory(
   activityHistory: Record<string, number> | undefined,
   tasks: Task[]
-): { html: string; bestCount: number; activeDays: number } {
+): Record<string, number> {
   const history: Record<string, number> = activityHistory ? { ...activityHistory } : {};
   if (Object.keys(history).length === 0) {
     tasks.forEach((t) => {
@@ -34,6 +31,152 @@ function renderMomentumPulseHtml(
       }
     });
   }
+  return history;
+}
+
+function getHeatmapLevel(count: number): number {
+  if (count <= 0) return 0;
+  if (count === 1) return 1;
+  if (count === 2) return 2;
+  if (count <= 4) return 3;
+  return 4;
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatDateKey(y: number, mZeroBased: number, day: number): string {
+  return `${y}-${String(mZeroBased + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function renderFocusHeatmapHtml(
+  history: Record<string, number>,
+  mode: 'month' | 'year',
+  year: number,
+  month: number
+): { html: string; totalTasks: number; activeDays: number; periodLabel: string } {
+  const today = new Date();
+  const todayKey = formatDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+  let totalTasks = 0;
+  let activeDays = 0;
+
+  if (mode === 'month') {
+    const firstDay = new Date(year, month, 1);
+    const startWeekday = firstDay.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const headers = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+      .map((l) => `<div class="focus-heatmap-weekday">${l}</div>`)
+      .join('');
+
+    const blanks = Array.from({ length: startWeekday }, () => `<div></div>`).join('');
+    const cells: string[] = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = formatDateKey(year, month, day);
+      const count = history[key] || 0;
+      totalTasks += count;
+      if (count > 0) activeDays += 1;
+      const lvl = getHeatmapLevel(count);
+      const label = `${MONTH_NAMES[month]} ${day}, ${year}`;
+      const isToday = key === todayKey;
+
+      cells.push(`
+        <button
+          type="button"
+          class="focus-heatmap-cell month-cell lvl-${lvl}${isToday ? ' is-today' : ''}"
+          data-date="${key}"
+          data-label="${label}"
+          data-count="${count}"
+          title="${count} task${count === 1 ? '' : 's'} on ${label}"
+        >${day}</button>
+      `);
+    }
+
+    return {
+      html: `<div class="focus-heatmap-month-grid">${headers}${blanks}${cells.join('')}</div>`,
+      totalTasks,
+      activeDays,
+      periodLabel: `${MONTH_NAMES[month]} ${year}`,
+    };
+  }
+
+  // Year View (53-week grid, Sun-Sat rows)
+  const jan1 = new Date(year, 0, 1);
+  const dec31 = new Date(year, 11, 31);
+  const startOffset = jan1.getDay();
+  const cells: string[] = [];
+  const monthCols: Array<{ col: number; label: string }> = [];
+
+  for (let i = 0; i < startOffset; i++) {
+    cells.push(`<div style="width:11px;height:11px;"></div>`);
+  }
+
+  const cur = new Date(jan1);
+  let cellIndex = startOffset;
+  let lastLabeledMonth = -1;
+
+  while (cur <= dec31) {
+    const m = cur.getMonth();
+    const d = cur.getDate();
+    const col = Math.floor(cellIndex / 7);
+    if (m !== lastLabeledMonth && d <= 7) {
+      monthCols.push({ col, label: MONTH_NAMES[m] });
+      lastLabeledMonth = m;
+    }
+
+    const key = formatDateKey(year, m, d);
+    const count = history[key] || 0;
+    totalTasks += count;
+    if (count > 0) activeDays += 1;
+    const lvl = getHeatmapLevel(count);
+    const label = `${MONTH_NAMES[m]} ${d}, ${year}`;
+    const isToday = key === todayKey;
+
+    cells.push(`
+      <button
+        type="button"
+        class="focus-heatmap-cell year-cell lvl-${lvl}${isToday ? ' is-today' : ''}"
+        data-date="${key}"
+        data-label="${label}"
+        data-count="${count}"
+        title="${count} task${count === 1 ? '' : 's'} on ${label}"
+      ></button>
+    `);
+
+    cur.setDate(cur.getDate() + 1);
+    cellIndex += 1;
+  }
+
+  const totalCols = Math.ceil(cellIndex / 7);
+  const monthLabelMap = new Map(monthCols.map((mc) => [mc.col, mc.label]));
+  const monthRowHtml = Array.from({ length: totalCols }, (_, c) => {
+    const lbl = monthLabelMap.get(c) || '';
+    return `<div class="focus-heatmap-year-month-label">${lbl}</div>`;
+  }).join('');
+
+  return {
+    html: `
+      <div class="focus-heatmap-year-scroll">
+        <div class="focus-heatmap-year-months">${monthRowHtml}</div>
+        <div class="focus-heatmap-year-body">
+          <div class="focus-heatmap-year-days">
+            <span></span><span>M</span><span></span><span>W</span><span></span><span>F</span><span></span>
+          </div>
+          <div class="focus-heatmap-year-grid">${cells.join('')}</div>
+        </div>
+      </div>
+    `,
+    totalTasks,
+    activeDays,
+    periodLabel: `${year}`,
+  };
+}
+
+/**
+ * Renders Option A: 14-Day Momentum Pulse (Vertical Capsule Bars + Mini Orbit Rings).
+ */
+function renderMomentumPulseHtml(
+  history: Record<string, number>
+): { html: string; bestCount: number; activeDays: number } {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -141,7 +284,20 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
       ? `<button class="btn btn-primary btn-full" id="account-action-btn">Create Account to Sync</button>`
       : `<button class="btn btn-secondary btn-full" id="account-action-btn" style="color: var(--color-red-primary);">Sign Out</button>`;
 
-    const momentum = renderMomentumPulseHtml(stats.activityHistory, tasks);
+    const history = buildActivityHistory(stats.activityHistory, tasks);
+    const momentum = renderMomentumPulseHtml(history);
+
+    const nowDate = new Date();
+    let heatmapMode: 'month' | 'year' = 'month';
+    let heatmapYear = nowDate.getFullYear();
+    let heatmapMonth = nowDate.getMonth();
+
+    const yearSet = new Set<number>([heatmapYear - 2, heatmapYear - 1, heatmapYear, heatmapYear + 1]);
+    Object.keys(history).forEach((k) => {
+      const parsedY = parseInt(k.slice(0, 4), 10);
+      if (!isNaN(parsedY) && parsedY >= 2020 && parsedY <= 2100) yearSet.add(parsedY);
+    });
+    const availableYears = Array.from(yearSet).sort((a, b) => b - a);
 
     container.innerHTML = `
       <!-- Profile Identity Card -->
@@ -210,6 +366,43 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
         ${momentum.html}
       </div>
 
+      <!-- Focus Map (Monthly & Yearly Activity Heatmap) -->
+      <div style="background: var(--bg-surface-elevated); padding: var(--spacing-3); border-radius: var(--radius-md); margin-bottom: var(--spacing-4);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+          <div>
+            <div style="font-family: var(--font-family-display); font-size: var(--font-size-sm); font-weight: 800; color: var(--color-black-dominant);">
+              Focus Map
+            </div>
+            <div id="focus-heatmap-readout" style="font-size: 0.7rem; color: var(--color-black-muted); font-weight: 600;"></div>
+          </div>
+          <div class="orbit-view-switch" style="padding: 2px;">
+            <button type="button" id="heatmap-mode-month" class="orbit-view-btn active" style="padding: 3px 10px; font-size: 0.66rem;">Month</button>
+            <button type="button" id="heatmap-mode-year" class="orbit-view-btn" style="padding: 3px 10px; font-size: 0.66rem;">Year</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <select id="heatmap-month-select" class="form-select" style="flex: 1; padding: 6px 10px; font-size: 0.72rem;">
+            ${MONTH_NAMES.map((mName, idx) => `<option value="${idx}" ${idx === heatmapMonth ? 'selected' : ''}>${mName}</option>`).join('')}
+          </select>
+          <select id="heatmap-year-select" class="form-select" style="flex: 1; padding: 6px 10px; font-size: 0.72rem;">
+            ${availableYears.map((yr) => `<option value="${yr}" ${yr === heatmapYear ? 'selected' : ''}>${yr}</option>`).join('')}
+          </select>
+        </div>
+
+        <div id="focus-heatmap-container"></div>
+
+        <div class="focus-heatmap-legend">
+          <span>Less</span>
+          <span class="focus-heatmap-legend-box lvl-0" style="background: var(--bg-surface); border: 1px solid var(--border-subtle);"></span>
+          <span class="focus-heatmap-legend-box lvl-1" style="background: rgba(229, 46, 46, 0.22);"></span>
+          <span class="focus-heatmap-legend-box lvl-2" style="background: rgba(229, 46, 46, 0.46);"></span>
+          <span class="focus-heatmap-legend-box lvl-3" style="background: rgba(229, 46, 46, 0.76);"></span>
+          <span class="focus-heatmap-legend-box lvl-4" style="background: var(--color-red-primary);"></span>
+          <span>More</span>
+        </div>
+      </div>
+
       <!-- Account Action -->
       <div>
         ${accountActionBtnHtml}
@@ -232,6 +425,64 @@ export function renderCloudView(options?: CloudViewOptions): HTMLElement {
         }
       });
     });
+
+    // Focus Map interactive render + filters
+    const heatmapContainer = container.querySelector<HTMLElement>('#focus-heatmap-container');
+    const heatmapReadout = container.querySelector<HTMLElement>('#focus-heatmap-readout');
+    const modeMonthBtn = container.querySelector<HTMLButtonElement>('#heatmap-mode-month');
+    const modeYearBtn = container.querySelector<HTMLButtonElement>('#heatmap-mode-year');
+    const monthSelect = container.querySelector<HTMLSelectElement>('#heatmap-month-select');
+    const yearSelect = container.querySelector<HTMLSelectElement>('#heatmap-year-select');
+
+    function renderHeatmap() {
+      if (!heatmapContainer) return;
+      const result = renderFocusHeatmapHtml(history, heatmapMode, heatmapYear, heatmapMonth);
+      heatmapContainer.innerHTML = result.html;
+
+      if (heatmapReadout) {
+        heatmapReadout.textContent = `${result.totalTasks} task${result.totalTasks === 1 ? '' : 's'} • ${result.activeDays} active day${result.activeDays === 1 ? '' : 's'} (${result.periodLabel})`;
+      }
+
+      if (monthSelect) {
+        monthSelect.style.display = heatmapMode === 'month' ? 'block' : 'none';
+      }
+      modeMonthBtn?.classList.toggle('active', heatmapMode === 'month');
+      modeYearBtn?.classList.toggle('active', heatmapMode === 'year');
+
+      heatmapContainer.querySelectorAll<HTMLButtonElement>('.focus-heatmap-cell').forEach((cell) => {
+        cell.addEventListener('click', () => {
+          heatmapContainer.querySelectorAll('.focus-heatmap-cell').forEach((c) => c.classList.remove('selected'));
+          cell.classList.add('selected');
+          const label = cell.dataset.label || '';
+          const count = parseInt(cell.dataset.count || '0', 10);
+          if (heatmapReadout) {
+            heatmapReadout.textContent = `${label} • ${count} task${count === 1 ? '' : 's'} completed`;
+          }
+        });
+      });
+    }
+
+    modeMonthBtn?.addEventListener('click', () => {
+      heatmapMode = 'month';
+      renderHeatmap();
+    });
+
+    modeYearBtn?.addEventListener('click', () => {
+      heatmapMode = 'year';
+      renderHeatmap();
+    });
+
+    monthSelect?.addEventListener('change', () => {
+      heatmapMonth = parseInt(monthSelect.value, 10) || 0;
+      renderHeatmap();
+    });
+
+    yearSelect?.addEventListener('change', () => {
+      heatmapYear = parseInt(yearSelect.value, 10) || nowDate.getFullYear();
+      renderHeatmap();
+    });
+
+    renderHeatmap();
 
     // Action button listeners
     const actionBtn = container.querySelector<HTMLButtonElement>('#account-action-btn');
