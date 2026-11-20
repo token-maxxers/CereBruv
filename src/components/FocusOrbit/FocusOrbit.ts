@@ -628,7 +628,7 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
     const todayStr = getTodayString();
     const isDark = document.documentElement.getAttribute('data-theme') === 'obsidian';
     const trackColor = isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.08)';
-    const r = 14;
+    const r = 13.5;
     const circ = 2 * Math.PI * r;
 
     for (let i = 0; i < firstDay; i++) {
@@ -651,16 +651,16 @@ export function renderFocusOrbit(onOpenTaskForm: (date?: string, editTask?: Task
       cell.title = dayTasks.length > 0 ? `${dayTasks.length} task(s) on ${dateStr} (double-tap for Orbit)` : `${dateStr} (double-tap for Orbit)`;
 
       // Build Micro-Orbit SVG arcs from task categories on this day
-      let arcsHtml = `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${trackColor}" stroke-width="2.5" />`;
+      let arcsHtml = `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${trackColor}" stroke-width="3.5" />`;
       if (dayTasks.length > 0) {
         const sliceCount = Math.min(dayTasks.length, 4);
-        const gap = sliceCount > 1 ? 3.5 : 0;
+        const gap = sliceCount > 1 ? 5 : 0;
         const arcLen = Math.max(4, (circ / sliceCount) - gap);
         for (let idx = 0; idx < sliceCount; idx++) {
           const t = dayTasks[idx];
           const color = t.completed ? '#9CA3AF' : (CATEGORY_COLORS[t.category] || '#E52E2E');
           const offset = -(idx * (circ / sliceCount));
-          arcsHtml += `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${color}" stroke-width="2.75" stroke-linecap="round" stroke-dasharray="${arcLen.toFixed(2)} ${circ.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" />`;
+          arcsHtml += `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${color}" stroke-width="4.25" stroke-linecap="round" stroke-dasharray="${arcLen.toFixed(2)} ${circ.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" />`;
         }
       }
 
