@@ -105,7 +105,7 @@ export function renderTaskFormModal(): {
       </div>
 
       <!-- Scrollable Document Body -->
-      <form id="create-task-form" class="note-page-scroll">
+      <form id="create-task-form" class="note-page-scroll" novalidate>
         <!-- Title -->
         <input
           type="text"
@@ -282,17 +282,20 @@ export function renderTaskFormModal(): {
       dateInput.value = '';
       startInput.value = '';
       durationInput.value = '0';
+      durationInput.disabled = true;
     } else if (mode === 'one-time') {
       datetimeWrap.style.display = 'grid';
       datetimeWrap.style.gridTemplateColumns = '1.3fr 1fr';
       durationFieldCol.style.display = 'none';
       alertStyleWrap.style.display = 'flex';
       durationInput.value = '0';
+      durationInput.disabled = true;
     } else {
       datetimeWrap.style.display = 'grid';
       datetimeWrap.style.gridTemplateColumns = '1.3fr 1fr 0.8fr';
       durationFieldCol.style.display = 'flex';
       alertStyleWrap.style.display = 'flex';
+      durationInput.disabled = false;
       if (!durationInput.value || durationInput.value === '0') {
         durationInput.value = '45';
       }
