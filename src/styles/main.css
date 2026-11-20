@@ -1244,13 +1244,12 @@ html, body {
   height: 22px;
   padding: 0 6px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #F59E0B, #EA580C);
+  background: #F59E0B;
   color: #FFFFFF;
   font-family: var(--font-family-display);
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
 }
 
 .filter-pill-wrap {
@@ -1269,7 +1268,7 @@ html, body {
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #F59E0B, #EA580C);
+  background: #F59E0B;
   color: #FFFFFF;
   border: 2px solid var(--bg-surface);
   font-family: var(--font-family-display);
