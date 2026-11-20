@@ -69,6 +69,49 @@ export function renderSettingsView(options: SettingsViewOptions): HTMLElement {
         <input type="checkbox" id="settings-popups" />
       </label>
 
+      <label class="settings-toggle-row">
+        <div>
+          <strong>Quiet Hours (11 PM – 7 AM)</strong>
+          <span>Mute Gentle &amp; Standard alerts at night (Escalating still breaks through)</span>
+        </div>
+        <input type="checkbox" id="settings-quiet-hours" />
+      </label>
+
+      <div style="margin-top: var(--spacing-3); padding-top: var(--spacing-3); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <strong style="font-size: var(--font-size-xs); color: var(--color-black-dominant); text-transform: uppercase; letter-spacing: 0.04em;">Default Alert Style by Priority</strong>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+          <label style="display: flex; flex-direction: column; gap: 3px; font-size: 0.7rem; font-weight: 700; color: var(--color-black-muted);">
+            High Priority
+            <select id="settings-style-high" class="form-select" style="padding: 6px 8px; font-size: 0.72rem;">
+              <option value="escalating">Escalating</option>
+              <option value="standard">Standard</option>
+              <option value="gentle">Gentle</option>
+              <option value="silent">Silent</option>
+            </select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 3px; font-size: 0.7rem; font-weight: 700; color: var(--color-black-muted);">
+            Medium Priority
+            <select id="settings-style-medium" class="form-select" style="padding: 6px 8px; font-size: 0.72rem;">
+              <option value="escalating">Escalating</option>
+              <option value="standard">Standard</option>
+              <option value="gentle">Gentle</option>
+              <option value="silent">Silent</option>
+            </select>
+          </label>
+          <label style="display: flex; flex-direction: column; gap: 3px; font-size: 0.7rem; font-weight: 700; color: var(--color-black-muted);">
+            Low Priority
+            <select id="settings-style-low" class="form-select" style="padding: 6px 8px; font-size: 0.72rem;">
+              <option value="escalating">Escalating</option>
+              <option value="standard">Standard</option>
+              <option value="gentle">Gentle</option>
+              <option value="silent">Silent</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
       <div style="display: flex; gap: 8px; margin-top: var(--spacing-3); padding-top: var(--spacing-3); border-top: 1px solid var(--border-subtle);">
         <button type="button" id="settings-test-alarm-btn" class="btn btn-primary" style="flex: 1; padding: 9px 14px; font-size: var(--font-size-xs);">
           Test Alarm &amp; Voice
@@ -141,6 +184,10 @@ export function renderSettingsView(options: SettingsViewOptions): HTMLElement {
   const prefSound = container.querySelector<HTMLInputElement>('#settings-sound-chime')!;
   const prefVibrate = container.querySelector<HTMLInputElement>('#settings-vibrate')!;
   const prefPopups = container.querySelector<HTMLInputElement>('#settings-popups')!;
+  const prefQuiet = container.querySelector<HTMLInputElement>('#settings-quiet-hours')!;
+  const styleHighSelect = container.querySelector<HTMLSelectElement>('#settings-style-high')!;
+  const styleMedSelect = container.querySelector<HTMLSelectElement>('#settings-style-medium')!;
+  const styleLowSelect = container.querySelector<HTMLSelectElement>('#settings-style-low')!;
   const testAlarmBtn = container.querySelector<HTMLButtonElement>('#settings-test-alarm-btn')!;
   const osNotifBtn = container.querySelector<HTMLButtonElement>('#settings-os-notif-btn')!;
   const themeLightBtn = container.querySelector<HTMLButtonElement>('#settings-theme-light')!;
@@ -162,6 +209,10 @@ export function renderSettingsView(options: SettingsViewOptions): HTMLElement {
     prefSound.checked = prefs.soundChime;
     prefVibrate.checked = prefs.vibrateEnabled;
     prefPopups.checked = prefs.popupEnabled;
+    prefQuiet.checked = prefs.quietHoursEnabled;
+    styleHighSelect.value = prefs.priorityStyles.high;
+    styleMedSelect.value = prefs.priorityStyles.medium;
+    styleLowSelect.value = prefs.priorityStyles.low;
   }
 
   function applyPermUI(state: PermState, statusEl: HTMLSpanElement, btnEl: HTMLButtonElement, guideEl: HTMLDivElement) {
@@ -252,6 +303,23 @@ export function renderSettingsView(options: SettingsViewOptions): HTMLElement {
       await updatePermissionsDashboard();
     }
   });
+
+  prefQuiet.addEventListener('change', () => {
+    notificationService.updatePreferences({ quietHoursEnabled: prefQuiet.checked });
+  });
+
+  const handlePriorityStyleChange = () => {
+    notificationService.updatePreferences({
+      priorityStyles: {
+        high: styleHighSelect.value as any,
+        medium: styleMedSelect.value as any,
+        low: styleLowSelect.value as any,
+      },
+    });
+  };
+  styleHighSelect.addEventListener('change', handlePriorityStyleChange);
+  styleMedSelect.addEventListener('change', handlePriorityStyleChange);
+  styleLowSelect.addEventListener('change', handlePriorityStyleChange);
 
   testAlarmBtn.addEventListener('click', () => options.onTestAlarm());
 

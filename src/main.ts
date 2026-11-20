@@ -218,8 +218,13 @@ async function mountApp(user: AuthUser) {
     const badgeConfig: Record<AlarmPopupPayload['stage'], { label: string; bg: string; color: string }> = {
       '60min': { label: '1 HR REMINDER', bg: 'rgba(99, 102, 241, 0.14)', color: '#4F46E5' },
       '30min': { label: '30 MIN REMINDER', bg: 'rgba(245, 158, 11, 0.16)', color: '#B45309' },
+      '20min': { label: '20 MIN COUNTDOWN', bg: 'rgba(245, 158, 11, 0.18)', color: '#D97706' },
+      '15min': { label: '15 MIN HEADS-UP', bg: 'rgba(59, 130, 246, 0.14)', color: '#2563EB' },
+      '10min': { label: '10 MIN COUNTDOWN', bg: 'rgba(234, 88, 12, 0.16)', color: '#EA580C' },
+      '5min': { label: '5 MIN FINAL CALL', bg: 'rgba(229, 46, 46, 0.16)', color: '#DC2626' },
       'start': { label: 'ALARM NOW', bg: 'rgba(229, 46, 46, 0.15)', color: '#E52E2E' },
-      'missed': { label: `MISSED (${payload.xpDelta || -10} XP)`, bg: 'rgba(18, 18, 22, 0.12)', color: '#E52E2E' }
+      'missed': { label: `MISSED (${payload.xpDelta || -10} XP)`, bg: 'rgba(18, 18, 22, 0.12)', color: '#E52E2E' },
+      'snooze': { label: 'SNOOZE UP', bg: 'rgba(16, 185, 129, 0.15)', color: '#059669' },
     };
 
     const cfg = badgeConfig[payload.stage];
@@ -255,12 +260,18 @@ async function mountApp(user: AuthUser) {
         </div>
         ${savedLinksHtml ? `<div style="margin-bottom: 10px;">${savedLinksHtml}</div>` : ''}
 
-        <div style="display: flex; gap: 8px;">
-          <button type="button" id="alarm-toast-complete" style="flex: 1; padding: 7px 10px; border-radius: 999px; border: none; background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
-            Complete Task
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" id="alarm-toast-complete" style="flex: 1; min-width: 110px; padding: 7px 10px; border-radius: 999px; border: none; background: #10B981; color: #FFFFFF; font-size: 11px; font-weight: 800; cursor: pointer;">
+            Complete
           </button>
-          <button type="button" id="alarm-toast-reschedule" style="padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-cream); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
-            Edit / Reschedule
+          <button type="button" id="alarm-toast-ack" title="Silence remaining countdown alerts for this task" style="padding: 7px 11px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
+            I'm On It
+          </button>
+          <button type="button" id="alarm-toast-snooze" style="padding: 7px 11px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
+            +5m
+          </button>
+          <button type="button" id="alarm-toast-reschedule" style="padding: 7px 11px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-cream); color: var(--color-black-dominant); font-size: 11px; font-weight: 700; cursor: pointer;">
+            Edit
           </button>
         </div>
       </div>
@@ -268,6 +279,20 @@ async function mountApp(user: AuthUser) {
 
     alarmToastContainer.querySelector('#alarm-toast-dismiss')?.addEventListener('click', () => {
       alarmToastContainer.style.display = 'none';
+    });
+
+    alarmToastContainer.querySelector('#alarm-toast-ack')?.addEventListener('click', () => {
+      alarmToastContainer.style.display = 'none';
+      if (payload.task.id !== 'test-alarm') {
+        notificationService.acknowledgeTaskAlarms(payload.task.id);
+      }
+    });
+
+    alarmToastContainer.querySelector('#alarm-toast-snooze')?.addEventListener('click', () => {
+      alarmToastContainer.style.display = 'none';
+      if (payload.task.id !== 'test-alarm') {
+        notificationService.snoozeTaskAlarm(payload.task, 5);
+      }
     });
 
     alarmToastContainer.querySelector('#alarm-toast-complete')?.addEventListener('click', async () => {
@@ -670,11 +695,16 @@ async function mountApp(user: AuthUser) {
         eventBus.emit(AppEvents.STATS_UPDATED, newStats);
       }
 
-      // 1. Play chime sound
-      if (alarm.stage === 'start') {
+      // 1. Play chime sound matched to stage & notification style
+      const effectiveStyle = notificationService.getEffectiveStyle(alarm.task);
+      if (alarm.stage === 'start' || alarm.stage === 'snooze') {
         notificationService.playAlarmChime('start');
       } else if (alarm.stage === 'missed') {
         notificationService.playAlarmChime('missed');
+      } else if (effectiveStyle === 'escalating' && (alarm.stage === '10min' || alarm.stage === '5min')) {
+        notificationService.playAlarmChime('escalating');
+      } else if (effectiveStyle === 'gentle') {
+        notificationService.playAlarmChime('gentle');
       } else {
         notificationService.playAlarmChime('reminder');
       }

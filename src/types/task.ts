@@ -6,6 +6,8 @@ export type ReminderTimeMode = 'none' | 'one-time' | 'duration';
 
 export type ReminderBodyFormat = 'paragraph' | 'bullets' | 'checkboxes';
 
+export type NotificationStyle = 'auto' | 'silent' | 'gentle' | 'standard' | 'escalating';
+
 export interface ReminderChecklistItem {
   id: string;
   text: string;
@@ -36,6 +38,7 @@ export interface Task {
   urgency: UrgencyLevel;
   completed: boolean;
   timeMode?: ReminderTimeMode;
+  notificationStyle?: NotificationStyle;
   bodyFormat?: ReminderBodyFormat;
   checklistItems?: ReminderChecklistItem[];
   eventGroupId?: string;
@@ -63,6 +66,35 @@ export function resolveReminderTimeMode(
     return 'one-time';
   }
   return 'none';
+}
+
+export interface PriorityNotificationDefaults {
+  low: Exclude<NotificationStyle, 'auto'>;
+  medium: Exclude<NotificationStyle, 'auto'>;
+  high: Exclude<NotificationStyle, 'auto'>;
+}
+
+export const DEFAULT_PRIORITY_NOTIFICATION_STYLES: PriorityNotificationDefaults = {
+  low: 'gentle',
+  medium: 'standard',
+  high: 'escalating',
+};
+
+/**
+ * Resolves the effective NotificationStyle for a task given its urgency, timing mode, and user defaults.
+ */
+export function resolveNotificationStyle(
+  task: Pick<Task, 'notificationStyle' | 'urgency' | 'timeMode' | 'startTime' | 'durationMinutes' | 'date'>,
+  defaults: PriorityNotificationDefaults = DEFAULT_PRIORITY_NOTIFICATION_STYLES
+): Exclude<NotificationStyle, 'auto'> {
+  const mode = resolveReminderTimeMode(task);
+  if (mode === 'none' || !task.startTime) {
+    return 'silent';
+  }
+  if (task.notificationStyle && task.notificationStyle !== 'auto') {
+    return task.notificationStyle;
+  }
+  return defaults[task.urgency] || 'standard';
 }
 
 export interface OrbitArcSegment {

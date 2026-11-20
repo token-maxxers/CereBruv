@@ -10,6 +10,7 @@ import {
 } from '../../utils/imageUtils';
 import {
   resolveReminderTimeMode,
+  type NotificationStyle,
   type ReminderBodyFormat,
   type ReminderChecklistItem,
   type ReminderTimeMode,
@@ -144,6 +145,20 @@ export function renderTaskFormModal(): {
               <input type="number" id="task-duration-input" class="form-input" min="5" max="720" step="5" value="45" placeholder="Mins" title="Duration in minutes" style="padding: 8px 10px; font-size: 0.75rem;" />
             </div>
           </div>
+
+          <div id="alert-style-wrap" style="display: flex; flex-direction: column; gap: 6px; padding-top: 2px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span style="font-size: 0.68rem; font-weight: 800; color: var(--color-black-muted); letter-spacing: 0.04em; text-transform: uppercase;">Alert Style</span>
+              <span id="alert-style-preview" style="font-size: 0.68rem; font-weight: 700; color: var(--color-red-primary);"></span>
+            </div>
+            <div class="segmented-control" style="padding: 3px;">
+              <button type="button" class="segmented-btn alert-style-btn active" data-alert-style="auto" style="padding: 5px 6px; font-size: 0.68rem;">Auto</button>
+              <button type="button" class="segmented-btn alert-style-btn" data-alert-style="escalating" style="padding: 5px 6px; font-size: 0.68rem;">Escalating</button>
+              <button type="button" class="segmented-btn alert-style-btn" data-alert-style="standard" style="padding: 5px 6px; font-size: 0.68rem;">Standard</button>
+              <button type="button" class="segmented-btn alert-style-btn" data-alert-style="gentle" style="padding: 5px 6px; font-size: 0.68rem;">Gentle</button>
+              <button type="button" class="segmented-btn alert-style-btn" data-alert-style="silent" style="padding: 5px 6px; font-size: 0.68rem;">Silent</button>
+            </div>
+          </div>
         </div>
 
         <hr style="border: none; border-top: 1px solid var(--border-subtle); margin: 2px 0;" />
@@ -215,6 +230,9 @@ export function renderTaskFormModal(): {
   const durationInput = backdrop.querySelector<HTMLInputElement>('#task-duration-input')!;
   const datetimeWrap = backdrop.querySelector<HTMLDivElement>('#datetime-fields-wrap')!;
   const durationFieldCol = backdrop.querySelector<HTMLDivElement>('#duration-field-col')!;
+  const alertStyleWrap = backdrop.querySelector<HTMLDivElement>('#alert-style-wrap')!;
+  const alertStylePreview = backdrop.querySelector<HTMLSpanElement>('#alert-style-preview')!;
+  let currentNotificationStyle: NotificationStyle = 'auto';
 
   const notesInput = backdrop.querySelector<HTMLTextAreaElement>('#task-notes-input')!;
   const checklistEditor = backdrop.querySelector<HTMLDivElement>('#checklist-editor')!;
@@ -232,6 +250,26 @@ export function renderTaskFormModal(): {
   const addLinkBtn = backdrop.querySelector<HTMLButtonElement>('#task-add-link-btn')!;
   const draftLinksList = backdrop.querySelector<HTMLDivElement>('#task-draft-links-list')!;
 
+  function updateAlertStyleUI(style: NotificationStyle) {
+    currentNotificationStyle = style;
+    backdrop.querySelectorAll<HTMLButtonElement>('.alert-style-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-alert-style') === style);
+    });
+    const urgency = (urgencySelect.value as UrgencyLevel) || 'medium';
+    alertStylePreview.textContent = notificationService.getStageSummary(style, urgency);
+  }
+
+  backdrop.querySelectorAll<HTMLButtonElement>('.alert-style-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const style = (btn.getAttribute('data-alert-style') as NotificationStyle) || 'auto';
+      updateAlertStyleUI(style);
+    });
+  });
+
+  urgencySelect.addEventListener('change', () => {
+    updateAlertStyleUI(currentNotificationStyle);
+  });
+
   function updateTimeModeUI(mode: ReminderTimeMode) {
     currentTimeMode = mode;
     backdrop.querySelectorAll<HTMLButtonElement>('.time-mode-btn').forEach(btn => {
@@ -240,6 +278,7 @@ export function renderTaskFormModal(): {
 
     if (mode === 'none') {
       datetimeWrap.style.display = 'none';
+      alertStyleWrap.style.display = 'none';
       dateInput.value = '';
       startInput.value = '';
       durationInput.value = '0';
@@ -247,11 +286,13 @@ export function renderTaskFormModal(): {
       datetimeWrap.style.display = 'grid';
       datetimeWrap.style.gridTemplateColumns = '1.3fr 1fr';
       durationFieldCol.style.display = 'none';
+      alertStyleWrap.style.display = 'flex';
       durationInput.value = '0';
     } else {
       datetimeWrap.style.display = 'grid';
       datetimeWrap.style.gridTemplateColumns = '1.3fr 1fr 0.8fr';
       durationFieldCol.style.display = 'flex';
+      alertStyleWrap.style.display = 'flex';
       if (!durationInput.value || durationInput.value === '0') {
         durationInput.value = '45';
       }
@@ -614,6 +655,7 @@ export function renderTaskFormModal(): {
       renderDraftLinks();
       renderAttachments();
       updateTimeModeUI(resolveReminderTimeMode(editTask));
+      updateAlertStyleUI(editTask.notificationStyle || 'auto');
       updateBodyFormatUI(editTask.bodyFormat || (checklist.length > 0 ? 'checkboxes' : 'paragraph'), false);
     } else {
       editingTaskId = null;
@@ -638,6 +680,7 @@ export function renderTaskFormModal(): {
       renderDraftLinks();
       renderAttachments();
       updateTimeModeUI('duration');
+      updateAlertStyleUI('auto');
       updateBodyFormatUI('paragraph', false);
     }
 
@@ -691,6 +734,7 @@ export function renderTaskFormModal(): {
           durationMinutes: finalDuration,
           urgency,
           timeMode: currentTimeMode,
+          notificationStyle: currentNotificationStyle,
           bodyFormat: currentBodyFormat,
           checklistItems: checklist.length > 0 ? checklist : undefined,
           notes: notes || undefined,
@@ -710,6 +754,7 @@ export function renderTaskFormModal(): {
         durationMinutes: finalDuration,
         urgency,
         timeMode: currentTimeMode,
+        notificationStyle: currentNotificationStyle,
         bodyFormat: currentBodyFormat,
         checklistItems: checklist.length > 0 ? checklist : undefined,
         notes: notes || undefined,
@@ -730,6 +775,7 @@ export function renderTaskFormModal(): {
         durationMinutes: finalDuration,
         urgency,
         timeMode: currentTimeMode,
+        notificationStyle: currentNotificationStyle,
         bodyFormat: currentBodyFormat,
         checklistItems: checklist.length > 0 ? checklist : undefined,
         notes: notes || undefined,

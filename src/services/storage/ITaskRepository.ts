@@ -1,4 +1,5 @@
 import type {
+  NotificationStyle,
   ReminderBodyFormat,
   ReminderChecklistItem,
   ReminderTimeMode,
@@ -15,6 +16,7 @@ export interface CreateTaskDTO {
   durationMinutes: number; // 0 when no duration specified
   urgency: Task['urgency'];
   timeMode?: ReminderTimeMode;
+  notificationStyle?: NotificationStyle;
   bodyFormat?: ReminderBodyFormat;
   checklistItems?: ReminderChecklistItem[];
   eventGroupId?: string;

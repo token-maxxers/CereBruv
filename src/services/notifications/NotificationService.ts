@@ -2,7 +2,15 @@ import { getToken, onMessage } from 'firebase/messaging';
 import { doc, setDoc } from 'firebase/firestore';
 import { db, auth, getFirebaseMessaging } from '../firebase';
 import { eventBus, AppEvents } from '../events';
-import type { Task } from '../../types/task';
+import type {
+  NotificationStyle,
+  PriorityNotificationDefaults,
+  Task,
+} from '../../types/task';
+import {
+  DEFAULT_PRIORITY_NOTIFICATION_STYLES,
+  resolveNotificationStyle,
+} from '../../types/task';
 import { timeStringToFractionalHour } from '../../components/FocusOrbit/orbitCalculator';
 
 export interface CereBruvAlertPreferences {
@@ -10,9 +18,23 @@ export interface CereBruvAlertPreferences {
   soundChime: boolean;      // Web Audio API alarm chime sound
   vibrateEnabled: boolean;  // Haptic vibration + visual shake pulse
   popupEnabled: boolean;    // In-app + OS notification popups
+  quietHoursEnabled: boolean;     // Silence non-escalating alerts during sleep hours
+  quietStartHour: number;         // 0-23 (default 23 = 11 PM)
+  quietEndHour: number;           // 0-23 (default 7 = 7 AM)
+  escalatingBreaksQuiet: boolean; // Allow escalating high-priority alerts during quiet hours
+  priorityStyles: PriorityNotificationDefaults;
 }
 
-export type AlarmStage = '60min' | '30min' | 'start' | 'missed';
+export type AlarmStage =
+  | '60min'
+  | '30min'
+  | '20min'
+  | '15min'
+  | '10min'
+  | '5min'
+  | 'start'
+  | 'missed'
+  | 'snooze';
 
 export interface AlarmPopupPayload {
   id: string;
@@ -24,8 +46,35 @@ export interface AlarmPopupPayload {
   xpDelta?: number;
 }
 
+interface StageDefinition {
+  stage: AlarmStage;
+  minsBefore: number;
+  windowMin: number;
+  windowMax: number;
+  label: string;
+}
+
+const STAGE_DEFS: Record<Exclude<AlarmStage, 'missed' | 'snooze'>, StageDefinition> = {
+  '60min': { stage: '60min', minsBefore: 60, windowMin: 55, windowMax: 60, label: '1 Hour' },
+  '30min': { stage: '30min', minsBefore: 30, windowMin: 25, windowMax: 30, label: '30 Mins' },
+  '20min': { stage: '20min', minsBefore: 20, windowMin: 18, windowMax: 20, label: '20 Mins' },
+  '15min': { stage: '15min', minsBefore: 15, windowMin: 13, windowMax: 15, label: '15 Mins' },
+  '10min': { stage: '10min', minsBefore: 10, windowMin: 8, windowMax: 10, label: '10 Mins' },
+  '5min': { stage: '5min', minsBefore: 5, windowMin: 3, windowMax: 5, label: '5 Mins' },
+  'start': { stage: 'start', minsBefore: 0, windowMin: -10, windowMax: 0, label: 'Start' },
+};
+
+const STYLE_STAGES: Record<Exclude<NotificationStyle, 'auto'>, Array<Exclude<AlarmStage, 'missed' | 'snooze'>>> = {
+  silent: [],
+  gentle: ['15min', 'start'],
+  standard: ['60min', '30min', 'start'],
+  escalating: ['60min', '30min', '20min', '10min', '5min', 'start'],
+};
+
 const PREFS_STORAGE_KEY = 'cerebruv_alert_prefs_v1';
 const FIRED_ALARMS_KEY = 'cerebruv_fired_alarms_v1';
+const ACK_ALARMS_KEY = 'cerebruv_ack_alarms_v1';
+const SNOOZE_ALARMS_KEY = 'cerebruv_snooze_alarms_v1';
 
 export const ENABLE_MISSED_PENALTY = false;
 
@@ -37,8 +86,15 @@ class NotificationService {
     soundChime: true,
     vibrateEnabled: true,
     popupEnabled: true,
+    quietHoursEnabled: false,
+    quietStartHour: 23,
+    quietEndHour: 7,
+    escalatingBreaksQuiet: true,
+    priorityStyles: { ...DEFAULT_PRIORITY_NOTIFICATION_STYLES },
   };
   private firedAlarms: Set<string> = new Set();
+  private ackedTasks: Set<string> = new Set();
+  private snoozedAlarms: Map<string, number> = new Map();
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -47,6 +103,7 @@ class NotificationService {
       }
       this.loadPreferences();
       this.loadFiredAlarms();
+      this.loadAckAndSnooze();
     }
   }
 
@@ -55,12 +112,109 @@ class NotificationService {
       const saved = localStorage.getItem(PREFS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        this.prefs = { ...this.prefs, ...parsed };
+        this.prefs = {
+          ...this.prefs,
+          ...parsed,
+          priorityStyles: {
+            ...DEFAULT_PRIORITY_NOTIFICATION_STYLES,
+            ...(parsed?.priorityStyles || {}),
+          },
+        };
       } else {
         const legacyMuted = localStorage.getItem('cerebruv_voice_muted') === 'true';
         this.prefs.voiceMuted = legacyMuted;
       }
     } catch {}
+  }
+
+  private loadAckAndSnooze(): void {
+    try {
+      const rawAck = localStorage.getItem(ACK_ALARMS_KEY);
+      if (rawAck) {
+        this.ackedTasks = new Set((JSON.parse(rawAck) as string[]).slice(-100));
+      }
+      const rawSnooze = localStorage.getItem(SNOOZE_ALARMS_KEY);
+      if (rawSnooze) {
+        const entries = JSON.parse(rawSnooze) as Array<[string, number]>;
+        const now = Date.now();
+        this.snoozedAlarms = new Map(entries.filter(([, ts]) => ts > now - 10 * 60_000));
+      }
+    } catch {}
+  }
+
+  private saveAckAndSnooze(): void {
+    try {
+      localStorage.setItem(ACK_ALARMS_KEY, JSON.stringify(Array.from(this.ackedTasks).slice(-100)));
+      localStorage.setItem(SNOOZE_ALARMS_KEY, JSON.stringify(Array.from(this.snoozedAlarms.entries())));
+    } catch {}
+  }
+
+  private getTodayStr(now = new Date()): string {
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  public acknowledgeTaskAlarms(taskId: string): void {
+    const key = `${taskId}_${this.getTodayStr()}`;
+    this.ackedTasks.add(key);
+    this.snoozedAlarms.delete(taskId);
+    this.saveAckAndSnooze();
+  }
+
+  public isTaskAcknowledgedToday(taskId: string, todayStr = this.getTodayStr()): boolean {
+    return this.ackedTasks.has(`${taskId}_${todayStr}`);
+  }
+
+  public snoozeTaskAlarm(task: Task, minutes = 5): void {
+    const triggerAt = Date.now() + minutes * 60_000;
+    this.snoozedAlarms.set(task.id, triggerAt);
+    this.saveAckAndSnooze();
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then(reg => {
+          reg.active?.postMessage({
+            type: 'SYNC_TASK_ALARMS',
+            alarms: [
+              {
+                id: `${task.id}_snooze_${triggerAt}`,
+                taskId: task.id,
+                stage: 'snooze',
+                triggerAt,
+                title: `Snoozed Reminder: "${task.title}"`,
+                body: `${minutes}m snooze is up! Time to jump into "${task.title}".`,
+                vibrate: this.prefs.vibrateEnabled,
+                requireInteraction: true,
+              },
+            ],
+          });
+        })
+        .catch(() => {});
+    }
+  }
+
+  public getEffectiveStyle(task: Task): Exclude<NotificationStyle, 'auto'> {
+    return resolveNotificationStyle(task, this.prefs.priorityStyles);
+  }
+
+  public getStageSummary(style: NotificationStyle, urgency: Task['urgency']): string {
+    const resolved =
+      style === 'auto' ? this.prefs.priorityStyles[urgency] || 'standard' : style;
+    const stages = STYLE_STAGES[resolved];
+    if (stages.length === 0) return 'No alerts (quietly saved)';
+    return `Alerts at: ${stages.map(s => (s === 'start' ? 'Start' : s.replace('min', 'm'))).join(' → ')}`;
+  }
+
+  public isQuietHoursNow(style: Exclude<NotificationStyle, 'auto'>): boolean {
+    if (!this.prefs.quietHoursEnabled) return false;
+    if (style === 'escalating' && this.prefs.escalatingBreaksQuiet) return false;
+    const hour = new Date().getHours();
+    const { quietStartHour, quietEndHour } = this.prefs;
+    if (quietStartHour > quietEndHour) {
+      return hour >= quietStartHour || hour < quietEndHour;
+    }
+    return hour >= quietStartHour && hour < quietEndHour;
   }
 
   private savePreferences(): void {
@@ -97,7 +251,14 @@ class NotificationService {
   }
 
   public updatePreferences(partial: Partial<CereBruvAlertPreferences>): CereBruvAlertPreferences {
-    this.prefs = { ...this.prefs, ...partial };
+    this.prefs = {
+      ...this.prefs,
+      ...partial,
+      priorityStyles: {
+        ...this.prefs.priorityStyles,
+        ...(partial.priorityStyles || {}),
+      },
+    };
     this.savePreferences();
     return { ...this.prefs };
   }
@@ -133,7 +294,7 @@ class NotificationService {
   /**
    * Plays a crisp synthesized Web Audio API alarm chime (zero external audio files needed).
    */
-  public playAlarmChime(type: 'reminder' | 'start' | 'missed' | 'success' = 'reminder'): void {
+  public playAlarmChime(type: 'gentle' | 'reminder' | 'escalating' | 'start' | 'missed' | 'success' = 'reminder'): void {
     if (!this.prefs.soundChime || typeof window === 'undefined') return;
 
     try {
@@ -144,11 +305,15 @@ class NotificationService {
       const notes =
         type === 'start'
           ? [523.25, 659.25, 783.99, 1046.5] // C5 E5 G5 C6 (energetic start alarm)
-          : type === 'missed'
-            ? [440, 392, 349.23] // A4 G4 F4 (gentle heads-up tone)
-            : type === 'success'
-              ? [587.33, 783.99, 987.77] // D5 G5 B5 (celebration chime)
-              : [523.25, 659.25, 783.99]; // C5 E5 G5 (friendly reminder chime)
+          : type === 'escalating'
+            ? [659.25, 880, 659.25, 987.77] // E5 A5 E5 B5 (urgent countdown pulse)
+            : type === 'gentle'
+              ? [523.25, 659.25] // C5 E5 (soft gentle ping)
+              : type === 'missed'
+                ? [440, 392, 349.23] // A4 G4 F4 (gentle heads-up tone)
+                : type === 'success'
+                  ? [587.33, 783.99, 987.77] // D5 G5 B5 (celebration chime)
+                  : [523.25, 659.25, 783.99]; // C5 E5 G5 (friendly reminder chime)
 
       notes.forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -223,19 +388,18 @@ class NotificationService {
   }
 
   /**
-   * Syncs upcoming task alarms (1 hr before, 30 mins before, exact start time) into the Service Worker
+   * Syncs upcoming task alarms (based on each task's NotificationStyle) into the Service Worker
    * so OS notifications still pop up even when the browser tab is minimized or in the background.
    */
   public syncAlarmsWithServiceWorker(todayTasks: Task[]): void {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${y}-${m}-${day}`;
+    const todayStr = this.getTodayStr(now);
 
-    const pending = todayTasks.filter(t => !t.completed && Boolean(t.startTime) && t.date === todayStr);
+    const pending = todayTasks.filter(
+      t => !t.completed && Boolean(t.startTime) && t.date === todayStr && !this.isTaskAcknowledgedToday(t.id, todayStr)
+    );
     const alarms: Array<{
       id: string;
       taskId: string;
@@ -249,6 +413,10 @@ class NotificationService {
 
     pending.forEach(task => {
       if (!task.startTime) return;
+      const style = this.getEffectiveStyle(task);
+      const stageKeys = STYLE_STAGES[style];
+      if (stageKeys.length === 0) return;
+
       const [hStr, mStr] = task.startTime.split(':');
       const taskStart = new Date(
         now.getFullYear(),
@@ -260,41 +428,29 @@ class NotificationService {
       ).getTime();
       const durText = task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : '';
 
-      const stages: Array<{ stage: AlarmStage; offsetMs: number; title: string; body: string }> = [
-        {
-          stage: '60min',
-          offsetMs: -60 * 60 * 1000,
-          title: `CereBruv: 1 Hour Heads-Up`,
-          body: `"${task.title}" (${task.category.toUpperCase()}) starts in 1 hour at ${task.startTime}.`,
-        },
-        {
-          stage: '30min',
-          offsetMs: -30 * 60 * 1000,
-          title: `CereBruv: 30 Mins Before Task`,
-          body: `"${task.title}" starts in 30 minutes at ${task.startTime} (${task.urgency} priority).`,
-        },
-        {
-          stage: 'start',
-          offsetMs: 0,
-          title: `CereBruv Alarm: Time for "${task.title}"!`,
-          body: `It's ${task.startTime}, Bruv! Start "${task.title}"${durText} now.`,
-        },
-      ];
+      stageKeys.forEach(stageKey => {
+        const def = STAGE_DEFS[stageKey];
+        const triggerAt = taskStart - def.minsBefore * 60 * 1000;
+        if (triggerAt <= Date.now()) return;
 
-      stages.forEach(s => {
-        const triggerAt = taskStart + s.offsetMs;
-        if (triggerAt > Date.now()) {
-          alarms.push({
-            id: `${task.id}_${todayStr}_${s.stage}`,
-            taskId: task.id,
-            stage: s.stage,
-            triggerAt,
-            title: s.title,
-            body: s.body,
-            vibrate: this.prefs.vibrateEnabled,
-            requireInteraction: s.stage === 'start',
-          });
-        }
+        const isStart = stageKey === 'start';
+        const title = isStart
+          ? `CereBruv Alarm: Time for "${task.title}"!`
+          : `CereBruv (${def.label} Left): "${task.title}"`;
+        const body = isStart
+          ? `It's ${task.startTime}, Bruv! Start "${task.title}"${durText} now.`
+          : `"${task.title}" starts in ${def.label.toLowerCase()} at ${task.startTime} (${task.urgency} priority).`;
+
+        alarms.push({
+          id: `${task.id}_${todayStr}_${stageKey}`,
+          taskId: task.id,
+          stage: stageKey,
+          triggerAt,
+          title,
+          body,
+          vibrate: this.prefs.vibrateEnabled,
+          requireInteraction: isStart || style === 'escalating',
+        });
       });
     });
 
@@ -309,88 +465,105 @@ class NotificationService {
   }
 
   /**
-   * Evaluates all today's tasks against current real time and returns any newly triggered
-   * 1-hour reminder, 30-min reminder, exact start-time alarm, or missed task alert.
+   * Evaluates all today's tasks against current real time using each task's resolved NotificationStyle
+   * (Silent, Gentle, Standard, or Escalating countdown) plus any active snoozed reminders.
    */
   public checkRealTimeTaskAlarms(todayTasks: Task[]): AlarmPopupPayload[] {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${y}-${m}-${day}`;
+    const todayStr = this.getTodayStr(now);
     const currentMins = now.getHours() * 60 + now.getMinutes();
+    const nowMs = now.getTime();
 
     const triggered: AlarmPopupPayload[] = [];
-    const pending = todayTasks.filter(t => !t.completed && Boolean(t.startTime) && t.date === todayStr);
+    const pending = todayTasks.filter(t => !t.completed);
 
-    pending.forEach(task => {
-      if (!task.startTime) return;
-      const startHourFrac = timeStringToFractionalHour(task.startTime);
-      const startMins = Math.round(startHourFrac * 60);
-      const effectiveDur = task.durationMinutes > 0 ? task.durationMinutes : 15;
-      const endMins = startMins + effectiveDur;
-      const minsUntilStart = startMins - currentMins;
-      const minsPastEnd = currentMins - endMins;
-      const durInfo = task.durationMinutes > 0 ? `${task.durationMinutes}m • ` : '';
+    // 0. Check Snoozed Alarms first
+    if (this.snoozedAlarms.size > 0) {
+      let snoozeChanged = false;
+      this.snoozedAlarms.forEach((triggerAt, taskId) => {
+        if (nowMs >= triggerAt) {
+          const task = pending.find(t => t.id === taskId);
+          this.snoozedAlarms.delete(taskId);
+          snoozeChanged = true;
+          if (task) {
+            triggered.push({
+              id: `${task.id}_snooze_${triggerAt}`,
+              task,
+              stage: 'snooze',
+              headline: `Snooze Up: "${task.title}", Bruv!`,
+              message: `Your snoozed ${task.urgency} priority reminder is ready now.`,
+              spokenText: `Snooze timer finished, Bruv! Time to jump into ${task.title}.`,
+            });
+          }
+        }
+      });
+      if (snoozeChanged) this.saveAckAndSnooze();
+    }
 
-      // 1. 1-Hour Before Reminder (55 to 60 mins before start)
-      const key60 = `${task.id}_${todayStr}_60min`;
-      if (minsUntilStart >= 55 && minsUntilStart <= 60 && !this.hasAlarmFired(key60)) {
-        this.markAlarmFired(key60);
-        triggered.push({
-          id: key60,
-          task,
-          stage: '60min',
-          headline: `1 Hour Until "${task.title}", Bruv!`,
-          message: `Scheduled at ${task.startTime} (${durInfo}${task.urgency} priority).`,
-          spokenText: `Heads up, Bruv! You have ${task.title} coming up in 1 hour at ${task.startTime}.`,
+    pending
+      .filter(t => Boolean(t.startTime) && t.date === todayStr && !this.isTaskAcknowledgedToday(t.id, todayStr))
+      .forEach(task => {
+        if (!task.startTime) return;
+        const style = this.getEffectiveStyle(task);
+        if (style === 'silent' || this.isQuietHoursNow(style)) return;
+
+        const stageKeys = STYLE_STAGES[style];
+        const startHourFrac = timeStringToFractionalHour(task.startTime);
+        const startMins = Math.round(startHourFrac * 60);
+        const effectiveDur = task.durationMinutes > 0 ? task.durationMinutes : 15;
+        const endMins = startMins + effectiveDur;
+        const minsUntilStart = startMins - currentMins;
+        const minsPastEnd = currentMins - endMins;
+        const durInfo = task.durationMinutes > 0 ? `${task.durationMinutes}m • ` : '';
+
+        stageKeys.forEach(stageKey => {
+          const def = STAGE_DEFS[stageKey];
+          const key = `${task.id}_${todayStr}_${stageKey}`;
+          if (
+            minsUntilStart >= def.windowMin &&
+            minsUntilStart <= def.windowMax &&
+            !this.hasAlarmFired(key)
+          ) {
+            this.markAlarmFired(key);
+            if (stageKey === 'start') {
+              triggered.push({
+                id: key,
+                task,
+                stage: 'start',
+                headline: `Alarm: Time for "${task.title}", Bruv!`,
+                message: `It's ${task.startTime}! Your ${task.urgency} priority ${task.category} task${task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : ''} is starting right now.`,
+                spokenText: `Alarm check, Bruv! It is time for your ${task.urgency} priority task: ${task.title}. Let's get after it!`,
+              });
+            } else {
+              const countdownTag = style === 'escalating' ? 'Countdown: ' : '';
+              triggered.push({
+                id: key,
+                task,
+                stage: stageKey,
+                headline: `${countdownTag}${def.label} Until "${task.title}"`,
+                message: `Scheduled at ${task.startTime} (${durInfo}${task.urgency} priority).`,
+                spokenText: `${def.label} until ${task.title} at ${task.startTime}.`,
+              });
+            }
+          }
         });
-      }
 
-      // 2. 30-Minutes Before Reminder (25 to 30 mins before start)
-      const key30 = `${task.id}_${todayStr}_30min`;
-      if (minsUntilStart >= 25 && minsUntilStart <= 30 && !this.hasAlarmFired(key30)) {
-        this.markAlarmFired(key30);
-        triggered.push({
-          id: key30,
-          task,
-          stage: '30min',
-          headline: `30 Mins Until "${task.title}", Bruv!`,
-          message: `Starting at ${task.startTime} (${task.category.toUpperCase()} • ${task.urgency} priority). Wrap up what you're doing!`,
-          spokenText: `Reminder, Bruv! ${task.title} starts in 30 minutes at ${task.startTime}. Get ready!`,
-        });
-      }
-
-      // 3. Exact Start Time / In-Window Alarm (0 to 10 mins after start time)
-      const keyStart = `${task.id}_${todayStr}_start`;
-      if (minsUntilStart <= 0 && minsUntilStart >= -10 && !this.hasAlarmFired(keyStart)) {
-        this.markAlarmFired(keyStart);
-        triggered.push({
-          id: keyStart,
-          task,
-          stage: 'start',
-          headline: `Alarm: Time for "${task.title}", Bruv!`,
-          message: `It's ${task.startTime}! Your ${task.urgency} priority ${task.category} task${task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : ''} is starting right now.`,
-          spokenText: `Alarm check, Bruv! It is time for your ${task.urgency} priority task: ${task.title}. Let's get after it!`,
-        });
-      }
-
-      // 4. Missed / Overdue Task Check (Task window ended > 2 mins ago and still not completed)
-      const keyMissed = `${task.id}_${todayStr}_missed`;
-      if (ENABLE_MISSED_PENALTY && minsPastEnd >= 2 && !this.hasAlarmFired(keyMissed)) {
-        this.markAlarmFired(keyMissed);
-        const penalty = task.urgency === 'high' ? -15 : -10;
-        triggered.push({
-          id: keyMissed,
-          task,
-          stage: 'missed',
-          headline: `Missed Task: "${task.title}" (${penalty} XP)`,
-          message: `Window ${task.startTime}${task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : ''} passed without completion. Complete it now or reschedule!`,
-          spokenText: `Hey Bruv, the scheduled time for ${task.title} at ${task.startTime} has passed. You lost ${Math.abs(penalty)} XP, but you can still complete it or reschedule it now!`,
-          xpDelta: penalty,
-        });
-      }
-    });
+        // Missed / Overdue Task Check (Task window ended > 2 mins ago and still not completed)
+        const keyMissed = `${task.id}_${todayStr}_missed`;
+        if (ENABLE_MISSED_PENALTY && minsPastEnd >= 2 && !this.hasAlarmFired(keyMissed)) {
+          this.markAlarmFired(keyMissed);
+          const penalty = task.urgency === 'high' ? -15 : -10;
+          triggered.push({
+            id: keyMissed,
+            task,
+            stage: 'missed',
+            headline: `Missed Task: "${task.title}" (${penalty} XP)`,
+            message: `Window ${task.startTime}${task.durationMinutes > 0 ? ` (${task.durationMinutes}m)` : ''} passed without completion. Complete it now or reschedule!`,
+            spokenText: `Hey Bruv, the scheduled time for ${task.title} at ${task.startTime} has passed. You lost ${Math.abs(penalty)} XP, but you can still complete it or reschedule it now!`,
+            xpDelta: penalty,
+          });
+        }
+      });
 
     return triggered;
   }
