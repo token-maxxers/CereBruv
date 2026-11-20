@@ -4,6 +4,7 @@ import type {
   ReminderTimeMode,
   SavedLink,
   Task,
+  TaskAttachment,
 } from '../../types/task';
 
 export interface CreateTaskDTO {
@@ -20,6 +21,7 @@ export interface CreateTaskDTO {
   notes?: string;
   photoUrl?: string;
   links?: SavedLink[];
+  attachments?: TaskAttachment[];
 }
 
 export interface ITaskRepository {
