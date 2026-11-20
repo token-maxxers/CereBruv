@@ -352,34 +352,46 @@ async function mountApp(user: AuthUser) {
     voiceService.speak(demoPayload.spokenText);
   }
 
-  // View Router
+  // View Router with Keep-Alive Tab Panels & Dirty-Flag Caching
   const viewContainer = document.querySelector('#view-container')!;
+  const tabPanels = new Map<string, HTMLElement>();
+  const dirtyTabs = new Set<string>();
+  let activeTabName = 'orbit';
 
-  function switchTab(tab: string) {
-    const navTab = tab === 'settings' ? 'cloud' : tab;
-    document.querySelectorAll('.nav-item').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-tab') === navTab);
+  const markDataTabsDirty = () => {
+    ['orbit', 'tasks', 'thoughts', 'graph', 'cloud'].forEach(t => {
+      if (t !== activeTabName) dirtyTabs.add(t);
     });
+  };
 
-    const isProfileOrSettings = tab === 'cloud' || tab === 'settings';
-    const bannerEl = document.querySelector<HTMLElement>('#mascot-banner');
-    if (bannerEl) bannerEl.style.display = isProfileOrSettings ? 'none' : 'flex';
+  [
+    AppEvents.TASK_CREATED,
+    AppEvents.TASK_UPDATED,
+    AppEvents.TASK_DELETED,
+    AppEvents.TASK_COMPLETED,
+    AppEvents.NOTE_CREATED,
+    AppEvents.NOTE_UPDATED,
+    AppEvents.NOTE_DELETED,
+    AppEvents.STATS_UPDATED,
+    AppEvents.DATE_SELECTED,
+  ].forEach(ev => eventBus.on(ev, markDataTabsDirty));
 
-    viewContainer.innerHTML = '';
-
+  function buildTabContent(tab: string, panel: HTMLElement) {
+    panel.innerHTML = '';
     if (tab === 'orbit') {
-      renderOrbitView();
+      panel.appendChild(renderFocusOrbit((date, editTask) => taskFormModal.open(date, editTask)));
+      panel.appendChild(renderTaskList((date, editTask) => taskFormModal.open(date, editTask)));
     } else if (tab === 'tasks') {
-      viewContainer.appendChild(renderTaskList((date, editTask) => taskFormModal.open(date, editTask)));
+      panel.appendChild(renderTaskList((date, editTask) => taskFormModal.open(date, editTask)));
     } else if (tab === 'thoughts') {
-      viewContainer.appendChild(
+      panel.appendChild(
         renderThoughtsView(
           (date, draftTask) => taskFormModal.open(date, draftTask),
           () => currentSelectedDate
         )
       );
     } else if (tab === 'graph') {
-      viewContainer.appendChild(
+      panel.appendChild(
         renderDotGraph({
           onConvertNoteToTask: (draftTask) => taskFormModal.open(currentSelectedDate, draftTask as any),
           onJumpToOrbit: (dateStr) => {
@@ -392,19 +404,22 @@ async function mountApp(user: AuthUser) {
         })
       );
     } else if (tab === 'cloud') {
-      viewContainer.appendChild(
+      panel.appendChild(
         renderCloudView({
           onOpenSettings: () => switchTab('settings'),
           onUpgradeGuest: () => {
             showAuth(true); // Open in link mode so UID is retained
           },
           onSignOut: () => {
+            tabPanels.clear();
+            dirtyTabs.clear();
+            viewContainer.innerHTML = '';
             showAuth(false);
           }
         })
       );
     } else if (tab === 'settings') {
-      viewContainer.appendChild(
+      panel.appendChild(
         renderSettingsView({
           onBack: () => switchTab('cloud'),
           onTestAlarm: () => triggerDemoAlarm(),
@@ -415,9 +430,33 @@ async function mountApp(user: AuthUser) {
     }
   }
 
-  function renderOrbitView() {
-    viewContainer.appendChild(renderFocusOrbit((date, editTask) => taskFormModal.open(date, editTask)));
-    viewContainer.appendChild(renderTaskList((date, editTask) => taskFormModal.open(date, editTask)));
+  function switchTab(tab: string) {
+    activeTabName = tab;
+    const navTab = tab === 'settings' ? 'cloud' : tab;
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === navTab);
+    });
+
+    const isProfileOrSettings = tab === 'cloud' || tab === 'settings';
+    const bannerEl = document.querySelector<HTMLElement>('#mascot-banner');
+    if (bannerEl) bannerEl.style.display = isProfileOrSettings ? 'none' : 'flex';
+
+    tabPanels.forEach((p, key) => {
+      p.style.display = key === tab ? 'block' : 'none';
+    });
+
+    let panel = tabPanels.get(tab);
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'tab-panel-keepalive';
+      tabPanels.set(tab, panel);
+      viewContainer.appendChild(panel);
+      buildTabContent(tab, panel);
+      dirtyTabs.delete(tab);
+    } else if (dirtyTabs.has(tab)) {
+      buildTabContent(tab, panel);
+      dirtyTabs.delete(tab);
+    }
   }
 
   // Attach Bottom Nav Listeners
